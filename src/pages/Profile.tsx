@@ -1,0 +1,1098 @@
+import { useEffect, useRef, useState } from "react"
+import { Link, useNavigate } from "react-router-dom"
+import Navbar from "../components/Navbar"
+import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
+import { PROFILE_LANGUAGE_OPTIONS } from "../lib/profileLanguages.ts"
+import { parseGitHubField, parseLinkedInField, parseOptionalWebUrl } from "../lib/socialUrls.ts"
+import { isSupabaseConfigured, supabase } from "../lib/supabase"
+
+function formatSaveError(err: unknown): string {
+  if (err instanceof Error) return err.message
+  if (typeof err === "object" && err !== null) {
+    const o = err as { message?: string; details?: string; hint?: string }
+    const parts = [o.message, o.details, o.hint].filter((x) => typeof x === "string" && x.trim())
+    if (parts.length) return parts.join(" — ")
+  }
+  return "შენახვა ვერ მოხერხდა."
+}
+
+type ServiceListingForm = {
+  id?: string
+  title: string
+  description: string
+  price: string
+  deliveryDays: string
+  isActive: boolean
+}
+
+function stripListingMeta(raw: string | null) {
+  if (!raw) return ""
+  const prefix = "<!--gigori-meta:"
+  const suffix = "-->"
+  if (!raw.startsWith(prefix)) return raw
+  const endIndex = raw.indexOf(suffix)
+  if (endIndex < 0) return raw
+  return raw.slice(endIndex + suffix.length).trimStart()
+}
+
+export default function ProfilePage() {
+  const navigate = useNavigate()
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
+  const [userId, setUserId] = useState("")
+  const [userType, setUserType] = useState<"freelancer" | "hirer" | "">("")
+
+  const [avatarUrl, setAvatarUrl] = useState("")
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const [cvUrl, setCvUrl] = useState("")
+  const [cvUploading, setCvUploading] = useState(false)
+
+  const [fullName, setFullName] = useState("")
+  const [city, setCity] = useState("")
+  const [phone, setPhone] = useState("")
+
+  const [professionalTitle, setProfessionalTitle] = useState("")
+  const [bio, setBio] = useState("")
+  const [availability, setAvailability] = useState("")
+  const [languages, setLanguages] = useState<string[]>([])
+  const [langDropdownOpen, setLangDropdownOpen] = useState(false)
+  const langBoxRef = useRef<HTMLDivElement>(null)
+  const [linkedinUrl, setLinkedinUrl] = useState("")
+  const [githubUrl, setGithubUrl] = useState("")
+  const [portfolioUrl, setPortfolioUrl] = useState("")
+  /** ცარიელი URL-ის შემთხვევაში განიხილება როგორც „ლინკი არ გვაქვს“. */
+  const [noLinkedinProfile, setNoLinkedinProfile] = useState(true)
+  const [noGithubProfile, setNoGithubProfile] = useState(true)
+  const [noPortfolioWebsite, setNoPortfolioWebsite] = useState(true)
+
+  const [companyName, setCompanyName] = useState("")
+  const [companyDescription, setCompanyDescription] = useState("")
+  const [industry, setIndustry] = useState("")
+  const [companyWebsite, setCompanyWebsite] = useState("")
+  const [freelancerProfileId, setFreelancerProfileId] = useState<string | null>(null)
+  const [serviceListings, setServiceListings] = useState<ServiceListingForm[]>([])
+  const [initialServiceIds, setInitialServiceIds] = useState<string[]>([])
+  const [availableSkillNames, setAvailableSkillNames] = useState<string[]>([])
+  const [profileTags, setProfileTags] = useState<string[]>([])
+
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [deleteStep, setDeleteStep] = useState<1 | 2 | 3>(1)
+  const [deletePassword, setDeletePassword] = useState("")
+  const [deleteError, setDeleteError] = useState("")
+  const [deleteLoading, setDeleteLoading] = useState(false)
+
+  useEffect(() => {
+    document.title = "პროფილი — გიგორი"
+  }, [])
+
+  useEffect(() => {
+    if (!langDropdownOpen) return
+    const onPointerDown = (event: PointerEvent) => {
+      if (langBoxRef.current && !langBoxRef.current.contains(event.target as Node)) {
+        setLangDropdownOpen(false)
+      }
+    }
+    document.addEventListener("pointerdown", onPointerDown)
+    return () => document.removeEventListener("pointerdown", onPointerDown)
+  }, [langDropdownOpen])
+
+  useEffect(() => {
+    const load = async () => {
+      if (!isSupabaseConfigured || !supabase) {
+        setError("Supabase არ არის კონფიგურირებული.")
+        setLoading(false)
+        return
+      }
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (!user) throw new Error("მომხმარებელი ვერ მოიძებნა.")
+        setUserId(user.id)
+
+        const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single()
+        if (!profile) throw new Error("პროფილი ვერ ჩაიტვირთა.")
+        setUserType(profile.user_type as "freelancer" | "hirer")
+        setFullName(profile.full_name ?? "")
+        setCity(profile.city ?? "")
+        setPhone(profile.phone ?? "")
+        setAvatarUrl(profile.avatar_url ?? "")
+        setCvUrl(profile.cv_url ?? "")
+
+        if (profile.user_type === "freelancer") {
+          const { data: fp } = await supabase.from("freelancer_profiles").select("*").eq("user_id", user.id).maybeSingle()
+          if (fp) {
+            setFreelancerProfileId(fp.id)
+            setProfessionalTitle(fp.professional_title ?? "")
+            const loadedBio = fp.bio ?? ""
+            setBio(
+              loadedBio.trim() === "ბიო უნდა შეიცავდეს მინიმუმ 50 სიმბოლოს"
+                ? ""
+                : loadedBio,
+            )
+            setAvailability(fp.availability ?? "")
+            setLanguages(Array.isArray(fp.languages) ? fp.languages : [])
+            const loadedLi = (fp.linkedin_url ?? "").trim()
+            const loadedGh = (fp.github_url ?? "").trim()
+            const loadedPf = (fp.portfolio_url ?? "").trim()
+            setLinkedinUrl(fp.linkedin_url ?? "")
+            setGithubUrl(fp.github_url ?? "")
+            setPortfolioUrl(fp.portfolio_url ?? "")
+            setNoLinkedinProfile(!loadedLi)
+            setNoGithubProfile(!loadedGh)
+            setNoPortfolioWebsite(!loadedPf)
+
+            const { data: serviceRows, error: servicesError } = await supabase
+              .from("services")
+              .select("id,title,description,price,delivery_days,is_active")
+              .eq("freelancer_profile_id", fp.id)
+              .order("created_at", { ascending: false })
+            if (servicesError) throw servicesError
+
+            const mappedServices = (serviceRows ?? []).map((item) => ({
+              id: item.id,
+              title: item.title ?? "",
+              description: stripListingMeta(item.description ?? ""),
+              price: item.price !== null && item.price !== undefined ? String(item.price) : "",
+              deliveryDays: item.delivery_days ? String(item.delivery_days) : "3",
+              isActive: item.is_active ?? true,
+            }))
+
+            setServiceListings(mappedServices.slice(0, 3))
+            setInitialServiceIds(mappedServices.map((item) => item.id).filter(Boolean))
+
+            const { data: skillRows, error: skillRowsError } = await supabase
+              .from("freelancer_skills")
+              .select("skills(name)")
+              .eq("freelancer_profile_id", fp.id)
+            if (skillRowsError) throw skillRowsError
+
+            const tags =
+              (skillRows ?? [])
+                .map((row: any) => row.skills?.name)
+                .filter(Boolean)
+                .map((name: string) => name.trim())
+                .filter(Boolean) ?? []
+            setProfileTags(Array.from(new Set(tags)))
+
+            const { data: allSkillsRows, error: allSkillsError } = await supabase
+              .from("skills")
+              .select("name")
+              .eq("is_approved", true)
+              .order("name")
+            if (allSkillsError) throw allSkillsError
+            setAvailableSkillNames(
+              Array.from(
+                new Set((allSkillsRows ?? []).map((row: any) => String(row.name ?? "").trim()).filter(Boolean)),
+              ),
+            )
+          } else {
+            setServiceListings([])
+            setInitialServiceIds([])
+            setProfileTags([])
+            setAvailableSkillNames([])
+          }
+        } else {
+          const { data: hp } = await supabase.from("hirer_profiles").select("*").eq("user_id", user.id).maybeSingle()
+          if (hp) {
+            setCompanyName(hp.company_name ?? "")
+            setCompanyDescription(hp.description ?? "")
+            setIndustry(hp.industry ?? "")
+            setCompanyWebsite(hp.website_url ?? "")
+          }
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "პროფილი ვერ ჩაიტვირთა.")
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [])
+
+  const handleAvatarUpload = async (file: File) => {
+    if (!file || !supabase) return
+    const user = (await supabase.auth.getUser()).data.user
+    if (!user) return
+    if (file.size > 5 * 1024 * 1024) return setError("სურათის ზომა არ უნდა აღემატებოდეს 5MB-ს.")
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      return setError("მხოლოდ JPEG, PNG ან WebP ფორმატები დაიშვება.")
+    }
+    setAvatarUploading(true)
+    setError("")
+    try {
+      const ext = file.name.split(".").pop()
+      const path = `${user.id}/avatar.${ext}`
+      const { error: uploadError } = await supabase.storage.from("avatars").upload(path, file, { upsert: true })
+      if (uploadError) throw uploadError
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("avatars").getPublicUrl(path)
+      setAvatarUrl(publicUrl)
+    } catch (err: any) {
+      setError(`ავატარის ატვირთვა ვერ მოხერხდა: ${err.message}`)
+    } finally {
+      setAvatarUploading(false)
+    }
+  }
+
+  const handleDeleteAvatar = async () => {
+    if (!supabase) return
+    const user = (await supabase.auth.getUser()).data.user
+    if (!user) return
+    setError("")
+    try {
+      await supabase.storage.from("avatars").remove([
+        `${user.id}/avatar`,
+        `${user.id}/avatar.jpg`,
+        `${user.id}/avatar.jpeg`,
+        `${user.id}/avatar.png`,
+        `${user.id}/avatar.webp`,
+      ])
+      await supabase.from("profiles").update({ avatar_url: null }).eq("id", user.id)
+      setAvatarUrl("")
+    } catch (err: any) {
+      setError(`სურათის წაშლა ვერ მოხერხდა: ${err.message}`)
+    }
+  }
+
+  const handleCVUpload = async (file: File) => {
+    if (!supabase) return
+    if (file.size > 10 * 1024 * 1024) {
+      setError("CV-ს ზომა არ უნდა აღემატებოდეს 10MB-ს.")
+      return
+    }
+    if (file.type !== "application/pdf") {
+      setError("მხოლოდ PDF ფორმატი დაიშვება.")
+      return
+    }
+    setCvUploading(true)
+    setError("")
+    try {
+      const user = (await supabase.auth.getUser()).data.user
+      if (!user) return
+      const filePath = `${user.id}/cv.pdf`
+      const { error: uploadError } = await supabase.storage.from("cvs").upload(filePath, file, { upsert: true })
+      if (uploadError) throw uploadError
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("cvs").getPublicUrl(filePath)
+      setCvUrl(publicUrl)
+      await supabase.from("profiles").update({ cv_url: publicUrl }).eq("id", user.id)
+    } catch (err: any) {
+      setError(`CV ატვირთვა ვერ მოხერხდა: ${err.message}`)
+    } finally {
+      setCvUploading(false)
+    }
+  }
+
+  const handleDeleteCV = async () => {
+    if (!supabase) return
+    const user = (await supabase.auth.getUser()).data.user
+    if (!user) return
+    try {
+      await supabase.storage.from("cvs").remove([`${user.id}/cv.pdf`])
+      await supabase.from("profiles").update({ cv_url: null }).eq("id", user.id)
+      setCvUrl("")
+    } catch (err: any) {
+      setError(`CV წაშლა ვერ მოხერხდა: ${err.message}`)
+    }
+  }
+
+  const onSave = async () => {
+    if (!supabase) return
+    setSaving(true)
+    setError("")
+    setSuccess("")
+    try {
+      await supabase.from("profiles").update({
+        full_name: fullName.trim(),
+        city: city.trim() || null,
+        phone: phone.trim() || null,
+        avatar_url: avatarUrl || null,
+      }).eq("id", userId)
+
+      if (userType === "freelancer") {
+        const parsedLi = parseLinkedInField(noLinkedinProfile ? "" : linkedinUrl)
+        if (parsedLi.ok === false) {
+          throw new Error(parsedLi.message)
+        }
+        const parsedGh = parseGitHubField(noGithubProfile ? "" : githubUrl)
+        if (parsedGh.ok === false) {
+          throw new Error(parsedGh.message)
+        }
+        const parsedPf = parseOptionalWebUrl(noPortfolioWebsite ? "" : portfolioUrl)
+        if (parsedPf.ok === false) {
+          throw new Error(parsedPf.message)
+        }
+
+        const { data: existingFp, error: existingFpErr } = await supabase
+          .from("freelancer_profiles")
+          .select("id,slug,is_public,is_profile_complete")
+          .eq("user_id", userId)
+          .maybeSingle()
+        if (existingFpErr) throw existingFpErr
+
+        const slug =
+          existingFp?.slug?.trim() ||
+          `freelancer-${userId.replace(/-/g, "").slice(0, 12)}-${Date.now().toString(36).slice(-5)}`
+
+        const { data: savedFreelancer, error: freelancerError } = await supabase
+          .from("freelancer_profiles")
+          .upsert(
+            {
+              ...(existingFp?.id ? { id: existingFp.id } : {}),
+              user_id: userId,
+              slug,
+              professional_title: professionalTitle.trim() || null,
+              bio: bio.trim() || null,
+              availability: availability || null,
+              languages,
+              linkedin_url: parsedLi.value,
+              github_url: parsedGh.value,
+              portfolio_url: parsedPf.value,
+              is_public: existingFp?.is_public ?? true,
+              is_profile_complete: existingFp?.is_profile_complete ?? true,
+            },
+            { onConflict: "user_id" },
+          )
+          .select("id")
+          .single()
+
+        if (freelancerError) throw freelancerError
+
+        const targetFreelancerId = savedFreelancer?.id ?? freelancerProfileId
+        if (!targetFreelancerId) {
+          throw new Error("ფრილანსერის პროფილი ვერ მოიძებნა.")
+        }
+        setFreelancerProfileId(targetFreelancerId)
+
+        const normalizedTagNames = Array.from(new Set(profileTags.map((tag) => tag.trim()).filter(Boolean)))
+
+        await supabase.from("freelancer_skills").delete().eq("freelancer_profile_id", targetFreelancerId)
+
+        if (normalizedTagNames.length > 0) {
+          const { data: finalSkills, error: finalSkillsError } = await supabase
+            .from("skills")
+            .select("id,name")
+            .in("name", normalizedTagNames)
+          if (finalSkillsError) throw finalSkillsError
+
+          if ((finalSkills ?? []).length > 0) {
+            const { error: insertFreelancerSkillsError } = await supabase.from("freelancer_skills").insert(
+              (finalSkills ?? []).map((skill) => ({
+                freelancer_profile_id: targetFreelancerId,
+                skill_id: skill.id,
+              })),
+            )
+            if (insertFreelancerSkillsError) throw insertFreelancerSkillsError
+          }
+        }
+
+        const nonEmptyListings = serviceListings
+          .map((item) => ({
+            id: item.id,
+            title: item.title.trim(),
+            description: item.description.trim(),
+            priceRaw: item.price.trim(),
+            deliveryDaysRaw: item.deliveryDays.trim(),
+            isActive: item.isActive,
+          }))
+          .filter((item) => item.title || item.description || item.priceRaw || item.deliveryDaysRaw)
+
+        if (nonEmptyListings.length > 3) {
+          throw new Error("მაქსიმუმ 3 ლისტინგის დამატება შეგიძლია.")
+        }
+
+        const normalizedListings = nonEmptyListings.map((item, index) => {
+          if (!item.title) {
+            throw new Error(`ლისტინგი #${index + 1}: სათაური სავალდებულოა.`)
+          }
+
+          const parsedPrice = item.priceRaw ? Number(item.priceRaw) : 0
+          if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+            throw new Error(`ლისტინგი #${index + 1}: ფასი არასწორია.`)
+          }
+
+          const parsedDeliveryDays = Number(item.deliveryDaysRaw || "0")
+          if (!Number.isInteger(parsedDeliveryDays) || parsedDeliveryDays <= 0) {
+            throw new Error(`ლისტინგი #${index + 1}: ვადა უნდა იყოს დადებითი მთელი რიცხვი.`)
+          }
+
+          return {
+            id: item.id,
+            title: item.title,
+            description: item.description || null,
+            price: parsedPrice,
+            delivery_days: parsedDeliveryDays,
+            is_active: item.isActive,
+          }
+        })
+
+        const currentListingIds = normalizedListings.map((item) => item.id).filter(Boolean) as string[]
+        const idsToDelete = initialServiceIds.filter((id) => !currentListingIds.includes(id))
+
+        if (idsToDelete.length > 0) {
+          const { error: deleteServicesError } = await supabase
+            .from("services")
+            .delete()
+            .eq("freelancer_profile_id", targetFreelancerId)
+            .in("id", idsToDelete)
+          if (deleteServicesError) throw deleteServicesError
+        }
+
+        const savedListingIds: string[] = []
+        for (const listing of normalizedListings) {
+          if (listing.id) {
+            const { error: updateServiceError } = await supabase
+              .from("services")
+              .update({
+                title: listing.title,
+                description: listing.description,
+                price: listing.price,
+                delivery_days: listing.delivery_days,
+                is_active: listing.is_active,
+              })
+              .eq("id", listing.id)
+              .eq("freelancer_profile_id", targetFreelancerId)
+            if (updateServiceError) throw updateServiceError
+            savedListingIds.push(listing.id)
+          } else {
+            const { data: insertedService, error: insertServiceError } = await supabase
+              .from("services")
+              .insert({
+                freelancer_profile_id: targetFreelancerId,
+                title: listing.title,
+                description: listing.description,
+                price: listing.price,
+                delivery_days: listing.delivery_days,
+                is_active: listing.is_active,
+              })
+              .select("id")
+              .single()
+            if (insertServiceError) throw insertServiceError
+            savedListingIds.push(insertedService.id)
+          }
+        }
+
+        const { data: refreshedServices, error: refreshServicesError } = await supabase
+          .from("services")
+          .select("id,title,description,price,delivery_days,is_active")
+          .eq("freelancer_profile_id", targetFreelancerId)
+          .order("created_at", { ascending: false })
+        if (refreshServicesError) throw refreshServicesError
+
+        const mappedRefreshed = (refreshedServices ?? []).map((item) => ({
+          id: item.id,
+          title: item.title ?? "",
+          description: item.description ?? "",
+          price: item.price !== null && item.price !== undefined ? String(item.price) : "",
+          deliveryDays: item.delivery_days ? String(item.delivery_days) : "3",
+          isActive: item.is_active ?? true,
+        }))
+        setServiceListings(mappedRefreshed.slice(0, 3))
+        setInitialServiceIds(savedListingIds)
+      } else {
+        await supabase.from("hirer_profiles").upsert({
+          user_id: userId,
+          company_name: companyName.trim() || null,
+          description: companyDescription.trim() || null,
+          industry: industry || null,
+          website_url: companyWebsite.trim() || null,
+        }, { onConflict: "user_id" })
+      }
+      setSuccess("ცვლილებები შენახულია.")
+    } catch (err) {
+      setError(formatSaveError(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const removeListing = (index: number) => {
+    setServiceListings((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const updateListing = (index: number, patch: Partial<ServiceListingForm>) => {
+    setServiceListings((prev) => prev.map((item, i) => (i === index ? { ...item, ...patch } : item)))
+  }
+
+  const toggleProfileTag = (tag: string) => {
+    setProfileTags((prev) => (prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag]))
+  }
+
+  const handleDeleteAccount = async () => {
+    if (!supabase || !deletePassword.trim()) return
+    const client = supabase
+    setDeleteLoading(true)
+    setDeleteError("")
+    try {
+      const {
+        data: { user },
+      } = await client.auth.getUser()
+      if (!user) return
+
+      const { error: signInError } = await client.auth.signInWithPassword({
+        email: user.email!,
+        password: deletePassword,
+      })
+      if (signInError) {
+        setDeleteError("პაროლი არასწორია. სცადე თავიდან.")
+        return
+      }
+
+      const { data: fp } = await client
+        .from("freelancer_profiles")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle()
+      const freelancerId = fp?.id ?? freelancerProfileId
+
+      if (freelancerId) {
+        await client.from("freelancer_skills").delete().eq("freelancer_profile_id", freelancerId)
+        await client.from("services").delete().eq("freelancer_profile_id", freelancerId)
+      }
+      await client.from("freelancer_profiles").delete().eq("user_id", user.id)
+      await client.from("hirer_profiles").delete().eq("user_id", user.id)
+      await client.from("notifications").delete().eq("user_id", user.id)
+
+      await client.storage.from("avatars").remove([
+        `${user.id}/avatar`,
+        `${user.id}/avatar.jpg`,
+        `${user.id}/avatar.jpeg`,
+        `${user.id}/avatar.png`,
+        `${user.id}/avatar.webp`,
+      ])
+      await client.storage.from("cvs").remove([`${user.id}/cv.pdf`])
+
+      await client.from("profiles").delete().eq("id", user.id)
+
+      const { error: deleteErrorRpc } = await client.rpc("delete_user")
+      if (deleteErrorRpc) throw deleteErrorRpc
+
+      setDeleteStep(3)
+      window.setTimeout(async () => {
+        await client.auth.signOut()
+        navigate("/")
+      }, 2000)
+    } catch (err: any) {
+      setDeleteError(`შეცდომა: ${err.message}`)
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
+  if (loading) return <div className="p-6">იტვირთება...</div>
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <Navbar />
+      <main className="mx-auto max-w-3xl px-6 py-10">
+        <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+          <div className="mb-6 flex items-start justify-between gap-4">
+            <h1 className="text-3xl font-bold text-[#1B2B4B]">ჩემი პროფილი</h1>
+            <button
+              type="button"
+              onClick={() => {
+                setDeleteModalOpen(true)
+                setDeleteStep(1)
+                setDeletePassword("")
+                setDeleteError("")
+              }}
+              className="rounded-lg border border-[#EF4444] px-3 py-2 text-sm font-semibold text-[#EF4444]"
+            >
+              🗑 ანგარიშის წაშლა
+            </button>
+          </div>
+
+          <div className="mb-8 flex items-center gap-5">
+            <div className="relative">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="პროფილის სურათი" className="h-[100px] w-[100px] rounded-full object-cover" />
+              ) : (
+                <div className="flex h-[100px] w-[100px] items-center justify-center rounded-full bg-[#1B2B4B] text-[32px] font-semibold text-white">
+                  {(fullName?.charAt(0) || "U").toUpperCase()}
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <input
+                type="file"
+                id="avatar-input"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) handleAvatarUpload(file)
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const element = document.getElementById("avatar-input") as HTMLInputElement | null
+                  element?.click()
+                }}
+                className="rounded-lg bg-[#1B2B4B] px-4 py-2 text-sm text-white"
+              >
+                {avatarUrl ? "📷 სურათის შეცვლა" : "📷 პროფილის სურათის ატვირთვა"}
+              </button>
+              {avatarUrl ? (
+                <button
+                  type="button"
+                  onClick={handleDeleteAvatar}
+                  className="rounded-lg border border-[#EF4444] px-4 py-2 text-sm text-[#EF4444]"
+                >
+                  🗑 სურათის წაშლა
+                </button>
+              ) : null}
+              {avatarUploading ? <p className="text-[13px] text-[#6B7280]">იტვირთება...</p> : null}
+            </div>
+          </div>
+
+          <div className="space-y-5">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">
+                სახელი და გვარი <span className="text-[#EF4444]">*</span>
+              </label>
+              <input className="h-11 w-full rounded-lg border border-slate-300 px-3" value={fullName} onChange={(e)=>setFullName(e.target.value)} />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">ქალაქი / ლოკაცია</label>
+              <LocationFilterSelect
+                value={city}
+                onChange={setCity}
+                variant="form"
+                className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
+              />
+              <p className="mt-1 text-xs text-slate-500">დისტანციური ან შერეული ფორმატიც შეგიძლიათ აირჩიოთ.</p>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">ტელეფონის ნომერი</label>
+              <input className="h-11 w-full rounded-lg border border-slate-300 px-3" value={phone} onChange={(e)=>setPhone(e.target.value)} />
+            </div>
+          </div>
+
+          {userType === "freelancer" ? (
+            <div className="mt-5 space-y-5">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">პროფესიული სათაური</label>
+                <input className="h-11 w-full rounded-lg border border-slate-300 px-3" placeholder="React Developer, Graphic Designer" value={professionalTitle} onChange={(e)=>setProfessionalTitle(e.target.value)} />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">ბიოგრაფია</label>
+                <textarea className="w-full rounded-lg border border-slate-300 px-3 py-2" rows={4} value={bio} onChange={(e)=>setBio(e.target.value)} />
+                <p className="mt-1 text-right text-xs text-slate-500">{bio.length}/2000</p>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">დასაქმების ტიპი</label>
+                <select className="h-11 w-full rounded-lg border border-slate-300 px-3" value={availability} onChange={(e)=>setAvailability(e.target.value)}>
+                  <option value="">აირჩიე...</option>
+                  <option value="full_time">სრული განაკვეთი</option>
+                  <option value="part_time">ნახევარი განაკვეთი</option>
+                  <option value="weekends">შაბათ-კვირა</option>
+                </select>
+              </div>
+              <div ref={langBoxRef} className="relative">
+                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">ენები</label>
+                <div className="min-h-[2.75rem] rounded-lg border border-slate-300 bg-white px-2 py-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {languages.map((lang) => (
+                      <button
+                        key={lang}
+                        type="button"
+                        onClick={() => setLanguages((prev) => prev.filter((x) => x !== lang))}
+                        className="inline-flex items-center gap-1 rounded-full bg-[#1B2B4B] px-2.5 py-0.5 text-xs font-medium text-white"
+                      >
+                        {lang}
+                        <span aria-hidden className="text-white/80">
+                          ×
+                        </span>
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setLangDropdownOpen((o) => !o)}
+                      className="ml-auto shrink-0 rounded-md border border-dashed border-slate-300 px-2 py-1 text-xs font-semibold text-[#1B2B4B] hover:border-[#D4A843]"
+                    >
+                      + ენა
+                    </button>
+                  </div>
+                  {langDropdownOpen ? (
+                    <ul className="absolute left-0 right-0 top-full z-30 mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+                      {PROFILE_LANGUAGE_OPTIONS.filter((opt) => !languages.includes(opt)).length === 0 ? (
+                        <li className="px-3 py-2 text-xs text-slate-500">ყველა ენა არჩეულია ან სია ცარიელია.</li>
+                      ) : null}
+                      {PROFILE_LANGUAGE_OPTIONS.filter((opt) => !languages.includes(opt)).map((opt) => (
+                        <li key={opt}>
+                          <button
+                            type="button"
+                            className="w-full px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-50"
+                            onClick={() => {
+                              setLanguages((prev) => [...prev, opt])
+                              setLangDropdownOpen(false)
+                            }}
+                          >
+                            {opt}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+                <p className="mt-1 text-xs text-slate-500">დააჭირე „+ ენა“ და აირჩიე სიიდან — სია იშლება ქვემოთ.</p>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">LinkedIn პროფილი</label>
+                <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={noLinkedinProfile}
+                    onChange={(e) => {
+                      const on = e.target.checked
+                      setNoLinkedinProfile(on)
+                      if (on) setLinkedinUrl("")
+                    }}
+                  />
+                  არ მაქვს LinkedIn პროფილი
+                </label>
+                <input
+                  type="url"
+                  inputMode="url"
+                  disabled={noLinkedinProfile}
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 disabled:cursor-not-allowed disabled:bg-slate-100"
+                  placeholder="https://www.linkedin.com/in/..."
+                  value={linkedinUrl}
+                  onChange={(e) => setLinkedinUrl(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  {noLinkedinProfile ? "ბმული არ შეინახება." : "მხოლოდ linkedin.com ბმული (in/company/school)."}{" "}
+                </p>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">GitHub პროფილი</label>
+                <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={noGithubProfile}
+                    onChange={(e) => {
+                      const on = e.target.checked
+                      setNoGithubProfile(on)
+                      if (on) setGithubUrl("")
+                    }}
+                  />
+                  არ მაქვს GitHub პროფილი
+                </label>
+                <input
+                  type="url"
+                  inputMode="url"
+                  disabled={noGithubProfile}
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 disabled:cursor-not-allowed disabled:bg-slate-100"
+                  placeholder="https://github.com/მომხმარებელი"
+                  value={githubUrl}
+                  onChange={(e) => setGithubUrl(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  {noGithubProfile ? "ბმული არ შეინახება." : "მხოლოდ github.com."}{" "}
+                </p>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">პორტფოლიო ვებსაიტი</label>
+                <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={noPortfolioWebsite}
+                    onChange={(e) => {
+                      const on = e.target.checked
+                      setNoPortfolioWebsite(on)
+                      if (on) setPortfolioUrl("")
+                    }}
+                  />
+                  არ მაქვს პორტფოლიოს ვებსაიტი
+                </label>
+                <input
+                  type="url"
+                  inputMode="url"
+                  disabled={noPortfolioWebsite}
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 disabled:cursor-not-allowed disabled:bg-slate-100"
+                  placeholder="https://"
+                  value={portfolioUrl}
+                  onChange={(e) => setPortfolioUrl(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  {noPortfolioWebsite ? "ბმული არ შეინახება." : "ნებისმიერი სწორი https ბმული."}
+                </p>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">უნარები (მინ. 3)</label>
+                <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex max-h-40 flex-wrap gap-2 overflow-auto">
+                    {availableSkillNames.map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => toggleProfileTag(tag)}
+                        className={`rounded-full border px-2 py-1 text-xs ${
+                          profileTags.includes(tag)
+                            ? "border-[#D4A843] bg-[#D4A843] text-[#1B2B4B]"
+                            : "border-slate-300 bg-white text-slate-700"
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    აირჩიე მხოლოდ არსებული ტეგები. არჩეული: {profileTags.length}
+                  </p>
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">სერვისები</label>
+                <div className="space-y-3">
+                  {serviceListings.length === 0 ? (
+                    <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                      ლისტინგები ჯერ არ გაქვს დამატებული.
+                    </p>
+                  ) : null}
+
+                  {serviceListings.map((listing, index) => (
+                    <div key={listing.id ?? `new-${index}`} className="rounded-xl border border-slate-200 p-4">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-[#1B2B4B]">ლისტინგი #{index + 1}</p>
+                        <button
+                          type="button"
+                          onClick={() => removeListing(index)}
+                          className="text-xs font-semibold text-[#EF4444]"
+                        >
+                          წაშლა
+                        </button>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-slate-600">სათაური *</label>
+                          <input
+                            className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
+                            value={listing.title}
+                            onChange={(e) => updateListing(index, { title: e.target.value })}
+                            placeholder="მაგ: ვებგვერდის დამზადება React-ით"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-slate-600">აღწერა</label>
+                          <textarea
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            rows={3}
+                            value={listing.description}
+                            onChange={(e) => updateListing(index, { description: e.target.value })}
+                            placeholder="მოკლე აღწერა სერვისზე"
+                          />
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-600">ფასი (₾)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
+                              value={listing.price}
+                              onChange={(e) => updateListing(index, { price: e.target.value })}
+                              placeholder="0"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-600">ვადა (დღე) *</label>
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
+                              value={listing.deliveryDays}
+                              onChange={(e) => updateListing(index, { deliveryDays: e.target.value })}
+                              placeholder="3"
+                            />
+                          </div>
+                        </div>
+
+                        <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={listing.isActive}
+                            onChange={(e) => updateListing(index, { isActive: e.target.checked })}
+                          />
+                          აქტიური ლისტინგი
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                    <span>{serviceListings.length}/3 ლისტინგი</span>
+                    {serviceListings.length < 3 ? (
+                      <Link
+                        to="/listing/new"
+                        className="rounded-md border border-[#1B2B4B] bg-white px-2 py-1 font-semibold text-[#1B2B4B] hover:bg-amber-50"
+                      >
+                        + ახალი ლისტინგი (სრული ფორმა)
+                      </Link>
+                    ) : (
+                      <span className="text-slate-500">ლიმიტი: 3 ლისტინგი</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    ახალი ლისტინგისთვის გამოიყენე ბმული ზემოთ — იქ ხელმისაწვდომია ყველა ტეგი და კატეგორია. სწრაფი რედაქტირება:{" "}
+                    <a href="/dashboard" className="font-semibold text-[#1B2B4B] hover:underline">
+                      დაშბორდი
+                    </a>
+                    .
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-5 space-y-5">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">კომპანიის სახელი</label>
+                <input className="h-11 w-full rounded-lg border border-slate-300 px-3" value={companyName} onChange={(e)=>setCompanyName(e.target.value)} />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">კომპანიის აღწერა</label>
+                <textarea className="w-full rounded-lg border border-slate-300 px-3 py-2" rows={4} value={companyDescription} onChange={(e)=>setCompanyDescription(e.target.value)} />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">ინდუსტრია</label>
+                <input className="h-11 w-full rounded-lg border border-slate-300 px-3" value={industry} onChange={(e)=>setIndustry(e.target.value)} />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">კომპანიის ვებსაიტი</label>
+                <input className="h-11 w-full rounded-lg border border-slate-300 px-3" value={companyWebsite} onChange={(e)=>setCompanyWebsite(e.target.value)} />
+              </div>
+            </div>
+          )}
+
+          <div className="mt-5">
+            <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">CV / რეზიუმე (PDF)</label>
+            {cvUrl ? (
+              <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-[#F8F9FC] p-3">
+                <span>📄</span>
+                <span className="flex-1 text-sm">CV ატვირთულია</span>
+                <a href={cvUrl} target="_blank" rel="noreferrer" className="text-[13px] text-[#1B2B4B]">
+                  ნახვა
+                </a>
+                <button type="button" onClick={handleDeleteCV} className="border-0 bg-transparent text-[13px] text-[#EF4444]">
+                  წაშლა
+                </button>
+              </div>
+            ) : (
+              <div>
+                <input
+                  type="file"
+                  id="cv-input"
+                  accept="application/pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) handleCVUpload(file)
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const element = document.getElementById("cv-input") as HTMLInputElement | null
+                    element?.click()
+                  }}
+                  className="rounded-lg border border-[#1B2B4B] px-5 py-2 text-[#1B2B4B]"
+                >
+                  📎 CV-ს ატვირთვა (PDF, მაქს. 10MB)
+                </button>
+              </div>
+            )}
+            {cvUploading ? <p className="mt-2 text-[13px] text-[#6B7280]">იტვირთება...</p> : null}
+          </div>
+
+          {error ? <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+          {success ? <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{success}</p> : null}
+
+          <button disabled={saving} onClick={onSave} className="mt-6 h-11 w-full rounded-lg bg-[#1B2B4B] text-white hover:bg-[#D4A843] hover:text-[#1B2B4B]">
+            {saving ? "ინახება..." : "ცვლილებების შენახვა"}
+          </button>
+        </div>
+      </main>
+
+      {deleteModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-[400px] rounded-xl bg-white p-8">
+            {deleteStep === 1 ? (
+              <div>
+                <p className="text-center text-3xl">⚠️</p>
+                <h2 className="mt-3 text-center text-xl font-bold text-[#1B2B4B]">დარწმუნებული ხარ?</h2>
+                <p className="mt-3 text-sm text-slate-600">
+                  ეს მოქმედება შეუქცევადია. შენი პროფილი, სერვისები, განცხადებები და ყველა მონაცემი სამუდამოდ წაიშლება.
+                </p>
+                <div className="mt-5 space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => setDeleteModalOpen(false)}
+                    className="h-11 w-full rounded-lg border border-slate-300 text-sm font-semibold text-slate-700"
+                  >
+                    გაუქმება
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteStep(2)}
+                    className="h-11 w-full rounded-lg bg-[#EF4444] text-sm font-semibold text-white"
+                  >
+                    კი, წავშალო
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {deleteStep === 2 ? (
+              <div>
+                <h2 className="text-center text-xl font-bold text-[#1B2B4B]">შეიყვანე პაროლი დასადასტურებლად</h2>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  className="mt-4 h-11 w-full rounded-lg border border-slate-300 px-3"
+                />
+                {deleteError ? <p className="mt-2 text-sm text-red-600">{deleteError}</p> : null}
+                <div className="mt-5 space-y-2">
+                  <button
+                    type="button"
+                    disabled={deleteLoading}
+                    onClick={handleDeleteAccount}
+                    className="h-11 w-full rounded-lg bg-[#EF4444] text-sm font-semibold text-white disabled:opacity-60"
+                  >
+                    {deleteLoading ? "მიმდინარეობს..." : "ანგარიშის წაშლა"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteModalOpen(false)}
+                    className="h-11 w-full rounded-lg border border-slate-300 text-sm font-semibold text-slate-700"
+                  >
+                    გაუქმება
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {deleteStep === 3 ? (
+              <div className="text-center">
+                <h2 className="text-xl font-bold text-[#1B2B4B]">ანგარიში წაიშალა</h2>
+                <p className="mt-2 text-sm text-slate-600">შენი ანგარიში წარმატებით წაიშალა.</p>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
