@@ -1864,15 +1864,6 @@ export default function DashboardPage() {
     }
   }
 
-  const handleLogout = async () => {
-    if (!supabase) {
-      navigate("/", { replace: true })
-      return
-    }
-    await supabase.auth.signOut()
-    navigate("/", { replace: true })
-  }
-
   const removeServiceDraft = (index: number) => {
     setServiceDrafts((prev) => prev.filter((_, i) => i !== index))
   }
@@ -2010,15 +2001,8 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-slate-50">
       <Navbar />
       <main className="mx-auto max-w-7xl px-6 py-10">
-        <div className="mb-8 flex items-center justify-between">
+        <div className="mb-8">
           <h1 className="text-3xl font-bold text-[#1B2B4B]">დაშბორდი</h1>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="rounded-lg border border-[#1B2B4B] px-4 py-2 text-sm font-semibold text-[#1B2B4B] transition hover:bg-[#1B2B4B] hover:text-white"
-          >
-            გასვლა
-          </button>
         </div>
 
         {!loading && !error && successMessage ? (

@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import Navbar from "../components/Navbar"
-import { PROFILE_LANGUAGE_OPTIONS } from "../lib/profileLanguages.ts"
+import { filterProfileLanguageOptions } from "../lib/profileLanguages.ts"
 import {
   FREELANCER_EDUCATION_DEGREE_OPTIONS,
   type FreelancerEducationDegreeLevel,
@@ -45,6 +45,9 @@ export default function OnboardingPage() {
   const [bio, setBio] = useState("")
   const [availability, setAvailability] = useState<"full_time" | "part_time" | "weekends" | "">("")
   const [languages, setLanguages] = useState<string[]>([])
+  const [languageQuery, setLanguageQuery] = useState("")
+  const [languageMenuOpen, setLanguageMenuOpen] = useState(false)
+  const languagePickerRef = useRef<HTMLDivElement | null>(null)
   const [linkedinUrl, setLinkedinUrl] = useState("")
   const [githubUrl, setGithubUrl] = useState("")
   const [portfolioUrl, setPortfolioUrl] = useState("")
@@ -57,12 +60,10 @@ export default function OnboardingPage() {
   const avatarInputRef = useRef<HTMLInputElement | null>(null)
   const [freelancerProfileId, setFreelancerProfileId] = useState<string | null>(null)
   const [freelancerSlug, setFreelancerSlug] = useState<string | null>(null)
-  const [experiences, setExperiences] = useState<ExperienceForm[]>([
-    { title: "", organization: "", start_date: "", end_date: "", is_present: false, description: "" },
-  ])
-  const [educations, setEducations] = useState<EducationForm[]>([
-    { institution: "", degree_level: "", field_of_study: "", end_date: "" },
-  ])
+  const [experiences, setExperiences] = useState<ExperienceForm[]>([])
+  const [educations, setEducations] = useState<EducationForm[]>([])
+  /** Which skill category is active for picking tags (Georgian label key in groupedSkills). */
+  const [skillFocusCategory, setSkillFocusCategory] = useState("")
 
   const [companyName, setCompanyName] = useState("")
   const [companyDescription, setCompanyDescription] = useState("")
@@ -186,12 +187,20 @@ export default function OnboardingPage() {
     init()
   }, [navigate])
 
+  const filteredLanguageOptions = useMemo(() => filterProfileLanguageOptions(languageQuery), [languageQuery])
+
   const groupedSkills = skills.reduce<Record<string, Array<{ id: string; name: string }>>>((acc, skill) => {
     const key = skill.category_id ? categoriesMap[skill.category_id] ?? "სხვა" : "სხვა"
     if (!acc[key]) acc[key] = []
     acc[key].push({ id: skill.id, name: skill.name })
     return acc
   }, {})
+
+  const skillNameById = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const s of skills) m.set(s.id, s.name)
+    return m
+  }, [skills])
 
   const handleAvatarUpload = async (file: File) => {
     if (!file) return
@@ -229,6 +238,17 @@ export default function OnboardingPage() {
     setSelectedSkillIds((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]))
   const toggleLanguage = (lng: string) =>
     setLanguages((prev) => (prev.includes(lng) ? prev.filter((x) => x !== lng) : [...prev, lng]))
+
+  useEffect(() => {
+    if (!languageMenuOpen) return
+    const close = (e: MouseEvent) => {
+      if (languagePickerRef.current && !languagePickerRef.current.contains(e.target as Node)) {
+        setLanguageMenuOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", close)
+    return () => document.removeEventListener("mousedown", close)
+  }, [languageMenuOpen])
 
   const updateExperience = (idx: number, key: keyof ExperienceForm, value: string | boolean) => {
     setExperiences((prev) =>
@@ -450,7 +470,7 @@ export default function OnboardingPage() {
       <Navbar />
       <main className="mx-auto max-w-3xl px-6 py-10">
         <div className="mx-auto max-w-[640px] rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-          <h1 className="text-3xl font-bold text-[#1B2B4B]">ონბორდინგი</h1>
+          <h1 className="text-3xl font-bold text-[#2563EB]">ონბორდინგი</h1>
 
           {userType === "hirer" ? (
             <div className="mt-6 space-y-4">
@@ -490,176 +510,364 @@ export default function OnboardingPage() {
                       </label>
                     ))}
                   </div>
-                  <div>
+                  <div ref={languagePickerRef} className="relative">
                     <p className="mb-1 text-xs font-medium text-slate-600">ენები (მინ. 1)</p>
-                    <div className="max-h-52 overflow-y-auto rounded-lg border border-slate-200 p-2">
-                      <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
-                        {PROFILE_LANGUAGE_OPTIONS.map((lng) => (
-                          <label key={lng} className="flex cursor-pointer items-center gap-2">
-                            <input type="checkbox" checked={languages.includes(lng)} onChange={() => toggleLanguage(lng)} />
+                    {languages.length > 0 ? (
+                      <div className="mb-2 flex flex-wrap gap-1.5">
+                        {languages.map((lng) => (
+                          <span
+                            key={lng}
+                            className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#D1D5DB] bg-white px-2.5 py-0.5 text-xs font-medium text-[#374151]"
+                          >
                             <span className="truncate">{lng}</span>
-                          </label>
+                            <button
+                              type="button"
+                              className="shrink-0 rounded-full px-0.5 text-slate-500 hover:bg-slate-100 hover:text-red-600"
+                              aria-label={`${lng} ამოშლა`}
+                              onClick={() => toggleLanguage(lng)}
+                            >
+                              ×
+                            </button>
+                          </span>
                         ))}
                       </div>
-                    </div>
+                    ) : null}
+                    <input
+                      type="text"
+                      value={languageQuery}
+                      onChange={(e) => {
+                        setLanguageQuery(e.target.value)
+                        setLanguageMenuOpen(true)
+                      }}
+                      onFocus={() => setLanguageMenuOpen(true)}
+                      placeholder="ძიება"
+                      className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#2563EB]/30 focus:border-[#2563EB] focus:ring-2"
+                      autoComplete="off"
+                    />
+                    {languageMenuOpen ? (
+                      <ul
+                        role="listbox"
+                        className="absolute z-20 mt-1 max-h-52 w-full overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
+                      >
+                        {filteredLanguageOptions.length === 0 ? (
+                          <li className="px-3 py-2 text-sm text-slate-500">ვერ მოიძებნა — სხვა სიტყვით სცადე</li>
+                        ) : (
+                          filteredLanguageOptions.map((lng) => {
+                            const selected = languages.includes(lng)
+                            return (
+                              <li key={lng} role="option" aria-selected={selected}>
+                                <button
+                                  type="button"
+                                  className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 ${
+                                    selected ? "bg-blue-50/80 font-medium text-[#2563EB]" : "text-slate-800"
+                                  }`}
+                                  onClick={() => toggleLanguage(lng)}
+                                >
+                                  <span className="min-w-0 truncate">{lng}</span>
+                                  {selected ? <span className="shrink-0 text-xs">✓</span> : null}
+                                </button>
+                              </li>
+                            )
+                          })
+                        )}
+                      </ul>
+                    ) : null}
                   </div>
                   {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
-                  <button onClick={nextFromStep1} className="h-11 w-full rounded-lg bg-[#1B2B4B] text-white hover:bg-[#D4A843] hover:text-[#1B2B4B]">შემდეგი</button>
+                  <button
+                    type="button"
+                    onClick={nextFromStep1}
+                    className="h-11 w-full rounded-lg bg-[#2563EB] text-sm font-medium text-white transition-colors duration-150 hover:bg-[#1D4ED8]"
+                  >
+                    შემდეგი
+                  </button>
                 </div>
               )}
 
               {step === 2 && (
                 <div className="space-y-4">
                   <div className="space-y-3">
-                    {Object.entries(groupedSkills).map(([cat, list]) => (
-                      <div key={cat}>
-                        <p className="mb-2 text-xs font-semibold text-slate-500">{cat}</p>
-                        <div className="flex flex-wrap gap-2">
-                          {list.map((s) => (
-                            <button key={s.id} type="button" onClick={() => toggleSkill(s.id)} className={`rounded-full px-3 py-1 text-xs ${selectedSkillIds.includes(s.id) ? "bg-[#D4A843] text-[#1B2B4B]" : "border border-slate-300"}`}>
-                              {s.name}
+                    <p className="text-xs font-medium text-slate-600">
+                      უნარები — ჯერ აირჩიე კატეგორია, შემდეგ დაამატე ტეგები ამ კატეგორიიდან (მინ. 3 სულ).
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      არჩეულია <span className="font-semibold tabular-nums text-slate-700">{selectedSkillIds.length}</span> უნარი · საჭიროა მინიმუმ{" "}
+                      <span className="font-semibold">3</span>
+                    </p>
+
+                    <div>
+                      <label htmlFor="onboarding-skill-category" className="mb-1 block text-xs font-medium text-slate-600">
+                        კატეგორია
+                      </label>
+                      <select
+                        id="onboarding-skill-category"
+                        className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/25"
+                        value={skillFocusCategory}
+                        onChange={(e) => setSkillFocusCategory(e.target.value)}
+                      >
+                        <option value="">აირჩიე კატეგორია…</option>
+                        {Object.keys(groupedSkills).map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {skillFocusCategory && groupedSkills[skillFocusCategory] ? (
+                      <div className="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
+                        <p className="mb-2 text-sm font-semibold text-[#2563EB]">{skillFocusCategory}</p>
+                        {(() => {
+                          const list = groupedSkills[skillFocusCategory]!
+                          const selectedInCategory = list.filter((s) => selectedSkillIds.includes(s.id))
+                          return (
+                            <>
+                              {selectedInCategory.length > 0 ? (
+                                <div className="mb-2 flex flex-wrap gap-1.5">
+                                  {selectedInCategory.map((s) => (
+                                    <button
+                                      key={s.id}
+                                      type="button"
+                                      onClick={() => toggleSkill(s.id)}
+                                      className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#D1D5DB] bg-white px-2.5 py-0.5 text-xs font-medium text-[#374151] hover:bg-slate-50"
+                                    >
+                                      <span className="truncate">{s.name}</span>
+                                      <span className="shrink-0 text-slate-400" aria-hidden>
+                                        ×
+                                      </span>
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="mb-2 text-xs text-slate-500">ამ კატეგორიიდან ჯერ არაფერი არ არის არჩეული.</p>
+                              )}
+                              <label className="sr-only" htmlFor="onboarding-skill-add-active">
+                                უნარის დამატება — {skillFocusCategory}
+                              </label>
+                              <select
+                                id="onboarding-skill-add-active"
+                                key={`skill-dd-${skillFocusCategory}-${selectedInCategory.map((s) => s.id).join("-")}`}
+                                className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/25"
+                                defaultValue=""
+                                onChange={(e) => {
+                                  const id = e.target.value
+                                  if (id) {
+                                    toggleSkill(id)
+                                    e.target.value = ""
+                                  }
+                                }}
+                              >
+                                <option value="">ტეგის / უნარის დამატება…</option>
+                                {list.map((s) => (
+                                  <option key={s.id} value={s.id} disabled={selectedSkillIds.includes(s.id)}>
+                                    {s.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </>
+                          )
+                        })()}
+                      </div>
+                    ) : (
+                      <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-3 py-3 text-xs text-slate-500">
+                        კატეგორიის ასარჩევად გამოიყენე ზემოთ სია — აქ გამოჩნდება შესაბამისი ტეგები.
+                      </p>
+                    )}
+
+                    {selectedSkillIds.length > 0 ? (
+                      <div className="rounded-lg border border-slate-100 bg-white p-3">
+                        <p className="mb-2 text-xs font-semibold text-slate-600">ყველა არჩეული უნარი</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {selectedSkillIds.map((id) => (
+                            <button
+                              key={id}
+                              type="button"
+                              onClick={() => toggleSkill(id)}
+                              className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#D1D5DB] bg-white px-2.5 py-0.5 text-xs font-medium text-[#374151] hover:bg-red-50"
+                            >
+                              <span className="truncate">{skillNameById.get(id) ?? id}</span>
+                              <span className="shrink-0 text-slate-400" aria-hidden>
+                                ×
+                              </span>
                             </button>
                           ))}
                         </div>
                       </div>
-                    ))}
+                    ) : null}
                   </div>
                   <div className="space-y-2 rounded-lg border border-slate-200 p-3">
                     <p className="text-sm font-semibold text-[#1B2B4B]">გამოცდილება (მაქს. 10)</p>
-                    {experiences.map((exp, idx) => (
-                      <div key={`exp-${idx}`} className="rounded-lg border border-slate-200 p-3">
-                        <input
-                          className="mb-2 h-10 w-full rounded border border-slate-300 px-2"
-                          placeholder="პოზიცია / როლი"
-                          value={exp.title}
-                          onChange={(e) => updateExperience(idx, "title", e.target.value)}
-                        />
-                        <input
-                          className="mb-2 h-10 w-full rounded border border-slate-300 px-2"
-                          placeholder="სამუშაო ადგილი (კომპანია)"
-                          value={exp.organization}
-                          onChange={(e) => updateExperience(idx, "organization", e.target.value)}
-                        />
-                        <div className="grid grid-cols-2 gap-2">
-                          <input
-                            type="date"
-                            className="h-10 rounded border border-slate-300 px-2"
-                            value={exp.start_date}
-                            onChange={(e) => updateExperience(idx, "start_date", e.target.value)}
-                          />
-                          <input
-                            type="date"
-                            disabled={exp.is_present}
-                            className="h-10 rounded border border-slate-300 px-2 disabled:bg-slate-100"
-                            value={exp.end_date}
-                            onChange={(e) => updateExperience(idx, "end_date", e.target.value)}
-                          />
-                        </div>
-                        <label className="mt-2 flex items-center gap-2 text-sm text-slate-700">
-                          <input
-                            type="checkbox"
-                            checked={exp.is_present}
-                            onChange={(e) => updateExperience(idx, "is_present", e.target.checked)}
-                          />
-                          მიმდინარე
-                        </label>
-                        <textarea
-                          className="mt-2 w-full rounded border border-slate-300 px-2 py-1"
-                          rows={3}
-                          placeholder="აღწერა"
-                          value={exp.description}
-                          onChange={(e) => updateExperience(idx, "description", e.target.value)}
-                        />
-                        {experiences.length > 1 ? (
-                          <button
-                            type="button"
-                            onClick={() => setExperiences((prev) => prev.filter((_, i) => i !== idx))}
-                            className="mt-2 text-xs text-red-600"
-                          >
-                            წაშლა
-                          </button>
-                        ) : null}
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      disabled={experiences.length >= 10}
-                      onClick={() =>
-                        setExperiences((prev) => [
-                          ...prev,
-                          { title: "", organization: "", start_date: "", end_date: "", is_present: false, description: "" },
-                        ])
-                      }
-                      className="text-sm font-semibold text-[#D4A843]"
-                    >
-                      ＋ გამოცდილების დამატება
-                    </button>
+                    {experiences.length === 0 ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExperiences([
+                            { title: "", organization: "", start_date: "", end_date: "", is_present: false, description: "" },
+                          ])
+                        }
+                        className="inline-flex h-11 w-full items-center justify-center rounded-lg border border-dashed border-[#2563EB]/50 bg-[#EFF6FF] px-4 text-sm font-semibold text-[#2563EB] transition hover:bg-[#DBEAFE]"
+                      >
+                        ＋ სამუშაოს / გამოცდილების დამატება
+                      </button>
+                    ) : (
+                      <>
+                        {experiences.map((exp, idx) => (
+                          <div key={`exp-${idx}`} className="rounded-lg border border-slate-200 bg-white p-3">
+                            <input
+                              className="mb-2 h-10 w-full rounded border border-slate-300 px-2"
+                              placeholder="პოზიცია / როლი"
+                              value={exp.title}
+                              onChange={(e) => updateExperience(idx, "title", e.target.value)}
+                            />
+                            <input
+                              className="mb-2 h-10 w-full rounded border border-slate-300 px-2"
+                              placeholder="სამუშაო ადგილი (კომპანია)"
+                              value={exp.organization}
+                              onChange={(e) => updateExperience(idx, "organization", e.target.value)}
+                            />
+                            <div className="grid grid-cols-2 gap-2">
+                              <input
+                                type="date"
+                                className="h-10 rounded border border-slate-300 px-2"
+                                value={exp.start_date}
+                                onChange={(e) => updateExperience(idx, "start_date", e.target.value)}
+                              />
+                              <input
+                                type="date"
+                                disabled={exp.is_present}
+                                className="h-10 rounded border border-slate-300 px-2 disabled:bg-slate-100"
+                                value={exp.end_date}
+                                onChange={(e) => updateExperience(idx, "end_date", e.target.value)}
+                              />
+                            </div>
+                            <label className="mt-2 flex items-center gap-2 text-sm text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={exp.is_present}
+                                onChange={(e) => updateExperience(idx, "is_present", e.target.checked)}
+                              />
+                              მიმდინარე
+                            </label>
+                            <textarea
+                              className="mt-2 w-full rounded border border-slate-300 px-2 py-1"
+                              rows={3}
+                              placeholder="აღწერა"
+                              value={exp.description}
+                              onChange={(e) => updateExperience(idx, "description", e.target.value)}
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExperiences((prev) => {
+                                  const next = prev.filter((_, i) => i !== idx)
+                                  return next
+                                })
+                              }
+                              className="mt-2 text-xs font-medium text-red-600 hover:underline"
+                            >
+                              წაშლა
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          disabled={experiences.length >= 10}
+                          onClick={() =>
+                            setExperiences((prev) => [
+                              ...prev,
+                              { title: "", organization: "", start_date: "", end_date: "", is_present: false, description: "" },
+                            ])
+                          }
+                          className="inline-flex h-10 w-full items-center justify-center rounded-lg border border-slate-300 bg-white text-sm font-semibold text-[#2563EB] transition hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          ＋ კიდევ ერთი სამუშაოს დამატება
+                        </button>
+                      </>
+                    )}
                   </div>
 
                   <div className="space-y-2 rounded-lg border border-slate-200 p-3">
                     <p className="text-sm font-semibold text-[#1B2B4B]">განათლება (არასავალდებულო, მაქს. 10)</p>
-                    {educations.map((edu, idx) => (
-                      <div key={`edu-${idx}`} className="rounded-lg border border-slate-200 p-3">
-                        <input
-                          className="mb-2 h-10 w-full rounded border border-slate-300 px-2"
-                          placeholder="სად სწავლობ / სასწავლებელი"
-                          value={edu.institution}
-                          onChange={(e) => updateEducation(idx, "institution", e.target.value)}
-                        />
-                        <select
-                          className="mb-2 h-10 w-full rounded border border-slate-300 bg-white px-2"
-                          value={edu.degree_level}
-                          onChange={(e) => updateEducation(idx, "degree_level", e.target.value)}
+                    {educations.length === 0 ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEducations([{ institution: "", degree_level: "", field_of_study: "", end_date: "" }])
+                        }
+                        className="inline-flex h-11 w-full items-center justify-center rounded-lg border border-dashed border-[#2563EB]/50 bg-[#EFF6FF] px-4 text-sm font-semibold text-[#2563EB] transition hover:bg-[#DBEAFE]"
+                      >
+                        ＋ განათლების დამატება
+                      </button>
+                    ) : (
+                      <>
+                        {educations.map((edu, idx) => (
+                          <div key={`edu-${idx}`} className="rounded-lg border border-slate-200 bg-white p-3">
+                            <input
+                              className="mb-2 h-10 w-full rounded border border-slate-300 px-2"
+                              placeholder="სად სწავლობ / სასწავლებელი"
+                              value={edu.institution}
+                              onChange={(e) => updateEducation(idx, "institution", e.target.value)}
+                            />
+                            <select
+                              className="mb-2 h-10 w-full rounded border border-slate-300 bg-white px-2"
+                              value={edu.degree_level}
+                              onChange={(e) => updateEducation(idx, "degree_level", e.target.value)}
+                            >
+                              <option value="">აირჩიე საფეხური</option>
+                              {FREELANCER_EDUCATION_DEGREE_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              className="mb-2 h-10 w-full rounded border border-slate-300 px-2"
+                              placeholder="რას სწავლობ (სპეციალობა / მიმართულება)"
+                              value={edu.field_of_study}
+                              onChange={(e) => updateEducation(idx, "field_of_study", e.target.value)}
+                            />
+                            <label className="mb-1 block text-xs text-slate-600">დასრულების თარიღი</label>
+                            <input
+                              type="date"
+                              className="h-10 w-full rounded border border-slate-300 px-2"
+                              value={edu.end_date}
+                              onChange={(e) => updateEducation(idx, "end_date", e.target.value)}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setEducations((prev) => prev.filter((_, i) => i !== idx))}
+                              className="mt-2 text-xs font-medium text-red-600 hover:underline"
+                            >
+                              წაშლა
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          disabled={educations.length >= 10}
+                          onClick={() =>
+                            setEducations((prev) => [
+                              ...prev,
+                              { institution: "", degree_level: "", field_of_study: "", end_date: "" },
+                            ])
+                          }
+                          className="inline-flex h-10 w-full items-center justify-center rounded-lg border border-slate-300 bg-white text-sm font-semibold text-[#2563EB] transition hover:bg-slate-50 disabled:opacity-50"
                         >
-                          <option value="">აირჩიე საფეხური</option>
-                          {FREELANCER_EDUCATION_DEGREE_OPTIONS.map((opt) => (
-                            <option key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          className="mb-2 h-10 w-full rounded border border-slate-300 px-2"
-                          placeholder="რას სწავლობ (სპეციალობა / მიმართულება)"
-                          value={edu.field_of_study}
-                          onChange={(e) => updateEducation(idx, "field_of_study", e.target.value)}
-                        />
-                        <label className="mb-1 block text-xs text-slate-600">დასრულების თარიღი</label>
-                        <input
-                          type="date"
-                          className="h-10 w-full rounded border border-slate-300 px-2"
-                          value={edu.end_date}
-                          onChange={(e) => updateEducation(idx, "end_date", e.target.value)}
-                        />
-                        {educations.length > 1 ? (
-                          <button
-                            type="button"
-                            onClick={() => setEducations((prev) => prev.filter((_, i) => i !== idx))}
-                            className="mt-2 text-xs text-red-600"
-                          >
-                            წაშლა
-                          </button>
-                        ) : null}
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      disabled={educations.length >= 10}
-                      onClick={() =>
-                        setEducations((prev) => [
-                          ...prev,
-                          { institution: "", degree_level: "", field_of_study: "", end_date: "" },
-                        ])
-                      }
-                      className="text-sm font-semibold text-[#D4A843]"
-                    >
-                      ＋ განათლების დამატება
-                    </button>
+                          ＋ კიდევ განათლების დამატება
+                        </button>
+                      </>
+                    )}
                   </div>
                   {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
                   <div className="grid grid-cols-2 gap-2">
                     <button onClick={() => setStep(1)} className="h-11 rounded-lg border border-slate-300">უკან</button>
-                    <button onClick={nextFromStep2} className="h-11 rounded-lg bg-[#1B2B4B] text-white hover:bg-[#D4A843] hover:text-[#1B2B4B]">შემდეგი</button>
+                    <button
+                      type="button"
+                      onClick={nextFromStep2}
+                      className="h-11 rounded-lg bg-[#2563EB] text-sm font-medium text-white transition-colors duration-150 hover:bg-[#1D4ED8]"
+                    >
+                      შემდეგი
+                    </button>
                   </div>
                 </div>
               )}
@@ -773,7 +981,14 @@ export default function OnboardingPage() {
                   {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
                   <div className="grid grid-cols-2 gap-2">
                     <button onClick={() => setStep(2)} className="h-11 rounded-lg border border-slate-300">უკან</button>
-                    <button disabled={submitting} onClick={submitFreelancer} className="h-11 rounded-lg bg-[#1B2B4B] text-white hover:bg-[#D4A843] hover:text-[#1B2B4B]">{submitting ? "იტვირთება..." : "პროფილის გამოქვეყნება"}</button>
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={submitFreelancer}
+                      className="h-11 rounded-lg bg-[#2563EB] text-sm font-medium text-white transition-colors duration-150 hover:bg-[#1D4ED8] disabled:opacity-60"
+                    >
+                      {submitting ? "იტვირთება..." : "პროფილის გამოქვეყნება"}
+                    </button>
                   </div>
                 </div>
               )}

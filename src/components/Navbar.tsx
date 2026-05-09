@@ -309,6 +309,17 @@ export default function Navbar() {
 
   const userDisplayName = fullName.trim() || "მომხმარებელი"
 
+  const confirmAndLogout = () => {
+    if (!window.confirm("დარწმუნებული ხარ, რომ გსურს სისტემიდან გასვლა?")) return
+    setMenuOpen(false)
+    setMobileMenuOpen(false)
+    void (async () => {
+      const client = supabase
+      if (client) await client.auth.signOut()
+      navigate("/", { replace: true })
+    })()
+  }
+
   return (
     <>
     <header className={`sticky top-0 z-40 border-b border-slate-200 bg-white font-sans ${isScrolled ? "shadow-sm" : ""}`}>
@@ -465,6 +476,13 @@ export default function Navbar() {
                     პროფილი
                   </Link>
                 ) : null}
+                <button
+                  type="button"
+                  onClick={confirmAndLogout}
+                  className="mt-1 block w-full rounded border-t border-slate-100 px-3 py-2 pt-3 text-left text-sm text-red-600 hover:bg-red-50"
+                >
+                  გასვლა
+                </button>
               </div>
             </div>
           ) : (
@@ -548,6 +566,13 @@ export default function Navbar() {
                   პროფილი
                 </Link>
               ) : null}
+              <button
+                type="button"
+                onClick={confirmAndLogout}
+                className="rounded-md px-3 py-3 text-left text-sm font-semibold text-red-600"
+              >
+                გასვლა
+              </button>
             </>
           ) : (
             <div className="grid gap-2 pt-2">
