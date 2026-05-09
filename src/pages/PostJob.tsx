@@ -2,6 +2,46 @@ import { useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import Navbar from "../components/Navbar.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
+import { jobImageThumbnailUrl } from "../lib/storageImageUrl.ts"
+
+const MAX_JOB_IMAGES = 3
+const MAX_INPUT_IMAGE_BYTES = 10 * 1024 * 1024
+const MAX_IMAGE_EDGE = 1600
+const TARGET_IMAGE_BYTES = 700 * 1024
+
+async function fileToImageBitmap(file: File): Promise<ImageBitmap> {
+  return await createImageBitmap(file)
+}
+
+async function canvasToJpegBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality))
+  if (!blob) throw new Error("სურათის დამუშავება ვერ მოხერხდა.")
+  return blob
+}
+
+async function compressImage(file: File): Promise<Blob> {
+  const bitmap = await fileToImageBitmap(file)
+  try {
+    const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(bitmap.width, bitmap.height))
+    const width = Math.max(1, Math.round(bitmap.width * scale))
+    const height = Math.max(1, Math.round(bitmap.height * scale))
+    const canvas = document.createElement("canvas")
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext("2d")
+    if (!ctx) throw new Error("სურათის დამუშავება ვერ მოხერხდა.")
+    ctx.drawImage(bitmap, 0, 0, width, height)
+    let quality = 0.86
+    let best = await canvasToJpegBlob(canvas, quality)
+    while (best.size > TARGET_IMAGE_BYTES && quality > 0.45) {
+      quality -= 0.08
+      best = await canvasToJpegBlob(canvas, quality)
+    }
+    return best
+  } finally {
+    bitmap.close()
+  }
+}
 
 const BUDGET_TYPE_LABELS: Record<string, string> = {
   fixed: "ფიქსირებული",
@@ -38,6 +78,7 @@ type FieldErrors = {
   budgetMin?: string
   budgetMax?: string
   applicationDeadline?: string
+  vacancies?: string
 }
 
 export default function PostJobPage() {
@@ -71,6 +112,10 @@ export default function PostJobPage() {
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
   const [contactPreference, setContactPreference] = useState("email")
   const [applicationDeadline, setApplicationDeadline] = useState("")
+  const [vacancies, setVacancies] = useState(1)
+  const [acceptedCountSnapshot, setAcceptedCountSnapshot] = useState(0)
+  const [existingImageUrls, setExistingImageUrls] = useState<string[]>([])
+  const [newImageFiles, setNewImageFiles] = useState<File[]>([])
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
 
@@ -160,7 +205,17 @@ export default function PostJobPage() {
           setLocationType(jobRow.location_type)
           setContactPreference(jobRow.contact_preference)
           setApplicationDeadline(jobRow.application_deadline ? jobRow.application_deadline.slice(0, 10) : "")
+          const jr = jobRow as { vacancies?: unknown; accepted_count?: unknown }
+          const vacN = Number(jr.vacancies ?? 1)
+          const acN = Number(jr.accepted_count ?? 0)
+          setVacancies(Number.isFinite(vacN) && vacN >= 1 ? Math.floor(vacN) : 1)
+          setAcceptedCountSnapshot(Number.isFinite(acN) && acN >= 0 ? Math.floor(acN) : 0)
           setSelectedSkillIds(jsRows?.map((r) => r.skill_id) ?? [])
+          setExistingImageUrls(
+            Array.isArray((jobRow as { image_urls?: unknown }).image_urls)
+              ? ((jobRow as { image_urls: unknown[] }).image_urls.map((v) => String(v)).filter(Boolean).slice(0, MAX_JOB_IMAGES))
+              : [],
+          )
         }
       } catch (e) {
         setPageError(e instanceof Error ? e.message : "გვერდის ჩატვირთვა ვერ მოხერხდა.")
@@ -218,6 +273,48 @@ export default function PostJobPage() {
     setSelectedSkillIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }
 
+  const removeExistingImage = (url: string) => {
+    setExistingImageUrls((prev) => prev.filter((item) => item !== url))
+  }
+
+  const removeNewImage = (index: number) => {
+    setNewImageFiles((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const handleImagePick = (files: FileList | null) => {
+    if (!files) return
+    const incoming = Array.from(files)
+    if (incoming.length === 0) return
+    const remaining = MAX_JOB_IMAGES - existingImageUrls.length - newImageFiles.length
+    if (remaining <= 0) {
+      setPageError(`მაქსიმუმ ${MAX_JOB_IMAGES} სურათი შეგიძლია დაამატო.`)
+      return
+    }
+    const valid: File[] = []
+    for (const file of incoming) {
+      if (!file.type.startsWith("image/")) continue
+      if (file.size > MAX_INPUT_IMAGE_BYTES) {
+        setPageError("ერთი ან მეტი სურათი ძალიან დიდია. მაქსიმუმ 10MB თითო ფაილზე.")
+        continue
+      }
+      valid.push(file)
+    }
+    if (valid.length === 0) return
+    setPageError("")
+    setNewImageFiles((prev) => [...prev, ...valid].slice(0, Math.max(0, remaining + prev.length)))
+  }
+
+  const newImagePreviews = useMemo(
+    () => newImageFiles.map((file) => ({ file, url: URL.createObjectURL(file) })),
+    [newImageFiles],
+  )
+
+  useEffect(() => {
+    return () => {
+      for (const preview of newImagePreviews) URL.revokeObjectURL(preview.url)
+    }
+  }, [newImagePreviews])
+
   const validateForPublish = (): boolean => {
     const e: FieldErrors = {}
 
@@ -257,6 +354,12 @@ export default function PostJobPage() {
       e.applicationDeadline = "ვადა უნდა იყოს მომავალში."
     }
 
+    if (!Number.isFinite(vacancies) || vacancies < 1 || !Number.isInteger(vacancies)) {
+      e.vacancies = "ვაკანსიების რაოდენობა მინიმუმ 1 უნდა იყოს."
+    } else if (isEdit && vacancies < acceptedCountSnapshot) {
+      e.vacancies = `ვაკანსიები არ უნდა იყოს ნაკლები უკვე მიღებული ფრილანსერების (${acceptedCountSnapshot}) რაოდენობაზე.`
+    }
+
     setFieldErrors(e)
     return Object.keys(e).length === 0
   }
@@ -272,6 +375,7 @@ export default function PostJobPage() {
     setPageError("")
 
     try {
+      let currentJobId = jobId ?? null
       if (isEdit && jobId) {
         const { error: upErr } = await supabase
           .from("jobs")
@@ -288,6 +392,7 @@ export default function PostJobPage() {
             contact_preference: contactPreference,
             application_deadline: applicationDeadline || null,
             is_urgent: isUrgent,
+            vacancies,
           })
           .eq("id", jobId)
           .eq("hirer_profile_id", hirerProfileId)
@@ -303,49 +408,85 @@ export default function PostJobPage() {
             .insert(selectedSkillIds.map((skill_id) => ({ job_id: jobId, skill_id })))
           if (insErr) throw insErr
         }
+        currentJobId = jobId
+      } else {
+        const exp = new Date()
+        exp.setDate(exp.getDate() + 30)
 
-        navigate("/dashboard", { replace: true, state: { successMessage: "განცხადება განახლდა." } })
-        return
+        const { data: inserted, error: insJobErr } = await supabase
+          .from("jobs")
+          .insert({
+            hirer_profile_id: hirerProfileId,
+            category_id: categoryId,
+            subcategory_id: subcategoryId || null,
+            title: title.trim(),
+            description: description.trim(),
+            budget_type: budgetType,
+            budget_min: Number(budgetMin),
+            budget_max: Number(budgetMax),
+            duration_type: durationType,
+            location_type: locationType,
+            contact_preference: contactPreference,
+            application_deadline: applicationDeadline || null,
+            is_urgent: isUrgent,
+            is_featured: false,
+            status: "open",
+            views_count: 0,
+            vacancies,
+            accepted_count: 0,
+            expires_at: exp.toISOString(),
+          })
+          .select("id")
+          .single()
+
+        if (insJobErr) throw insJobErr
+        if (!inserted?.id) throw new Error("განცხადების გამოქვეყნება ვერ მოხერხდა.")
+        currentJobId = inserted.id
+
+        if (selectedSkillIds.length > 0) {
+          const { error: skErr } = await supabase
+            .from("job_skills")
+            .insert(selectedSkillIds.map((skill_id) => ({ job_id: inserted.id, skill_id })))
+          if (skErr) throw skErr
+        }
       }
 
-      const exp = new Date()
-      exp.setDate(exp.getDate() + 30)
+      if (!currentJobId) throw new Error("განცხადების ID ვერ მოიძებნა.")
 
-      const { data: inserted, error: insJobErr } = await supabase
-        .from("jobs")
-        .insert({
-          hirer_profile_id: hirerProfileId,
-          category_id: categoryId,
-          subcategory_id: subcategoryId || null,
-          title: title.trim(),
-          description: description.trim(),
-          budget_type: budgetType,
-          budget_min: Number(budgetMin),
-          budget_max: Number(budgetMax),
-          duration_type: durationType,
-          location_type: locationType,
-          contact_preference: contactPreference,
-          application_deadline: applicationDeadline || null,
-          is_urgent: isUrgent,
-          is_featured: false,
-          status: "open",
-          views_count: 0,
-          expires_at: exp.toISOString(),
-        })
-        .select("id")
-        .single()
-
-      if (insJobErr) throw insJobErr
-      if (!inserted?.id) throw new Error("განცხადების გამოქვეყნება ვერ მოხერხდა.")
-
-      if (selectedSkillIds.length > 0) {
-        const { error: skErr } = await supabase
-          .from("job_skills")
-          .insert(selectedSkillIds.map((skill_id) => ({ job_id: inserted.id, skill_id })))
-        if (skErr) throw skErr
+      let uploadedImagePaths: string[] = []
+      if (newImageFiles.length > 0) {
+        const bucket = "job-images"
+        const compressedFiles = await Promise.all(newImageFiles.map((file) => compressImage(file)))
+        uploadedImagePaths = []
+        for (let i = 0; i < compressedFiles.length; i += 1) {
+          const blob = compressedFiles[i]
+          const safeName = `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 8)}.jpg`
+          const path = `${hirerProfileId}/${currentJobId}/${safeName}`
+          const { error: uploadError } = await supabase.storage.from(bucket).upload(path, blob, {
+            contentType: "image/jpeg",
+            upsert: false,
+          })
+          if (uploadError) {
+            throw new Error(`სურათის ატვირთვა ვერ მოხერხდა: ${uploadError.message}`)
+          }
+          uploadedImagePaths.push(path)
+        }
       }
 
-      navigate("/dashboard", { replace: true, state: { successMessage: "განცხადება წარმატებით გამოქვეყნდა." } })
+      const finalImageUrls = [...existingImageUrls, ...uploadedImagePaths].slice(0, MAX_JOB_IMAGES)
+      if (finalImageUrls.length !== existingImageUrls.length || uploadedImagePaths.length > 0) {
+        const { error: imageSaveError } = await supabase
+          .from("jobs")
+          .update({ image_urls: finalImageUrls } as { image_urls: string[] })
+          .eq("id", currentJobId)
+          .eq("hirer_profile_id", hirerProfileId)
+        if (imageSaveError) throw imageSaveError
+      }
+
+      navigate("/dashboard", {
+        replace: true,
+        state: { successMessage: isEdit ? "განცხადება განახლდა." : "განცხადება წარმატებით გამოქვეყნდა." },
+      })
     } catch (e) {
       setPageError(
         e instanceof Error
@@ -406,6 +547,9 @@ export default function PostJobPage() {
                   <span className="rounded-full bg-white px-3 py-1 text-slate-700">ვადა: {applicationDeadline}</span>
                 ) : null}
                 {isUrgent ? <span className="rounded-full bg-red-100 px-3 py-1 font-semibold text-red-700">სასწრაფო</span> : null}
+                <span className="rounded-full bg-white px-3 py-1 text-slate-700">
+                  ვაკანსიები / Vacancies: {vacancies}
+                </span>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -634,6 +778,26 @@ export default function PostJobPage() {
             <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <h2 className="border-l-4 border-[#D4A843] pl-3 text-xl font-bold text-[#1B2B4B]">5. კონტაქტი და ვადა</h2>
               <div className="mt-4 space-y-4">
+                <label className="block">
+                  <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">
+                    ვაკანსიების რაოდენობა / Vacancies <span className="text-red-500">*</span>
+                  </span>
+                  <input
+                    type="number"
+                    min={Math.max(1, isEdit ? acceptedCountSnapshot : 1)}
+                    step={1}
+                    value={vacancies}
+                    onChange={(event) => {
+                      const minSlots = Math.max(1, isEdit ? acceptedCountSnapshot : 1)
+                      const n = Number(event.target.value)
+                      if (!Number.isFinite(n)) setVacancies(minSlots)
+                      else setVacancies(Math.max(minSlots, Math.floor(n)))
+                    }}
+                    className="h-11 w-full max-w-[200px] rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#D4A843] focus:ring-2"
+                  />
+                  <p className="mt-1 text-xs text-slate-500">რამდენ ფრილანსერს შეუძლია ერთად მუშაობა ამ განცხადებაზე (მინ. 1).</p>
+                  {fieldErrors.vacancies ? <p className="mt-1 text-sm text-red-600">{fieldErrors.vacancies}</p> : null}
+                </label>
                 <div>
                   <p className="mb-2 text-sm font-semibold text-[#1B2B4B]">კონტაქტის მეთოდი</p>
                   <div className="grid gap-2 sm:grid-cols-2">
@@ -674,6 +838,56 @@ export default function PostJobPage() {
               >
                 პრევიუს ნახვა
               </button>
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 className="border-l-4 border-[#D4A843] pl-3 text-xl font-bold text-[#1B2B4B]">7. სურათები</h2>
+              <p className="mt-2 text-sm text-slate-500">მაქსიმუმ 3 სურათი. ფაილები ავტომატურად მცირდება ზომაში ატვირთვამდე.</p>
+              <div className="mt-4 rounded-lg border border-slate-300 bg-slate-50 p-3">
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(event) => {
+                    handleImagePick(event.target.files)
+                    event.currentTarget.value = ""
+                  }}
+                  disabled={existingImageUrls.length + newImageFiles.length >= MAX_JOB_IMAGES}
+                  className="block w-full text-xs text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-[#1B2B4B] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white"
+                />
+                {existingImageUrls.length + newImageFiles.length > 0 ? (
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    {existingImageUrls.map((url) => (
+                      <div key={url} className="overflow-hidden rounded-md border border-slate-200 bg-white">
+                        <img
+                          src={supabase ? jobImageThumbnailUrl(supabase, url) : ""}
+                          alt=""
+                          className="h-20 w-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeExistingImage(url)}
+                          className="w-full border-t border-slate-200 py-1 text-[11px] font-semibold text-red-600"
+                        >
+                          წაშლა
+                        </button>
+                      </div>
+                    ))}
+                    {newImagePreviews.map((preview, index) => (
+                      <div key={`${preview.file.name}-${index}`} className="overflow-hidden rounded-md border border-slate-200 bg-white">
+                        <img src={preview.url} alt="" className="h-20 w-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => removeNewImage(index)}
+                          className="w-full border-t border-slate-200 py-1 text-[11px] font-semibold text-red-600"
+                        >
+                          წაშლა
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </section>
           </div>
         )}

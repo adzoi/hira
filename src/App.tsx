@@ -1,14 +1,17 @@
-import { Suspense, lazy, useEffect, useRef, useState } from "react"
+import { PayPalScriptProvider } from "@paypal/react-paypal-js"
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react"
 import type { FormEvent } from "react"
-import { Link, Route, Routes, useNavigate, useSearchParams } from "react-router-dom"
+import { Link, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import Navbar from "./components/Navbar.tsx"
 import PageLoader from "./components/ui/PageLoader.tsx"
 import NotFoundPage from "./pages/NotFound.tsx"
+import { avatarImageUrl } from "./lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "./lib/supabase"
 import ProtectedRoute from "./components/ProtectedRoute.tsx"
 import LocationFilterSelect from "./components/LocationFilterSelect.tsx"
 import Footer from "./components/Footer.tsx"
 import HomeFeedSection from "./components/HomeFeedSection.tsx"
+import { stripLegacyPricePrefix } from "./lib/listingDescription.ts"
 
 const DashboardPage = lazy(() => import("./pages/Dashboard.tsx"))
 const BrowsePage = lazy(() => import("./pages/Browse.tsx"))
@@ -19,12 +22,15 @@ const OnboardingPageStandalone = lazy(() => import("./pages/Onboarding.tsx"))
 const PostJobPage = lazy(() => import("./pages/PostJob.tsx"))
 const ProfilePage = lazy(() => import("./pages/Profile.tsx"))
 const ListingFormPage = lazy(() => import("./pages/ListingForm.tsx"))
+const ListingDetailPage = lazy(() => import("./pages/ListingDetail.tsx"))
+const CVGeneratorPage = lazy(() => import("./pages/CVGenerator.tsx"))
+const PublicCVPage = lazy(() => import("./pages/PublicCV.tsx"))
 const ListingsPage = lazy(() => import("./pages/Listings.tsx"))
 const HirersPage = lazy(() => import("./pages/Hirers.tsx"))
 const HirerPublicPage = lazy(() => import("./pages/HirerPublic.tsx"))
-const MessagesPage = lazy(() => import("./pages/Messages"))
-
-type HomeCategory = { id: string; name: string }
+const ForgotPasswordPage = lazy(() => import("./pages/ForgotPassword.tsx"))
+const ResetPasswordPage = lazy(() => import("./pages/ResetPassword.tsx"))
+const PayPalCheckoutE2EPage = lazy(() => import("./pages/PayPalCheckoutE2E.tsx"))
 
 type HomeStats = {
   freelancerCount: number
@@ -32,56 +38,56 @@ type HomeStats = {
   completedCount: number
 }
 
-type HeroFreelancer = {
+type HomepageVipRenderableItem = {
+  type: "job" | "freelancer"
   id: string
-  slug: string
-  fullName: string
+  title?: string
+  name?: string
+  vip_expires_at: string
+  href: string
+  subtitle: string
+  description: string
   avatarUrl: string | null
-  professionalTitle: string
-  averageRating: number
-  completedJobsCount: number
-  /** Skill names from `freelancer_skills` (deduped, capped for display). */
-  skillLabels: string[]
-  bioSnippet: string | null
-}
-
-function getHeroInitials(fullName: string) {
-  const parts = fullName.trim().split(" ").filter(Boolean)
-  if (parts.length === 0) return "ფ"
-  return `${parts[0][0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase()
+  rating: number
 }
 
 function formatNumber(value: number) {
   return value.toLocaleString("en-US").replace(/,/g, " ")
 }
 
-/** One-line bio preview for hero cards (Georgian-friendly whitespace). */
-function heroBioSnippet(raw: string | null | undefined, maxLen = 130): string | null {
-  if (!raw || typeof raw !== "string") return null
-  const oneLine = raw.replace(/\s+/g, " ").trim()
-  if (!oneLine) return null
-  if (oneLine.length <= maxLen) return oneLine
-  return `${oneLine.slice(0, Math.max(0, maxLen - 1)).trim()}…`
+function shortText(raw: string | null | undefined, max = 100): string {
+  const normalized = String(raw ?? "").replace(/\s+/g, " ").trim()
+  if (!normalized) return "დეტალები განცხადების გვერდზე."
+  if (normalized.length <= max) return normalized
+  return `${normalized.slice(0, Math.max(0, max - 1)).trim()}…`
 }
 
-function collectHeroSkillNames(freelancerSkills: unknown): string[] {
-  const rows = Array.isArray(freelancerSkills) ? freelancerSkills : []
-  const seen = new Set<string>()
-  const out: string[] = []
-  for (const row of rows) {
-    const r = row as { skills?: unknown }
-    const sk = r.skills
-    const skillObj = Array.isArray(sk) ? sk[0] : sk
-    const name =
-      skillObj && typeof skillObj === "object" && "name" in skillObj
-        ? String((skillObj as { name?: unknown }).name ?? "").trim()
-        : ""
-    if (name && !seen.has(name)) {
-      seen.add(name)
-      out.push(name)
+function gigoriListingDescriptionPlain(raw: string | null | undefined): string {
+  const META_PREFIX = "<!--gigori-meta:"
+  const META_SUFFIX = "-->"
+  let body = String(raw ?? "")
+  if (body.startsWith(META_PREFIX)) {
+    const endIndex = body.indexOf(META_SUFFIX)
+    if (endIndex >= 0) {
+      body = body.slice(endIndex + META_SUFFIX.length).trimStart()
     }
   }
-  return out
+  return stripLegacyPricePrefix(body).replace(/\s+/g, " ").trim()
+}
+
+function initials(value: string): string {
+  const parts = value.trim().split(" ").filter(Boolean)
+  if (parts.length === 0) return "G"
+  return `${parts[0][0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase()
+}
+
+function ratingStars(value: number) {
+  const rounded = Math.round(value)
+  return `${"★".repeat(Math.max(0, rounded))}${"☆".repeat(Math.max(0, 5 - rounded))}`
+}
+
+function showVipCardRating(value: number) {
+  return Number.isFinite(value) && value > 0
 }
 
 /** Only same-site relative paths; blocks protocol-relative URLs. */
@@ -102,136 +108,228 @@ function sanitizeLoginRedirect(raw: string | null): string | null {
 
 function HomePage() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
   const [searchText, setSearchText] = useState("")
-  const [categories, setCategories] = useState<HomeCategory[]>([])
   const [stats, setStats] = useState<HomeStats>({
     freelancerCount: 0,
     jobCount: 0,
     completedCount: 0,
   })
-  const [heroFreelancers, setHeroFreelancers] = useState<HeroFreelancer[]>([])
-  const [heroFreelancersLoading, setHeroFreelancersLoading] = useState(true)
+  const [homepageVipItems, setHomepageVipItems] = useState<HomepageVipRenderableItem[]>([])
+  const [homepageVipLoading, setHomepageVipLoading] = useState(true)
+  const [homepageVipStartIndex, setHomepageVipStartIndex] = useState(0)
+  /** Which VIP strip we show: hirer job postings vs freelancer listings — opposite of viewer’s role (guest = talent). */
+  const [vipBoxMode, setVipBoxMode] = useState<"job" | "freelancer">("freelancer")
 
   useEffect(() => {
-    document.title = "გიგორი — ქართული ფრილანს პლატფორმა"
+    document.title = "გიგორი — ქართული freelance პლატფორმა"
   }, [])
 
   useEffect(() => {
     const loadHomeData = async () => {
-      setHeroFreelancersLoading(true)
       if (!supabase) {
-        setHeroFreelancers([])
-        setHeroFreelancersLoading(false)
         return
       }
 
-      const [categoriesRes, freelancerRes, jobsRes, completedRes, heroRes] = await Promise.all([
-        supabase.from("categories").select("id,name_ka,name_en").order("name_ka"),
+      const [freelancerRes, jobsRes, completedRes] = await Promise.all([
         supabase
           .from("freelancer_profiles")
           .select("*", { count: "exact", head: true })
-          .eq("is_public", true),
-        supabase.from("jobs").select("*", { count: "exact", head: true }),
-        supabase.from("completed_jobs").select("*", { count: "exact", head: true }),
-        supabase
-          .from("freelancer_profiles")
-          .select(
-            `
-            id,
-            slug,
-            professional_title,
-            average_rating,
-            bio,
-            completed_jobs_count,
-            profiles:profiles!freelancer_profiles_user_id_fkey (full_name, avatar_url),
-            freelancer_skills (
-              skills (name)
-            )
-          `,
-          )
           .eq("is_public", true)
-          .order("average_rating", { ascending: false })
-          .limit(3),
+          .limit(1),
+        supabase.from("jobs").select("*", { count: "exact", head: true }).limit(1),
+        supabase.from("completed_jobs").select("*", { count: "exact", head: true }).limit(1),
       ])
-
-      if (!categoriesRes.error) {
-        const mapped = (categoriesRes.data ?? []).map((cat: any) => ({
-          id: cat.id,
-          name: cat.name_ka ?? cat.name_en ?? "კატეგორია",
-        }))
-        setCategories(mapped)
-      }
 
       setStats({
         freelancerCount: freelancerRes.count ?? 0,
         jobCount: jobsRes.count ?? 0,
         completedCount: completedRes.count ?? 0,
       })
-
-      if (!heroRes.error && heroRes.data?.length) {
-        const mappedHero: HeroFreelancer[] = (heroRes.data as any[]).map((row) => {
-          const prof = row.profiles as null | { full_name: string | null; avatar_url: string | null }
-          const skillLabels = collectHeroSkillNames(row.freelancer_skills)
-          return {
-            id: row.id,
-            slug: row.slug,
-            fullName: prof?.full_name?.trim() || "ფრილანსერი",
-            avatarUrl: prof?.avatar_url ?? null,
-            professionalTitle: row.professional_title?.trim() || "ფრილანსერი",
-            averageRating: Number(row.average_rating ?? 0),
-            completedJobsCount: Math.max(0, Math.floor(Number(row.completed_jobs_count ?? 0))),
-            skillLabels,
-            bioSnippet: heroBioSnippet(row.bio ?? null),
-          }
-        })
-
-        const ids = mappedHero.map((f) => f.id)
-        const [{ data: cjRows, error: cjErr }, { data: siRows, error: siErr }] = await Promise.all([
-          supabase.from("completed_jobs").select("freelancer_profile_id").in("freelancer_profile_id", ids),
-          supabase
-            .from("service_inquiries")
-            .select("freelancer_profile_id")
-            .eq("status", "completed")
-            .in("freelancer_profile_id", ids),
-        ])
-
-        const countMap: Record<string, number> = Object.fromEntries(ids.map((id) => [id, 0]))
-
-        if (!cjErr && cjRows) {
-          for (const row of cjRows) {
-            const fp = row.freelancer_profile_id
-            countMap[fp] = (countMap[fp] ?? 0) + 1
-          }
-        } else {
-          for (const m of mappedHero) {
-            countMap[m.id] = Number(m.completedJobsCount ?? 0)
-          }
-        }
-
-        if (!siErr && siRows) {
-          for (const row of siRows) {
-            const fp = row.freelancer_profile_id
-            countMap[fp] = (countMap[fp] ?? 0) + 1
-          }
-        }
-
-        for (const item of mappedHero) {
-          item.completedJobsCount = countMap[item.id] ?? 0
-        }
-
-        setHeroFreelancers(mappedHero)
-      } else {
-        setHeroFreelancers([])
-      }
-      setHeroFreelancersLoading(false)
     }
 
     loadHomeData()
   }, [])
 
-  const activeCategoryId = searchParams.get("category") ?? ""
+  useEffect(() => {
+    type HirerNest = null | {
+      id?: string | null
+      user_id?: string | null
+      company_name?: string | null
+      average_rating_given?: number | null
+      profiles?: null | { full_name?: string | null; avatar_url?: string | null }
+    }
+    type FreelancerNest = null | {
+      user_id?: string | null
+      slug?: string | null
+      professional_title?: string | null
+      average_rating?: number | null
+      is_public?: boolean | null
+      profiles?: null | { full_name?: string | null; avatar_url?: string | null }
+    }
+
+    const loadHomepageVip = async () => {
+      if (!supabase) {
+        setHomepageVipItems([])
+        setHomepageVipStartIndex(0)
+        setVipBoxMode("freelancer")
+        setHomepageVipLoading(false)
+        return
+      }
+      const nowIso = new Date().toISOString()
+
+      let userType: "freelancer" | "hirer" | null = null
+      if (isSupabaseConfigured) {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (user) {
+          const { data: profile } = await supabase.from("profiles").select("user_type").eq("id", user.id).maybeSingle()
+          if (profile?.user_type === "freelancer") userType = "freelancer"
+          else if (profile?.user_type === "hirer") userType = "hirer"
+        }
+      }
+
+      // Freelancers seek work → hirer VIP jobs; hirers & guests seek talent → freelancer VIP listings (never mix).
+      const showHirerJobVip = userType === "freelancer"
+      setVipBoxMode(showHirerJobVip ? "job" : "freelancer")
+
+      if (showHirerJobVip) {
+        const { data: vipJobsData, error: vipJobsErr } = await supabase
+          .from("jobs")
+          .select(
+            `
+          id,
+          title,
+          description,
+          hirer_profile_id,
+          vip_expires_at,
+          hirer_profiles (
+            id,
+            user_id,
+            company_name,
+            average_rating_given,
+            profiles:profiles!hirer_profiles_user_id_fkey (
+              full_name,
+              avatar_url
+            )
+          )
+        `,
+          )
+          .eq("status", "open")
+          .eq("is_vip", true)
+          .gt("vip_expires_at", nowIso)
+          .order("vip_expires_at", { ascending: false })
+          .limit(12)
+
+        if (vipJobsErr) console.warn(vipJobsErr)
+
+        const jobItems: HomepageVipRenderableItem[] = (vipJobsData ?? []).map((row) => {
+          const hpRaw = (row as { hirer_profiles?: HirerNest | HirerNest[] }).hirer_profiles
+          const hp = Array.isArray(hpRaw) ? hpRaw[0] : hpRaw
+          const profile = hp?.profiles
+          const companyName = hp?.company_name?.trim() || profile?.full_name?.trim() || "დამქირავებელი"
+          const desc = String((row as { description?: string | null }).description ?? "").replace(/\s+/g, " ").trim()
+          const rating = Number(hp?.average_rating_given ?? 0)
+          const expires = String((row as { vip_expires_at?: string | null }).vip_expires_at ?? nowIso)
+          return {
+            type: "job",
+            id: String((row as { id: string }).id),
+            title: String((row as { title?: string | null }).title ?? "").trim() || "სამუშაო",
+            name: companyName,
+            vip_expires_at: expires,
+            subtitle: "დამქირავებელი",
+            description: shortText(desc),
+            avatarUrl: profile?.avatar_url ?? null,
+            rating: Number.isFinite(rating) ? rating : 0,
+            href: `/job/${encodeURIComponent(String((row as { id: string }).id))}`,
+          } satisfies HomepageVipRenderableItem
+        })
+
+        setHomepageVipItems(jobItems)
+      } else {
+        const { data: vipServicesData, error: vipServicesErr } = await supabase
+          .from("services")
+          .select(
+            `
+          id,
+          title,
+          description,
+          vip_expires_at,
+          freelancer_profiles (
+            user_id,
+            slug,
+            professional_title,
+            average_rating,
+            is_public,
+            profiles:profiles!freelancer_profiles_user_id_fkey (
+              full_name,
+              avatar_url
+            )
+          )
+        `,
+          )
+          .eq("is_active", true)
+          .eq("is_vip", true)
+          .gt("vip_expires_at", nowIso)
+          .order("vip_expires_at", { ascending: false })
+          .limit(12)
+
+        if (vipServicesErr) console.warn(vipServicesErr)
+
+        const freelancerItems: HomepageVipRenderableItem[] = []
+        for (const row of vipServicesData ?? []) {
+          const fpRaw = (row as { freelancer_profiles?: FreelancerNest | FreelancerNest[] }).freelancer_profiles
+          const fp = Array.isArray(fpRaw) ? fpRaw[0] : fpRaw
+          if (!fp?.slug || fp.is_public === false) continue
+          const prof = fp.profiles
+          const rating = Number(fp.average_rating ?? 0)
+          const descPlain = gigoriListingDescriptionPlain((row as { description?: string | null }).description)
+          const expires = String((row as { vip_expires_at?: string | null }).vip_expires_at ?? nowIso)
+          freelancerItems.push({
+            type: "freelancer",
+            id: String((row as { id: string }).id),
+            title: String((row as { title?: string | null }).title ?? "").trim() || "სერვისი",
+            name: prof?.full_name?.trim() || "ფრილანსერი",
+            vip_expires_at: expires,
+            subtitle: fp.professional_title?.trim() || "ფრილანსერი",
+            description: shortText(descPlain),
+            avatarUrl: prof?.avatar_url ?? null,
+            rating: Number.isFinite(rating) ? rating : 0,
+            href: `/listing/${encodeURIComponent(String((row as { id: string }).id))}`,
+          } satisfies HomepageVipRenderableItem)
+        }
+
+        setHomepageVipItems(freelancerItems)
+      }
+
+      setHomepageVipStartIndex(0)
+      setHomepageVipLoading(false)
+    }
+
+    void (async () => {
+      setHomepageVipLoading(true)
+      await loadHomepageVip()
+    })()
+  }, [])
+
+  useEffect(() => {
+    if (homepageVipItems.length <= 3) return
+    const timerId = window.setInterval(() => {
+      setHomepageVipStartIndex((prev) => (prev + 1) % homepageVipItems.length)
+    }, 30_000)
+    return () => window.clearInterval(timerId)
+  }, [homepageVipItems])
+
   const showStatsBar = stats.freelancerCount >= 10
+
+  useEffect(() => {
+    setHomepageVipStartIndex(0)
+  }, [homepageVipItems.length])
+
+  const visibleHomepageVipItems = useMemo(() => {
+    if (homepageVipItems.length <= 3) return homepageVipItems
+    return Array.from({ length: 3 }, (_, idx) => homepageVipItems[(homepageVipStartIndex + idx) % homepageVipItems.length])
+  }, [homepageVipItems, homepageVipStartIndex])
 
   const handleSearch = () => {
     const trimmed = searchText.trim()
@@ -246,30 +344,11 @@ function HomePage() {
     <main className="page-enter">
       <Navbar />
 
-      <div className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex w-full max-w-[1200px] gap-6 overflow-x-auto px-4 py-3 text-sm font-medium text-slate-600 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:px-6">
-          {categories.map((category) => (
-            <button
-              key={category.id}
-              type="button"
-              onClick={() => navigate(`/browse?category=${category.id}`)}
-              className={`whitespace-nowrap border-b-2 pb-1 transition ${
-                activeCategoryId === category.id
-                  ? "border-[#D4A843] text-[#1B2B4B]"
-                  : "border-transparent hover:text-[#1B2B4B]"
-              }`}
-            >
-              {category.name}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <section className="bg-[#1B2B4B]">
+      <section className="bg-[#2563EB]">
         <div className="mx-auto grid w-full max-w-[1200px] items-stretch gap-8 px-4 py-10 md:px-6 lg:grid-cols-2 lg:py-16">
           <div className="flex flex-col justify-center">
-            <p className="text-sm font-semibold uppercase tracking-widest text-[#D4A843]">
-              იპოვე და დაიქირავე
+            <p className="text-sm font-semibold uppercase tracking-widest text-[#F59E0B]">
+              იპოვე 
             </p>
             <h1 className="mt-3 text-[28px] font-extrabold leading-tight text-white lg:text-[48px]">
               საუკეთესო
@@ -280,7 +359,7 @@ function HomePage() {
               ითანამშრომლე გამოცდილ პროფესიონალებთან უსაფრთხო, სწრაფ და მოქნილ პლატფორმაზე.
             </p>
 
-            <div className="mt-8 flex flex-col gap-3 rounded-xl bg-white p-3 shadow-lg sm:flex-row">
+            <div className="mt-8 flex flex-col gap-2 rounded-xl bg-white p-3 shadow-lg sm:flex-row sm:items-center">
               <input
                 type="text"
                 value={searchText}
@@ -289,101 +368,79 @@ function HomePage() {
                   if (event.key === "Enter") handleSearch()
                 }}
                 placeholder="რომელ უნარს ეძებ?"
-                className="h-12 flex-1 rounded-md border border-slate-200 px-4 text-sm text-slate-800 outline-none ring-[#D4A843] transition placeholder:text-slate-400 focus:ring-2"
+                className="h-10 min-w-0 flex-1 rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#2563EB]"
               />
               <button
                 type="button"
                 onClick={handleSearch}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-[#D4A843] px-6 text-sm font-semibold text-[#1B2B4B] transition hover:bg-[#e5bb5a]"
+                className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-white px-8 text-base font-bold text-[#2563EB] transition hover:bg-blue-50"
               >
-                <span>🔎</span>
                 ძებნა
               </button>
             </div>
           </div>
 
-          <div className="relative min-h-0 rounded-2xl border border-slate-700/70 bg-[#1B2B4B] p-4">
+          <div className="relative min-h-0 rounded-2xl border border-white/15 bg-[#1D4ED8] p-4">
+            <p className="mb-2 text-sm font-bold uppercase tracking-wide text-white">
+              {vipBoxMode === "job" ? "VIP სამუშაოები" : "VIP ფრილანსერები"}
+            </p>
             <div className="space-y-2">
-              {heroFreelancersLoading ? (
+              {homepageVipLoading ? (
                 Array.from({ length: 3 }).map((_, index) => (
-                  <div key={index} className="rounded-xl border border-slate-600 bg-white/95 p-2 shadow-sm">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 shrink-0 animate-pulse rounded-full bg-slate-300" />
-                      <div className="flex-1">
-                        <div className="h-3 w-32 animate-pulse rounded bg-slate-300" />
-                        <div className="mt-2 h-2 w-24 animate-pulse rounded bg-slate-200" />
+                  <div key={index} className="relative rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm">
+                    <div className="flex gap-3">
+                      <div className="h-10 w-10 shrink-0 animate-pulse rounded-full bg-slate-200" />
+                      <div className="min-w-0 flex-1 space-y-2 pr-10">
+                        <div className="h-4 w-36 animate-pulse rounded bg-slate-200" />
+                        <div className="h-3 w-24 animate-pulse rounded bg-slate-100" />
+                        <div className="h-4 w-full animate-pulse rounded bg-slate-100" />
+                        <div className="h-3 w-full animate-pulse rounded bg-slate-100" />
                       </div>
-                      <div className="h-4 w-10 animate-pulse rounded bg-slate-200" />
-                    </div>
-                    <div className="mt-1 h-3 w-28 animate-pulse rounded bg-slate-200" />
-                    <div className="mt-1 h-3 w-full animate-pulse rounded bg-slate-100" />
-                    <div className="mt-1.5 flex gap-1">
-                      <div className="h-5 w-14 animate-pulse rounded-full bg-slate-200" />
-                      <div className="h-5 w-16 animate-pulse rounded-full bg-slate-200" />
                     </div>
                   </div>
                 ))
-              ) : heroFreelancers.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-slate-500 bg-white/90 p-6 text-center shadow-sm">
-                  <p className="text-sm font-semibold text-[#1B2B4B]">საჯარო ფრილანსერები მალე გამოჩნდება.</p>
-                  <Link to="/browse" className="mt-3 inline-block text-sm font-semibold text-[#D4A843] underline">
-                    კატალოგის ნახვა →
-                  </Link>
+              ) : homepageVipItems.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-white/40 bg-white/10 p-6 text-center shadow-sm">
+                  <p className="text-sm font-semibold text-white">ამ ფილტრისთვის VIP განცხადებები არ არის.</p>
                 </div>
               ) : (
-                heroFreelancers.map((f) => (
+                visibleHomepageVipItems.map((item) => (
                   <Link
-                    key={f.id}
-                    to={`/freelancer/${encodeURIComponent(f.slug)}`}
-                    className="block rounded-xl border border-slate-600 bg-white/95 p-2 shadow-sm transition hover:border-[#D4A843]/80 hover:bg-white"
+                    key={`${item.type}-${item.id}`}
+                    to={item.href}
+                    className="relative block overflow-hidden rounded-xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-3 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#2563EB] hover:shadow-[-4px_0_12px_rgba(37,99,235,0.25)]"
                   >
-                    <div className="flex items-start gap-2.5">
+                    <span className="absolute right-3 top-3 z-10 rounded-full bg-[#F59E0B] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
+                      VIP
+                    </span>
+                    <div className="flex gap-3 pr-14">
                       <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-[11px] font-bold text-[#1B2B4B]">
-                        {f.avatarUrl ? (
-                          <img src={f.avatarUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+                        {item.avatarUrl ? (
+                          <img
+                            src={avatarImageUrl(supabase, item.avatarUrl) ?? item.avatarUrl}
+                            alt=""
+                            loading="lazy"
+                            className="h-full w-full object-cover"
+                          />
                         ) : (
-                          getHeroInitials(f.fullName)
+                          initials(item.name ?? item.subtitle)
                         )}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="truncate font-semibold text-[#1B2B4B]">{f.fullName}</p>
-                            <p className="truncate text-xs text-slate-600">{f.professionalTitle}</p>
-                          </div>
-                          <div className="shrink-0 text-xs font-semibold text-[#D4A843]">
-                            ★ {f.averageRating.toFixed(1)}
-                          </div>
-                        </div>
-                        <p className="mt-1 text-[11px] font-bold text-[#1B2B4B]">
-                          <span className="tabular-nums">{f.completedJobsCount}</span>
-                          {" · "}
-                          შესრულებული სამუშაო
-                        </p>
-                        {f.bioSnippet ? (
-                          <p className="mt-1 line-clamp-1 text-xs leading-snug text-slate-700 [overflow-wrap:anywhere]">
-                            {f.bioSnippet}
+                        <p className="truncate text-sm font-bold text-gray-900">{item.name || item.subtitle}</p>
+                        {showVipCardRating(item.rating) ? (
+                          <p className="mt-1 text-sm font-semibold text-amber-500">
+                            <span className="tracking-tight">{ratingStars(item.rating)}</span>{" "}
+                            <span className="text-gray-900">{item.rating.toFixed(1)}</span>
                           </p>
                         ) : null}
-                        <div className="mt-1.5 flex flex-wrap gap-1">
-                          {f.skillLabels.length > 0 ? (
-                            f.skillLabels.slice(0, 6).map((label) => (
-                              <span
-                                key={label}
-                                className="inline-flex max-w-full truncate rounded-full bg-[#1B2B4B]/90 px-2 py-0.5 text-[10px] font-semibold text-white"
-                              >
-                                {label}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-                              უნარები ჯერ არ არის
-                            </span>
-                          )}
-                          {f.skillLabels.length > 6 ? (
-                            <span className="text-[10px] font-medium text-slate-500">+{f.skillLabels.length - 6}</span>
-                          ) : null}
-                        </div>
+                        <p className={`line-clamp-1 text-sm font-bold text-gray-900 ${showVipCardRating(item.rating) ? "mt-2" : "mt-1"}`}>
+                          {item.title || item.name || (item.type === "job" ? "VIP Job" : "VIP Freelancer")}
+                        </p>
+                        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-600">{item.description}</p>
+                        <span className="mt-2 inline-flex max-w-full items-center rounded-full border border-[#D1D5DB] bg-white px-2.5 py-0.5 text-[11px] font-medium text-[#374151]">
+                          {item.type === "job" ? "სამუშაო" : "ფრილანსერი"}
+                        </span>
                       </div>
                     </div>
                   </Link>
@@ -428,6 +485,7 @@ function HomePage() {
 
 function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams] = useSearchParams()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -436,6 +494,10 @@ function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const reason = searchParams.get("reason")
   const redirectRaw = searchParams.get("redirect")
+  const passwordResetDone =
+    typeof location.state === "object" &&
+    location.state !== null &&
+    (location.state as { reason?: string }).reason === "password-reset"
 
   useEffect(() => {
     document.title = "შესვლა — გიგორი"
@@ -535,6 +597,12 @@ function LoginPage() {
             </div>
           ) : null}
 
+          {passwordResetDone ? (
+            <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              პაროლი განახლდა. შეგიძლიათ შეხვიდეთ ახალი პაროლით.
+            </div>
+          ) : null}
+
           <form onSubmit={handleLogin} className="mt-6 space-y-4">
             <label className="block">
               <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">ელფოსტა</span>
@@ -550,9 +618,9 @@ function LoginPage() {
             <label className="block">
               <div className="mb-1 flex items-center justify-between">
                 <span className="text-sm font-semibold text-[#1B2B4B]">პაროლი</span>
-                <a href="#" className="text-xs font-semibold text-[#D4A843] hover:underline">
+                <Link to="/forgot-password" className="text-xs font-semibold text-[#D4A843] hover:underline">
                   დაავიწყდა პაროლი?
-                </a>
+                </Link>
               </div>
               <div className="relative">
               <input
@@ -917,24 +985,61 @@ function OnboardingPage() {
 }
 
 function App() {
-  return (
+  const paypalClientId = typeof import.meta.env.VITE_PAYPAL_CLIENT_ID === "string" ? import.meta.env.VITE_PAYPAL_CLIENT_ID.trim() : ""
+  /** Stable object identity — PayPalScriptProvider’s effect keys off `options`; avoid reloading SDK each App re-render. */
+  const paypalProviderOptions = useMemo(
+    () => ({
+      clientId: paypalClientId,
+      currency: "USD",
+      intent: "capture" as const,
+    }),
+    [paypalClientId],
+  )
+  const routes = (
     <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/browse" element={<BrowsePage />} />
         <Route path="/listings" element={<ListingsPage />} />
+        <Route path="/listing/:id" element={<ListingDetailPage />} />
+        <Route path="/cv/:slug" element={<PublicCVPage />} />
         <Route path="/hirers" element={<HirersPage />} />
         <Route path="/hirer/:id" element={<HirerPublicPage />} />
         <Route path="/freelancer/:slug" element={<FreelancerProfilePage />} />
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/job/:id" element={<JobDetailPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/forgot-password"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <ForgotPasswordPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/auth/reset-password"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <ResetPasswordPage />
+            </Suspense>
+          }
+        />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/checkout" element={<PayPalCheckoutE2EPage />} />
         <Route
           path="/onboarding"
           element={
             <ProtectedRoute>
               <OnboardingPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/cv-generator"
+          element={
+            <ProtectedRoute>
+              <CVGeneratorPage />
             </ProtectedRoute>
           }
         />
@@ -947,10 +1052,10 @@ function App() {
           }
         />
         <Route
-          path="/messages"
+          path="/settings"
           element={
             <ProtectedRoute>
-              <MessagesPage />
+              <ProfilePage />
             </ProtectedRoute>
           }
         />
@@ -997,6 +1102,16 @@ function App() {
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Suspense>
+  )
+
+  if (!paypalClientId) {
+    return routes
+  }
+
+  return (
+    <PayPalScriptProvider options={paypalProviderOptions}>
+      {routes}
+    </PayPalScriptProvider>
   )
 }
 

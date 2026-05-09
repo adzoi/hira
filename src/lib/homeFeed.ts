@@ -1,33 +1,8 @@
+import type { SupabaseClient } from "@supabase/supabase-js"
 import { isSupabaseConfigured, supabase } from "./supabase"
-
-const META_PREFIX = "<!--gigori-meta:"
-const META_SUFFIX = "-->"
-
-function parseListingPreview(raw: string | null): { text: string; tags: string[] } {
-  if (!raw) return { text: "", tags: [] }
-  const fallbackTags: string[] = []
-  let body = raw
-  if (raw.startsWith(META_PREFIX)) {
-    const endIndex = raw.indexOf(META_SUFFIX)
-    if (endIndex >= 0) {
-      const metaChunk = raw.slice(META_PREFIX.length, endIndex).trim()
-      body = raw.slice(endIndex + META_SUFFIX.length).trimStart()
-      try {
-        const parsed = JSON.parse(metaChunk) as { tags?: unknown }
-        if (Array.isArray(parsed.tags)) {
-          for (const t of parsed.tags) {
-            const s = String(t).trim()
-            if (s && fallbackTags.length < 20) fallbackTags.push(s)
-          }
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-  const oneLine = body.replace(/\s+/g, " ").trim()
-  return { text: oneLine, tags: fallbackTags }
-}
+import { jobVacancyStats } from "./jobVacancies.ts"
+import { jobVipIsActive } from "./vipJobTiers.ts"
+import { parseListingPreview } from "./listingDescription.ts"
 
 export type HomeFreelancerServiceItem = {
   kind: "freelancer_service"
@@ -43,7 +18,10 @@ export type HomeFreelancerServiceItem = {
   professionalTitle: string
   avatarUrl: string | null
   averageRating: number
+  viewsCount: number
   tags: string[]
+  /** Active paid VIP placement for this listing. */
+  vipFeatured: boolean
 }
 
 /** Open job posting (დამქირავებლის განცხადება) — არა პროფილი. */
@@ -53,6 +31,7 @@ export type HomeJobListingItem = {
   createdAt: string
   title: string
   descriptionPreview: string
+  imagePath: string | null
   companyName: string
   companyAvatar: string | null
   city: string | null
@@ -66,8 +45,15 @@ export type HomeJobListingItem = {
   isUrgent: boolean
   applicationDeadline: string | null
   applicantsCount: number
+  viewsCount: number
   skillNames: string[]
   hirerAverageRating: number
+  /** Active paid VIP placement for this job posting. */
+  vipFeatured: boolean
+  vacancies: number
+  acceptedCount: number
+  /** Present for live feed rows — used to resolve hirer rating from reviews. */
+  hirerProfileId?: string | null
 }
 
 export type HomeFeedItem = HomeFreelancerServiceItem | HomeJobListingItem
@@ -92,7 +78,9 @@ const MOCK_SERVICES: HomeFreelancerServiceItem[] = [
     professionalTitle: "Full-Stack Developer",
     avatarUrl: null,
     averageRating: 4.8,
+    viewsCount: 0,
     tags: ["React", "TypeScript"],
+    vipFeatured: false,
   },
   {
     kind: "freelancer_service",
@@ -108,7 +96,9 @@ const MOCK_SERVICES: HomeFreelancerServiceItem[] = [
     professionalTitle: "UI Designer",
     avatarUrl: null,
     averageRating: 4.9,
+    viewsCount: 0,
     tags: [],
+    vipFeatured: false,
   },
 ]
 
@@ -120,6 +110,7 @@ const MOCK_JOB_LISTINGS: HomeJobListingItem[] = [
     title: "React Developer საჭიროა საპროექტო ჯგუფისთვის",
     descriptionPreview:
       "გამოცდილი React დეველოპერი კომერციული პროექტისთვის — კომპონენტები, მდგომარეობის მართვა და API.",
+    imagePath: null,
     companyName: "TechStart Georgia",
     companyAvatar: null,
     city: "თბილისი",
@@ -133,8 +124,12 @@ const MOCK_JOB_LISTINGS: HomeJobListingItem[] = [
     isUrgent: true,
     applicationDeadline: null,
     applicantsCount: 3,
+    viewsCount: 0,
     skillNames: ["React", "TypeScript"],
     hirerAverageRating: 4.7,
+    vipFeatured: false,
+    vacancies: 1,
+    acceptedCount: 0,
   },
   {
     kind: "hirer_job",
@@ -142,6 +137,7 @@ const MOCK_JOB_LISTINGS: HomeJobListingItem[] = [
     createdAt: new Date(Date.now() - 72000000).toISOString(),
     title: "სოციალური მედიის კონტენტის სერია",
     descriptionPreview: "Instagram და Facebook პოსტები, სტორიები და მოკლე ვიდეო იდეები კვარტალურად.",
+    imagePath: null,
     companyName: "Café Leila",
     companyAvatar: null,
     city: "ბათუმი",
@@ -155,49 +151,89 @@ const MOCK_JOB_LISTINGS: HomeJobListingItem[] = [
     isUrgent: false,
     applicationDeadline: null,
     applicantsCount: 8,
+    viewsCount: 0,
     skillNames: ["Instagram", "კონტენტი"],
     hirerAverageRating: 4.5,
+    vipFeatured: false,
+    vacancies: 3,
+    acceptedCount: 1,
   },
 ]
 
-async function aggregateHirerRatings(
-  client: NonNullable<typeof supabase>,
-  hirerUserIds: string[],
-): Promise<Map<string, { sum: number; count: number }>> {
-  const ratingTotals = new Map<string, { sum: number; count: number }>()
-  if (hirerUserIds.length === 0) return ratingTotals
-
-  const { data: reviewRows, error: revErr } = await client
-    .from("reviews")
-    .select("reviewee_id, rating_overall")
-    .in("reviewee_id", hirerUserIds)
-
-  if (revErr) {
-    console.warn(revErr)
-    return ratingTotals
+function normalizeSkillNames(raw: unknown, max: number): string[] {
+  if (!Array.isArray(raw)) return []
+  const out: string[] = []
+  for (const x of raw) {
+    const s = String(x ?? "").trim()
+    if (s && out.length < max) out.push(s)
   }
-
-  for (const r of reviewRows ?? []) {
-    const rid = String((r as { reviewee_id: string }).reviewee_id ?? "")
-    if (!rid) continue
-    const rating = Number((r as { rating_overall?: number }).rating_overall ?? 0)
-    const prev = ratingTotals.get(rid) ?? { sum: 0, count: 0 }
-    prev.sum += rating
-    prev.count += 1
-    ratingTotals.set(rid, prev)
-  }
-
-  return ratingTotals
+  return out
 }
 
-function hirerRatingFromTotals(
-  ownerUserId: string,
-  ratingTotals: Map<string, { sum: number; count: number }>,
-  fallbackFromProfile: number,
-): number {
-  const t = ratingTotals.get(ownerUserId)
-  if (t && t.count > 0) return t.sum / t.count
-  return Number(fallbackFromProfile ?? 0) || 0
+/** Prefer explicit RPC/join keys; `average_rating_given` alone is often unset — overwritten via reviews when possible. */
+function hirerRatingFromJobRow(row: Record<string, unknown>): number | null {
+  const keys = ["hirer_average_rating", "average_rating_received", "average_rating", "average_rating_given"] as const
+  for (const key of keys) {
+    const v = row[key]
+    if (v === null || v === undefined || v === "") continue
+    const n = typeof v === "number" ? v : Number(v)
+    if (Number.isFinite(n) && n > 0) return n
+  }
+  return null
+}
+
+async function applyHirerRatingsFromReviews(client: SupabaseClient, jobs: HomeJobListingItem[]) {
+  const hpIds = [...new Set(jobs.map((j) => j.hirerProfileId).filter((id): id is string => Boolean(id)))]
+  if (hpIds.length === 0) return
+
+  const { data: hpRows, error: hpErr } = await client.from("hirer_profiles").select("id, user_id").in("id", hpIds)
+  if (hpErr || !hpRows?.length) return
+
+  const userIdByHpId = new Map<string, string>()
+  const userIds: string[] = []
+  for (const r of hpRows) {
+    const id = String(r.id)
+    const uid = String(r.user_id)
+    userIdByHpId.set(id, uid)
+    userIds.push(uid)
+  }
+  if (userIds.length === 0) return
+
+  const { data: revRows, error: revErr } = await client
+    .from("reviews")
+    .select("reviewee_id, rating_overall")
+    .in("reviewee_id", userIds)
+
+  if (revErr || !revRows?.length) return
+
+  const sumByUser = new Map<string, number>()
+  const countByUser = new Map<string, number>()
+  for (const rv of revRows) {
+    const uid = String(rv.reviewee_id)
+    const rating = Number(rv.rating_overall)
+    if (!Number.isFinite(rating) || rating <= 0) continue
+    sumByUser.set(uid, (sumByUser.get(uid) ?? 0) + rating)
+    countByUser.set(uid, (countByUser.get(uid) ?? 0) + 1)
+  }
+
+  for (const job of jobs) {
+    const hpId = job.hirerProfileId
+    if (!hpId) continue
+    const uid = userIdByHpId.get(hpId)
+    if (!uid) continue
+    const c = countByUser.get(uid) ?? 0
+    if (c === 0) continue
+    const avg = (sumByUser.get(uid) ?? 0) / c
+    if (Number.isFinite(avg)) job.hirerAverageRating = avg
+  }
+}
+
+function serviceVipFeatured(row: Record<string, unknown>): boolean {
+  return (
+    row.is_vip === true &&
+    Boolean(row.vip_expires_at) &&
+    new Date(String(row.vip_expires_at)) > new Date()
+  )
 }
 
 /**
@@ -208,165 +244,120 @@ export async function loadHomeFeed(): Promise<HomeFeedItem[]> {
     return [...MOCK_SERVICES, ...MOCK_JOB_LISTINGS].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
   }
 
-  const [{ data: serviceRows, error: sErr }, { data: jobRows, error: jErr }] = await Promise.all([
-    supabase
-      .from("services")
-      .select(
-        `
-        id,
-        freelancer_profile_id,
-        title,
-        description,
-        price,
-        delivery_days,
-        created_at,
-        freelancer_profiles (
-          slug,
-          professional_title,
-          is_public,
-          average_rating,
-          profiles:profiles!freelancer_profiles_user_id_fkey (
-            full_name,
-            avatar_url
-          )
-        )
-      `,
-      )
-      .eq("is_active", true)
-      .order("created_at", { ascending: false })
-      .limit(80),
-    supabase
-      .from("jobs")
-      .select(
-        `
-        id,
-        created_at,
-        title,
-        description,
-        budget_type,
-        budget_min,
-        budget_max,
-        location_type,
-        duration_type,
-        is_urgent,
-        application_deadline,
-        hirer_profiles (
-          user_id,
-          company_name,
-          average_rating_given,
-          profiles:profiles!hirer_profiles_user_id_fkey (
-            full_name,
-            avatar_url,
-            city
-          )
-        ),
-        categories (name_ka),
-        subcategories (name_ka),
-        job_skills (
-          skills (name)
-        ),
-        job_applications (id)
-      `,
-      )
-      .eq("status", "open")
-      .order("created_at", { ascending: false })
-      .limit(80),
-  ])
+  const { data, error } = await supabase.functions.invoke("get-home-feed")
+  if (error) throw error
+  if (!data || typeof data !== "object" || !("ok" in data) || (data as { ok?: unknown }).ok !== true) {
+    const errMsg =
+      data && typeof data === "object" && "error" in data
+        ? String((data as { error?: unknown }).error)
+        : "მთავარი ლენტა ვერ ჩაიტვირთა."
+    throw new Error(errMsg)
+  }
 
-  if (sErr) console.warn(sErr)
-  if (jErr) console.warn(jErr)
-
-  const hirerUserIdsFromJobs = [
-    ...new Set(
-      (jobRows ?? [])
-        .map((row: { hirer_profiles?: { user_id?: string | null } | null }) =>
-          String(row.hirer_profiles?.user_id ?? "").trim(),
-        )
-        .filter(Boolean),
-    ),
-  ]
-
-  const ratingTotals = await aggregateHirerRatings(supabase, hirerUserIdsFromJobs)
+  const payload = (data as { data: unknown }).data as null | { services?: unknown[]; jobs?: unknown[] }
+  const serviceRows = Array.isArray(payload?.services) ? payload!.services! : []
+  const jobRows = Array.isArray(payload?.jobs) ? payload!.jobs! : []
 
   const freelancerItems: HomeFreelancerServiceItem[] = []
-  for (const row of serviceRows ?? []) {
-    const fp = row.freelancer_profiles as unknown as null | {
-      slug: string | null
-      professional_title: string | null
-      is_public: boolean | null
-      average_rating: number | null
-      profiles: null | { full_name: string | null; avatar_url: string | null }
-    }
-    if (!fp?.slug || fp.is_public === false) continue
-    const parsed = parseListingPreview(row.description ?? null)
+  for (const raw of serviceRows) {
+    const row = raw as Record<string, unknown>
+    if (row.is_public === false) continue
+    const slug = String(row.slug ?? "").trim()
+    if (!slug) continue
+
+    const parsed = parseListingPreview((row.description as string | null) ?? null)
     const snippet =
       parsed.text.length > 120 ? `${parsed.text.slice(0, 120)}…` : parsed.text || "დეტალები ლისტინგის გვერდზე."
     const priceNum = Number(row.price ?? 0)
     const priceNegotiable = listingPriceNegotiable(priceNum, parsed.text)
-    const prof = fp.profiles
     freelancerItems.push({
       kind: "freelancer_service",
-      id: row.id,
-      createdAt: row.created_at ?? new Date().toISOString(),
-      title: row.title?.trim() || "სერვისი",
+      id: String(row.id ?? ""),
+      createdAt: String(row.created_at ?? new Date().toISOString()),
+      title: String(row.title ?? "").trim() || "სერვისი",
       descriptionPreview: snippet,
       priceNegotiable,
       price: priceNum,
       deliveryDays: Number(row.delivery_days ?? 0),
-      freelancerSlug: fp.slug,
-      fullName: prof?.full_name?.trim() || "ფრილანსერი",
-      professionalTitle: fp.professional_title?.trim() || "",
-      avatarUrl: prof?.avatar_url ?? null,
-      averageRating: Number(fp.average_rating ?? 0),
-      tags: parsed.tags,
+      freelancerSlug: slug,
+      fullName: String(row.full_name ?? "").trim() || "ფრილანსერი",
+      professionalTitle: String(row.professional_title ?? "").trim(),
+      avatarUrl: row.avatar_url != null ? String(row.avatar_url) : null,
+      averageRating: Number(row.average_rating ?? 0),
+      viewsCount: Number(row.views_count ?? 0),
+      tags: normalizeSkillNames(row.skill_names, 20),
+      vipFeatured: serviceVipFeatured(row),
     })
   }
 
-  const jobItems: HomeJobListingItem[] = (jobRows ?? []).map((row: any) => {
-    const hp = row.hirer_profiles as null | {
-      user_id: string | null
-      company_name: string | null
-      average_rating_given: number | null
-      profiles: null | { full_name: string | null; avatar_url: string | null; city: string | null }
-    }
-    const profile = hp?.profiles
-    const companyName = hp?.company_name?.trim() || profile?.full_name?.trim() || "დამქირავებელი"
+  const jobItems: HomeJobListingItem[] = jobRows.map((raw) => {
+    const row = raw as Record<string, unknown>
     const desc = String(row.description ?? "").replace(/\s+/g, " ").trim()
     const snippet = desc.length > 120 ? `${desc.slice(0, 120)}…` : desc || "დეტალები განცხადების გვერდზე."
-    const skillsRaw = row.job_skills as Array<{ skills: null | { name: string } }> | undefined
-    const skillNames = (skillsRaw ?? [])
-      .map((x) => x.skills?.name?.trim())
-      .filter((n): n is string => Boolean(n))
-      .slice(0, 12)
-    const apps = row.job_applications as unknown[] | undefined
-    const ownerUid = String(hp?.user_id ?? "").trim()
-    const ratingFallback = Number(hp?.average_rating_given ?? 0)
+    const imagePaths = Array.isArray(row.image_urls)
+      ? (row.image_urls as unknown[]).map((v) => String(v)).filter(Boolean)
+      : []
+    const imagePathFlat = row.image_path != null ? String(row.image_path) : null
+    const companyName =
+      String(row.company_name ?? "").trim() ||
+      String(row.full_name ?? "").trim() ||
+      "დამქირავებელი"
+    const vac = jobVacancyStats(row.vacancies as number | null | undefined, row.accepted_count as number | null | undefined)
+    const skillNames = normalizeSkillNames(row.skill_names, 12)
+
+    const rowRating = hirerRatingFromJobRow(row)
+    const hirerProfileId = row.hirer_profile_id != null ? String(row.hirer_profile_id) : null
 
     return {
       kind: "hirer_job" as const,
-      id: row.id as string,
-      createdAt: row.created_at ?? new Date().toISOString(),
-      title: row.title?.trim() || "სამუშაო",
+      id: String(row.id ?? ""),
+      createdAt: String(row.created_at ?? new Date().toISOString()),
+      title: String(row.title ?? "").trim() || "სამუშაო",
       descriptionPreview: snippet,
+      imagePath: imagePaths[0] ?? imagePathFlat,
       companyName,
-      companyAvatar: profile?.avatar_url ?? null,
-      city: profile?.city ?? null,
-      categoryName: row.categories?.name_ka ?? "კატეგორია",
-      subcategoryName: row.subcategories?.name_ka ?? null,
+      companyAvatar: row.avatar_url != null ? String(row.avatar_url) : null,
+      city: row.city != null ? String(row.city) : null,
+      categoryName: String(row.category_name ?? "").trim() || "კატეგორია",
+      subcategoryName: row.subcategory_name != null ? String(row.subcategory_name) : null,
       budgetType: String(row.budget_type ?? "fixed"),
       budgetMin: row.budget_min != null ? Number(row.budget_min) : null,
       budgetMax: row.budget_max != null ? Number(row.budget_max) : null,
       locationType: String(row.location_type ?? "anywhere"),
       durationType: String(row.duration_type ?? "one_time"),
       isUrgent: Boolean(row.is_urgent),
-      applicationDeadline: row.application_deadline ?? null,
-      applicantsCount: Array.isArray(apps) ? apps.length : 0,
+      applicationDeadline: row.application_deadline != null ? String(row.application_deadline) : null,
+      applicantsCount: Number(row.applicants_count ?? 0),
+      viewsCount: Number(row.views_count ?? 0),
       skillNames,
-      hirerAverageRating: ownerUid ? hirerRatingFromTotals(ownerUid, ratingTotals, ratingFallback) : 0,
+      hirerAverageRating: rowRating ?? 0,
+      hirerProfileId,
+      vipFeatured: jobVipIsActive(Boolean(row.is_vip), row.vip_expires_at != null ? String(row.vip_expires_at) : null),
+      vacancies: vac.vacancies,
+      acceptedCount: vac.acceptedCount,
     }
   })
 
+  jobItems.sort((a, b) => {
+    const v = (b.vipFeatured ? 1 : 0) - (a.vipFeatured ? 1 : 0)
+    if (v !== 0) return v
+    return +new Date(b.createdAt) - +new Date(a.createdAt)
+  })
+
+  if (supabase && jobItems.length > 0) {
+    await applyHirerRatingsFromReviews(supabase, jobItems)
+  }
+  for (const j of jobItems) {
+    delete j.hirerProfileId
+  }
+
   const merged = [...freelancerItems, ...jobItems]
-  merged.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
+  merged.sort((a, b) => {
+    const av = a.kind === "hirer_job" ? (a.vipFeatured ? 1 : 0) : (a.vipFeatured ? 1 : 0)
+    const bv = b.kind === "hirer_job" ? (b.vipFeatured ? 1 : 0) : (b.vipFeatured ? 1 : 0)
+    const v = bv - av
+    if (v !== 0) return v
+    return +new Date(b.createdAt) - +new Date(a.createdAt)
+  })
   return merged
 }

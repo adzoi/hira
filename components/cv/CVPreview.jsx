@@ -1,0 +1,941 @@
+"use client"
+
+import { useEffect, useMemo, useRef, useState } from "react"
+import { supabase } from "../../src/lib/supabase"
+import { avatarImageUrl, avatarPublicUrl } from "../../src/lib/storageImageUrl.ts"
+import {
+  formatGeorgianExperienceRange,
+  formatGeorgianMonthYear,
+  initialsFromName,
+  stripUrlForDisplay,
+} from "../../src/lib/cvFromProfile.ts"
+
+const A4_WIDTH = 794
+const A4_HEIGHT = 1123
+
+function truthyStr(v) {
+  if (v == null) return false
+  if (typeof v === "string") return v.trim().length > 0 && v.trim().toUpperCase() !== "N/A"
+  return Boolean(v)
+}
+
+function truthyArr(a) {
+  return Array.isArray(a) && a.some((x) => truthyStr(typeof x === "string" ? x : String(x)))
+}
+
+/** Web URLs shown in sidebar / PDF: non-empty and http(s). */
+function truthyHttpUrl(v) {
+  if (!truthyStr(v)) return false
+  return /^https?:\/\//i.test(String(v).trim())
+}
+
+function normalizeCV(input) {
+  const raw = input && typeof input === "object" ? input : {}
+  const { hourly_rate: _hourlyDropped, ...source } = raw
+  void _hourlyDropped
+  const ts = Array.isArray(source.technical_skills) ? source.technical_skills.map((x) => String(x)) : []
+  const lang = Array.isArray(source.languages) ? source.languages.map((x) => String(x)) : []
+  return {
+    ...source,
+    full_name: String(source.full_name || source?.basic_info?.full_name || ""),
+    email: String(source.email || source?.basic_info?.email || ""),
+    phone: String(source.phone || source?.basic_info?.phone || ""),
+    location: String(source.location || source?.basic_info?.location || ""),
+    linkedin_url: String(source.linkedin_url || source?.basic_info?.linkedin_url || ""),
+    github_url: String(source.github_url || ""),
+    portfolio_url: String(source.portfolio_url || ""),
+    avatar_url: String(source.avatar_url || ""),
+    professional_summary: String(source.professional_summary || ""),
+    work_experience: Array.isArray(source.work_experience) ? source.work_experience : [],
+    education: Array.isArray(source.education) ? source.education : [],
+    technical_skills: ts,
+    languages: lang,
+    soft_skills: Array.isArray(source.soft_skills) ? source.soft_skills.map((x) => String(x)) : [],
+    custom_slug: source.custom_slug,
+    is_public: source.is_public,
+    id: source.id,
+  }
+}
+
+function PencilButton({ onClick, label, variant = "light" }) {
+  const sidebar = variant === "sidebar"
+  return (
+    <button
+      type="button"
+      title={label}
+      onClick={onClick}
+      className={
+        sidebar
+          ? "print:hidden inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-white/35 bg-white/10 text-sm text-white hover:bg-white/15"
+          : "print:hidden inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-sm text-slate-600 hover:bg-slate-50"
+      }
+      aria-label={label}
+    >
+      ✎
+    </button>
+  )
+}
+
+const SIDEBAR_FIELD_CLASS =
+  "w-full rounded-[4px] border border-white/30 bg-white/[0.1] px-2 py-1 text-[14px] leading-normal text-white caret-white outline-none placeholder:text-white/40 focus:border-white/[0.45] focus:bg-white/[0.12]"
+
+const SIDEBAR_TAG_INPUT_CLASS =
+  "w-full mt-2 rounded-[4px] border border-white/20 bg-white/[0.1] px-2 py-1 text-sm leading-normal text-white caret-white outline-none placeholder:text-white/40 focus-visible:border-white/[0.28]"
+
+function TagEditor({ tags, onChange, placeholder, inputAriaLabel, disabled, variant = "default" }) {
+  const [draft, setDraft] = useState("")
+  const sidebar = variant === "sidebar"
+  const tagClass = sidebar
+    ? "inline-flex items-center gap-1 rounded-full border border-white/25 bg-white/10 px-2 py-0.5 text-xs text-white"
+    : "inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-800"
+  const rmClass = sidebar ? "text-white/70 hover:text-red-300" : "text-slate-500 hover:text-red-600"
+  const inputClass = sidebar ? SIDEBAR_TAG_INPUT_CLASS : "mt-2 w-full rounded border border-slate-200 px-2 py-1 text-sm"
+
+  return (
+    <div className="print:hidden">
+      <div className="flex flex-wrap gap-1.5">
+        {tags.map((t, i) => (
+          <span key={`${t}-${i}`} className={tagClass}>
+            {t}
+            {!disabled ? (
+              <button type="button" className={rmClass} onClick={() => onChange(tags.filter((_, j) => j !== i))}>
+                ×
+              </button>
+            ) : null}
+          </span>
+        ))}
+      </div>
+      {!disabled ? (
+        <input
+          className={inputClass}
+          aria-label={inputAriaLabel ?? (sidebar ? placeholder : undefined)}
+          placeholder={sidebar ? "" : placeholder}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return
+            e.preventDefault()
+            const next = draft.trim()
+            if (!next) return
+            if (tags.includes(next)) {
+              setDraft("")
+              return
+            }
+            onChange([...tags, next])
+            setDraft("")
+          }}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function AvatarEditor({ fullName, avatarUrl, onChangeUrl, onRemove, onPickFile, uploading }) {
+  const fileInputRef = useRef(null)
+  return (
+    <div className="rounded border border-white/20 bg-white/[0.06] p-2">
+      <div className="mb-2 flex items-center gap-2">
+        {truthyHttpUrl(avatarUrl) ? (
+          <img
+            src={avatarImageUrl(supabase, avatarUrl) ?? avatarUrl}
+            alt=""
+            className="h-12 w-12 rounded-full object-cover ring-2 ring-white/30"
+          />
+        ) : (
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/15 text-sm font-semibold text-white">
+            {initialsFromName(fullName || "")}
+          </div>
+        )}
+        <p className="text-xs text-white/70">ფოტო CV-ის მარცხენა პანელზე და PDF-ში გამოჩნდება.</p>
+      </div>
+      <input
+        className={SIDEBAR_FIELD_CLASS}
+        value={avatarUrl}
+        onChange={(e) => onChangeUrl(e.target.value)}
+        placeholder=""
+        aria-label="ავატარის URL (https://)"
+      />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (!file) return
+          if (typeof onPickFile === "function") onPickFile(file)
+          e.currentTarget.value = ""
+        }}
+      />
+      <div className="mt-2 flex flex-wrap justify-end gap-2">
+        <button
+          type="button"
+          disabled={Boolean(uploading)}
+          onClick={() => fileInputRef.current?.click()}
+          className="rounded border border-white/30 bg-white/10 px-2 py-1 text-xs font-medium text-white hover:bg-white/20 disabled:opacity-60"
+        >
+          {uploading ? "იტვირთება..." : "ფოტოს ატვირთვა"}
+        </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="rounded border border-white/30 bg-white/10 px-2 py-1 text-xs font-medium text-white hover:bg-white/20"
+        >
+          ფოტოს წაშლა
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export default function CVPreview({ cv, readOnly = false, showActions = true, onNotify }) {
+  const [localCV, setLocalCV] = useState(() => normalizeCV(cv))
+  const [isPrinting, setIsPrinting] = useState(false)
+  const [isAvatarUploading, setIsAvatarUploading] = useState(false)
+  const [scale, setScale] = useState(1)
+
+  const [editingHeader, setEditingHeader] = useState(false)
+  const [editingSummary, setEditingSummary] = useState(false)
+  const [editingWorkIdx, setEditingWorkIdx] = useState(null)
+  const [editingEduIdx, setEditingEduIdx] = useState(null)
+
+  useEffect(() => {
+    setLocalCV(normalizeCV(cv))
+  }, [cv])
+
+  useEffect(() => {
+    const recalc = () => {
+      const available = Math.max(320, window.innerWidth - 40)
+      setScale(Math.min(1, available / A4_WIDTH))
+    }
+    recalc()
+    window.addEventListener("resize", recalc)
+    return () => window.removeEventListener("resize", recalc)
+  }, [])
+
+  const scaledHeight = Math.max(500, Math.round(A4_HEIGHT * scale))
+
+  function notify(type, message) {
+    if (typeof onNotify === "function") {
+      onNotify({ type, message })
+      return
+    }
+    if (typeof window !== "undefined") window.alert(message)
+  }
+
+  async function handleUploadAvatar(file) {
+    if (!file) return
+    if (!supabase) {
+      notify("error", "Supabase is not configured.")
+      return
+    }
+    const isImage = String(file.type || "").startsWith("image/")
+    if (!isImage) {
+      notify("error", "ატვირთეთ სურათის ფაილი.")
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      notify("error", "ფაილი ძალიან დიდია (მაქს 10MB).")
+      return
+    }
+    setIsAvatarUploading(true)
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) throw new Error("Session expired. Please log in again.")
+
+      const extRaw = String(file.name || "").split(".").pop()?.toLowerCase() || ""
+      const ext = /^[a-z0-9]{2,8}$/.test(extRaw) ? extRaw : "jpg"
+      const path = `${user.id}/cv-avatar.${ext}`
+
+      const { error: uploadError } = await supabase.storage.from("avatars").upload(path, file, { upsert: true })
+      if (uploadError) throw uploadError
+
+      const publicUrl = avatarPublicUrl(supabase, path).trim()
+      if (!truthyHttpUrl(publicUrl)) throw new Error("ვერ მოვიპოვე ატვირთული ფოტოს URL.")
+
+      setLocalCV((prev) => ({ ...prev, avatar_url: publicUrl }))
+      notify("success", "ფოტო ატვირთულია.")
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "ფოტოს ატვირთვა ვერ მოხერხდა.")
+    } finally {
+      setIsAvatarUploading(false)
+    }
+  }
+
+  const showSidebarSkills = readOnly ? truthyArr(localCV.technical_skills) : true
+  const showSidebarLang = readOnly ? truthyArr(localCV.languages) : true
+  const showSummary = readOnly ? truthyStr(localCV.professional_summary) : true
+  const showWork = readOnly ? truthyArr(localCV.work_experience) : true
+  const showEducation = readOnly ? truthyArr(localCV.education) : true
+
+  const sidebarLinks = useMemo(() => {
+    const out = []
+    if (truthyHttpUrl(localCV.linkedin_url)) out.push({ key: "li", label: "LinkedIn", href: localCV.linkedin_url.trim() })
+    if (truthyHttpUrl(localCV.github_url)) out.push({ key: "gh", label: "GitHub", href: localCV.github_url.trim() })
+    if (truthyHttpUrl(localCV.portfolio_url)) out.push({ key: "pf", label: "Portfolio", href: localCV.portfolio_url.trim() })
+    return out
+  }, [localCV.linkedin_url, localCV.github_url, localCV.portfolio_url])
+
+  function buildPrintableHtml() {
+    const longName = String(localCV.full_name || "").trim().length > 15
+    const escLite = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;")
+    const skills = (localCV.technical_skills || []).filter((s) => truthyStr(s)).map((s) => `<li>${escLite(s)}</li>`).join("")
+    const languages = (localCV.languages || []).filter((s) => truthyStr(s)).map((s) => `<li>${escLite(s)}</li>`).join("")
+
+    const linkLine = (url) => {
+      if (!truthyHttpUrl(url)) return ""
+      const u = String(url).trim()
+      const display = stripUrlForDisplay(u)
+      return `<div class="print-link"><a href="${u.replace(/"/g, "&quot;")}">🔗 ${display.replace(/</g, "&lt;")}</a></div>`
+    }
+
+    const contactBlocks = []
+    if (truthyStr(localCV.email)) contactBlocks.push(`<p>${String(localCV.email)}</p>`)
+    if (truthyStr(localCV.phone)) contactBlocks.push(`<p>${String(localCV.phone)}</p>`)
+    if (truthyStr(localCV.location)) contactBlocks.push(`<p>${String(localCV.location)}</p>`)
+
+    const printLinks = [linkLine(localCV.linkedin_url), linkLine(localCV.github_url), linkLine(localCV.portfolio_url)]
+      .filter(Boolean)
+      .join("")
+
+    const avatarPrintSrc =
+      supabase && truthyHttpUrl(localCV.avatar_url)
+        ? avatarImageUrl(supabase, localCV.avatar_url) ?? localCV.avatar_url
+        : localCV.avatar_url
+    const avatarBlock = truthyHttpUrl(avatarPrintSrc)
+      ? `<img class="avatar" src="${String(avatarPrintSrc).replace(/"/g, "&quot;")}" alt="" />`
+      : truthyStr(localCV.full_name)
+        ? `<div class="avatar-fallback">${initialsFromName(localCV.full_name)}</div>`
+        : ""
+
+    const education = (localCV.education || [])
+      .filter((edu) => truthyStr(edu.school) || truthyStr(edu.degree) || truthyStr(edu.field_of_study) || truthyStr(edu.end_date))
+      .map((edu) => {
+        const line1 = [edu.degree, edu.field_of_study].filter(truthyStr).join(" — ")
+        const school = truthyStr(edu.school) ? edu.school : ""
+        const end = edu.end_date ? formatGeorgianMonthYear(String(edu.end_date)) : ""
+        return `
+          <div class="edu-card">
+            ${line1 ? `<div class="edu-degree">${line1.replace(/</g, "&lt;")}</div>` : ""}
+            ${school ? `<div class="edu-school">${String(school).replace(/</g, "&lt;")}</div>` : ""}
+            ${end ? `<div class="edu-year">${end.replace(/</g, "&lt;")}</div>` : ""}
+          </div>
+        `
+      })
+      .join("")
+
+    const work = (localCV.work_experience || [])
+      .filter((job) => truthyStr(job.role) || truthyStr(job.company) || truthyStr(job.description))
+      .map((job) => {
+        const desc = String(job.description || "").trim()
+        const bullets = desc ? `<li>${desc.replace(/</g, "&lt;")}</li>` : ""
+        const dates = formatGeorgianExperienceRange(job.start_date, job.end_date, Boolean(job.is_current))
+        const title = [job.role, job.company].filter(truthyStr).join(" — ")
+        return `
+          <div class="work-card">
+            ${title ? `<div class="work-title">${title.replace(/</g, "&lt;")}</div>` : ""}
+            ${dates ? `<div class="work-date">${dates.replace(/</g, "&lt;")}</div>` : ""}
+            ${bullets ? `<ul>${bullets}</ul>` : ""}
+          </div>
+        `
+      })
+      .join("")
+
+    const summaryBlock = truthyStr(localCV.professional_summary)
+      ? `<section class="sec" style="border-top:none;margin-top:0;padding-top:0">
+           <h3 class="sec-title">პროფესიული რეზიუმე</h3>
+           <p class="summary">${String(localCV.professional_summary).replace(/</g, "&lt;")}</p>
+         </section>`
+      : ""
+
+    const skillsSec =
+      skills.length > 0
+        ? `<section class="sec"><h3 class="sec-title">უნარები</h3><ul>${skills}</ul></section>`
+        : ""
+    const langSec =
+      languages.length > 0
+        ? `<section class="sec"><h3 class="sec-title">ენები</h3><ul>${languages}</ul></section>`
+        : ""
+    const eduSec = education.length > 0 ? `<section class="sec"><h3 class="sec-title">განათლება</h3>${education}</section>` : ""
+
+    return `
+      <!doctype html>
+      <html lang="ka">
+        <head>
+          <meta charset="utf-8" />
+          <title>CV</title>
+          <style>
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            @page { margin: 0; size: A4; }
+            body { margin: 1.6cm; background: #f3f4f6; font-family: "Arial", "Helvetica", sans-serif; }
+            .cv-shell { width: 794px; min-height: 1123px; margin: 0 auto; display: grid; grid-template-columns: 260px 1fr; border: 1px solid #e5e7eb; }
+            .sidebar { width: 260px; overflow: hidden; flex-shrink: 0; background: #1a1a2e; color: #fff; padding: 24px; }
+            .sidebar * { word-break: break-word; overflow-wrap: break-word; }
+            .main { background: #fff; color: #111827; padding: 32px; }
+            .avatar { display:block; width:96px; height:96px; margin:0 auto 14px; border-radius:9999px; object-fit:cover; border:2px solid rgba(255,255,255,.3); }
+            .avatar-fallback { width:96px; height:96px; margin:0 auto 14px; border-radius:9999px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.15); color:#fff; font-weight:700; font-size:22px; }
+            .name { font-size: ${longName ? "20px" : "32px"}; font-weight: 700; margin: 0 0 12px; word-break: break-word; hyphens: auto; }
+            .contact p { margin: 0 0 4px; font-size: 14px; color: #cbd5e1; }
+            .print-link a { color: #4a90d9; text-decoration: underline; font-size: 13px; display: inline-block; margin: 4px 0; }
+            .sec { margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.2); }
+            .main .sec { border-top: 1px solid #e5e7eb; margin-top: 18px; }
+            .sec-title { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; margin: 0 0 10px; color: #94a3b8; }
+            .main .sec-title { color: #4b5563; }
+            ul { margin: 6px 0 0 18px; padding: 0; }
+            li { margin: 0 0 6px; line-height: 1.5; font-size: 14px; }
+            .summary { margin: 0; line-height: 1.7; font-size: 15px; white-space: pre-wrap; }
+            .work-card { border: 1px solid #f1f5f9; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+            .work-title { font-weight: 700; margin-bottom: 2px; }
+            .work-date { color: #6b7280; font-size: 12px; margin-bottom: 8px; }
+            .edu-card { border: 1px solid #f1f5f9; border-radius: 8px; padding: 12px; margin-bottom: 10px; background: #fff; }
+            .edu-degree { font-weight: 700; font-size: 14px; color: #111827; }
+            .edu-school { color: #374151; font-size: 13px; margin-top: 2px; }
+            .edu-year { color: #6b7280; font-size: 12px; margin-top: 2px; }
+            @media print {
+              @page { margin: 0; size: A4; }
+              body { background: #fff; margin: 1.6cm; }
+              .cv-shell { border: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="cv-shell">
+            <aside class="sidebar">
+              ${avatarBlock}
+              <h1 class="name" lang="ka">${(localCV.full_name || "").replace(/</g, "&lt;")}</h1>
+              ${contactBlocks.length ? `<div class="contact">${contactBlocks.join("")}</div>` : ""}
+              ${printLinks ? `<div class="sec" style="border-top:1px solid rgba(255,255,255,.2);margin-top:16px;padding-top:12px">${printLinks}</div>` : ""}
+              ${skillsSec}
+              ${langSec}
+            </aside>
+            <main class="main">
+              ${summaryBlock}
+              ${
+                work.length > 0
+                  ? `<section class="sec"><h3 class="sec-title">გამოცდილება</h3>${work}</section>`
+                  : ""
+              }
+              ${eduSec}
+            </main>
+          </div>
+          <script>window.onload = () => window.print();</script>
+        </body>
+      </html>
+    `
+  }
+
+  async function printCV() {
+    const fullName = String(localCV?.full_name || "").trim()
+    if (!fullName) {
+      notify("warning", "დაამატე სახელი სანამ PDF-ს დაბეჭდი.")
+      return
+    }
+    setIsPrinting(true)
+    try {
+      const printWindow = window.open("", "_blank", "width=1024,height=900")
+      if (!printWindow) throw new Error("ბროუზერმა ახლის ფანჯრის გახსნა დაბლოკა.")
+      printWindow.document.open()
+      printWindow.document.write(buildPrintableHtml())
+      printWindow.document.close()
+      notify("success", "ბეჭდვის დიალოგი გაიხსნა.")
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "ვერ გაიხსნა ბეჭდვა.")
+    } finally {
+      setIsPrinting(false)
+    }
+  }
+
+  const workList = Array.isArray(localCV.work_experience) ? localCV.work_experience : []
+  const eduList = Array.isArray(localCV.education) ? localCV.education : []
+
+  return (
+    <div className="space-y-4 bg-slate-100 p-4 md:p-6">
+      {showActions ? (
+        <div className="print:hidden flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={printCV}
+            disabled={isPrinting}
+            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isPrinting ? " იხსნება…" : "PDF / ბეჭდვა"}
+          </button>
+        </div>
+      ) : null}
+
+      <div className="mx-auto w-full max-w-[1000px]" style={{ height: `${scaledHeight}px` }}>
+        <article
+          className="mx-auto grid origin-top overflow-hidden rounded-lg border border-gray-200 shadow-sm md:grid-cols-[260px_1fr]"
+          style={{
+            width: `${A4_WIDTH}px`,
+            minHeight: `${A4_HEIGHT}px`,
+            transform: `scale(${scale})`,
+          }}
+        >
+          <aside className="sidebar-dark w-[260px] shrink-0 overflow-hidden bg-[#1a1a2e] p-6 text-white [&_*]:break-words">
+            {truthyHttpUrl(localCV.avatar_url) ? (
+              <img
+                src={avatarImageUrl(supabase, localCV.avatar_url) ?? localCV.avatar_url}
+                alt=""
+                className="mx-auto mb-4 h-24 w-24 rounded-full object-cover ring-2 ring-white/30"
+              />
+            ) : truthyStr(localCV.full_name) ? (
+              <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-white/15 text-xl font-bold text-white">
+                {initialsFromName(localCV.full_name)}
+              </div>
+            ) : null}
+
+            <div className="flex items-start gap-2">
+              {!readOnly && editingHeader ? (
+                <div className="min-w-0 flex-1 space-y-2 text-sm">
+                  <input
+                    className={SIDEBAR_FIELD_CLASS}
+                    value={localCV.full_name}
+                    onChange={(e) => setLocalCV((p) => ({ ...p, full_name: e.target.value }))}
+                    placeholder="სახელი და გვარი"
+                    aria-label="სახელი და გვარი"
+                  />
+                  <input
+                    type="email"
+                    className={SIDEBAR_FIELD_CLASS}
+                    value={localCV.email}
+                    onChange={(e) => setLocalCV((p) => ({ ...p, email: e.target.value }))}
+                    placeholder="ელფოსტა"
+                    aria-label="ელფოსტა"
+                  />
+                  <input
+                    className={SIDEBAR_FIELD_CLASS}
+                    value={localCV.phone}
+                    onChange={(e) => setLocalCV((p) => ({ ...p, phone: e.target.value }))}
+                    placeholder="ტელეფონი"
+                    aria-label="ტელეფონი"
+                  />
+                  <input
+                    className={SIDEBAR_FIELD_CLASS}
+                    value={localCV.location}
+                    onChange={(e) => setLocalCV((p) => ({ ...p, location: e.target.value }))}
+                    placeholder="ლოკაცია"
+                    aria-label="ლოკაცია"
+                  />
+                  <input
+                    className={SIDEBAR_FIELD_CLASS}
+                    value={localCV.linkedin_url}
+                    onChange={(e) => setLocalCV((p) => ({ ...p, linkedin_url: e.target.value }))}
+                    placeholder=""
+                    aria-label="LinkedIn — https:// დაწყებით"
+                  />
+                  <input
+                    className={SIDEBAR_FIELD_CLASS}
+                    value={localCV.github_url}
+                    onChange={(e) => setLocalCV((p) => ({ ...p, github_url: e.target.value }))}
+                    placeholder=""
+                    aria-label="GitHub — https:// დაწყებით"
+                  />
+                  <input
+                    className={SIDEBAR_FIELD_CLASS}
+                    value={localCV.portfolio_url}
+                    onChange={(e) => setLocalCV((p) => ({ ...p, portfolio_url: e.target.value }))}
+                    placeholder=""
+                    aria-label="პორტფოლიო — https:// დაწყებით"
+                  />
+                  <AvatarEditor
+                    fullName={localCV.full_name}
+                    avatarUrl={localCV.avatar_url}
+                    onChangeUrl={(next) => setLocalCV((p) => ({ ...p, avatar_url: next }))}
+                    onRemove={() => setLocalCV((p) => ({ ...p, avatar_url: "" }))}
+                    onPickFile={(file) => void handleUploadAvatar(file)}
+                    uploading={isAvatarUploading}
+                  />
+                  <button
+                    type="button"
+                    className="w-full rounded border border-white/30 bg-white/15 px-2 py-1.5 text-xs font-medium text-white hover:bg-white/25"
+                    onClick={() => setEditingHeader(false)}
+                  >
+                    დასრულება
+                  </button>
+                </div>
+              ) : (
+                <div className="min-w-0 flex-1">
+                  {truthyStr(localCV.full_name) ? (
+                    <h1
+                      lang="ka"
+                      className={`font-bold text-white ${localCV.full_name.length > 15 ? "text-[20px]" : "text-3xl"}`}
+                    >
+                      {localCV.full_name}
+                    </h1>
+                  ) : null}
+                  <div className="mt-3 space-y-1 text-sm text-[#cbd5e1]">
+                    {truthyStr(localCV.email) ? <p className="break-all">{localCV.email}</p> : null}
+                    {truthyStr(localCV.phone) ? <p>{localCV.phone}</p> : null}
+                    {truthyStr(localCV.location) ? <p>{localCV.location}</p> : null}
+                  </div>
+                  {sidebarLinks.length > 0 ? (
+                    <div className="mt-4 space-y-2 border-t border-white/20 pt-3">
+                      {sidebarLinks.map((l) => (
+                        <a
+                          key={l.key}
+                          href={l.href}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-2 text-sm text-[#cbd5e1] hover:text-white"
+                        >
+                          <span className="opacity-90">🔗</span>
+                          <span>{l.label}</span>
+                        </a>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              )}
+              {!readOnly ? (
+                <PencilButton variant="sidebar" onClick={() => setEditingHeader((e) => !e)} label="საკონტაქტოს რედაქტირება" />
+              ) : null}
+            </div>
+
+            {showSidebarSkills ? (
+              <section className="border-t border-white/20 py-5">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-[12px] font-bold uppercase tracking-wider text-[#94a3b8]">უნარები</h3>
+                </div>
+                {readOnly && truthyArr(localCV.technical_skills) ? (
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm marker:text-[#64748b]">
+                    {localCV.technical_skills.map((item, i) => (
+                      <li key={i} className="text-white">
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                ) : !readOnly ? (
+                  <TagEditor
+                    variant="sidebar"
+                    tags={localCV.technical_skills}
+                    onChange={(next) => setLocalCV((p) => ({ ...p, technical_skills: next }))}
+                    placeholder="უნარი"
+                    inputAriaLabel="დაამატეთ უნარი, Enter დაადასტურებს"
+                    disabled={false}
+                  />
+                ) : null}
+              </section>
+            ) : null}
+
+            {showSidebarLang ? (
+              <section className="border-t border-white/20 py-5">
+                <h3 className="text-[12px] font-bold uppercase tracking-wider text-[#94a3b8]">ენები</h3>
+                {readOnly && truthyArr(localCV.languages) ? (
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm marker:text-[#64748b]">
+                    {localCV.languages.map((item, i) => (
+                      <li key={i} className="text-white">
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                ) : !readOnly ? (
+                  <TagEditor
+                    variant="sidebar"
+                    tags={localCV.languages}
+                    onChange={(next) => setLocalCV((p) => ({ ...p, languages: next }))}
+                    placeholder="ენა"
+                    inputAriaLabel="დაამატეთ ენა, Enter დაადასტურებს"
+                    disabled={false}
+                  />
+                ) : null}
+              </section>
+            ) : null}
+
+            <style>{`
+              .sidebar-dark ::placeholder {
+                color: rgba(255, 255, 255, 0.4);
+                opacity: 1;
+              }
+            `}</style>
+          </aside>
+
+          <main className="bg-white p-8">
+            {showSummary ? (
+              <section className="border-b border-gray-200 pb-5">
+                <div className="flex items-start justify-between gap-2">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-600">პროფესიული რეზიუმე</h3>
+                  {!readOnly ? <PencilButton onClick={() => setEditingSummary((s) => !s)} label="რეზიუმე" /> : null}
+                </div>
+                {editingSummary && !readOnly ? (
+                  <textarea
+                    className="mt-3 w-full rounded border border-gray-200 p-2 text-[15px] leading-7"
+                    rows={8}
+                    value={localCV.professional_summary}
+                    onChange={(e) => setLocalCV((p) => ({ ...p, professional_summary: e.target.value }))}
+                  />
+                ) : truthyStr(localCV.professional_summary) || !readOnly ? (
+                  <p className="mt-3 whitespace-pre-wrap text-[15px] leading-7 text-gray-800">{localCV.professional_summary}</p>
+                ) : null}
+              </section>
+            ) : null}
+
+            {showWork ? (
+              <section className="pt-5">
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-600">გამოცდილება</h3>
+                  {!readOnly ? (
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-blue-600"
+                      onClick={() =>
+                        setLocalCV((p) => ({
+                          ...p,
+                          work_experience: [
+                            ...workList,
+                            { role: "", company: "", start_date: "", end_date: "", is_current: false, description: "" },
+                          ],
+                        }))
+                      }
+                    >
+                      + დამატება
+                    </button>
+                  ) : null}
+                </div>
+                <div className="mt-3 space-y-4">
+                  {workList.map((job, index) => {
+                    const dates = formatGeorgianExperienceRange(job.start_date, job.end_date, Boolean(job.is_current))
+                    const hasContent =
+                      truthyStr(job.role) ||
+                      truthyStr(job.company) ||
+                      truthyStr(job.description) ||
+                      truthyStr(job.start_date)
+                    if (readOnly && !hasContent) return null
+                    const editing = editingWorkIdx === index && !readOnly
+                    return (
+                      <div key={`work-${index}`} className="rounded border border-gray-100 p-4">
+                        <div className="mb-2 flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            {editing ? null : readOnly ? null : (
+                              <>
+                                {(truthyStr(job.role) || truthyStr(job.company)) ? (
+                                  <p className="font-semibold text-gray-900">
+                                    {[job.role, job.company].filter(truthyStr).join(" — ")}
+                                  </p>
+                                ) : (
+                                  <p className="text-sm italic text-gray-400">ახალი ჩანაწერი — დააჭირეთ რედაქტორს</p>
+                                )}
+                                {dates ? <p className="mb-1 text-xs text-gray-500">{dates}</p> : null}
+                                {truthyStr(job.description) ? <p className="text-sm text-gray-800">{job.description}</p> : null}
+                              </>
+                            )}
+                          </div>
+                          {!readOnly ? (
+                            <div className="flex shrink-0 gap-1">
+                              <PencilButton onClick={() => setEditingWorkIdx(editing ? null : index)} label="რედაქტირება" />
+                              <button
+                                type="button"
+                                className="text-xs text-red-600"
+                                onClick={() =>
+                                  setLocalCV((p) => ({
+                                    ...p,
+                                    work_experience: workList.filter((_, i) => i !== index),
+                                  }))
+                                }
+                              >
+                                წაშლა
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                        {editing ? (
+                          <div className="space-y-2 text-sm">
+                            <input
+                              className="w-full rounded border px-2 py-1"
+                              placeholder="როლი"
+                              value={job.role}
+                              onChange={(e) => {
+                                const next = [...workList]
+                                next[index] = { ...next[index], role: e.target.value }
+                                setLocalCV((p) => ({ ...p, work_experience: next }))
+                              }}
+                            />
+                            <input
+                              className="w-full rounded border px-2 py-1"
+                              placeholder="კომპანია"
+                              value={job.company}
+                              onChange={(e) => {
+                                const next = [...workList]
+                                next[index] = { ...next[index], company: e.target.value }
+                                setLocalCV((p) => ({ ...p, work_experience: next }))
+                              }}
+                            />
+                            <div className="flex gap-2">
+                              <input
+                                type="date"
+                                className="flex-1 rounded border px-2 py-1"
+                                value={job.start_date?.slice(0, 10) ?? ""}
+                                onChange={(e) => {
+                                  const next = [...workList]
+                                  next[index] = { ...next[index], start_date: e.target.value }
+                                  setLocalCV((p) => ({ ...p, work_experience: next }))
+                                }}
+                              />
+                              <input
+                                type="date"
+                                disabled={job.is_current}
+                                className="flex-1 rounded border px-2 py-1 disabled:bg-slate-100"
+                                value={job.end_date?.slice(0, 10) ?? ""}
+                                onChange={(e) => {
+                                  const next = [...workList]
+                                  next[index] = { ...next[index], end_date: e.target.value }
+                                  setLocalCV((p) => ({ ...p, work_experience: next }))
+                                }}
+                              />
+                            </div>
+                            <label className="flex items-center gap-2 text-xs">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(job.is_current)}
+                                onChange={(e) => {
+                                  const next = [...workList]
+                                  next[index] = { ...next[index], is_current: e.target.checked, end_date: e.target.checked ? "" : next[index].end_date }
+                                  setLocalCV((p) => ({ ...p, work_experience: next }))
+                                }}
+                              />
+                              მიმდინარე
+                            </label>
+                            <textarea
+                              className="w-full rounded border px-2 py-1"
+                              rows={3}
+                              placeholder="აღწერა"
+                              value={job.description}
+                              onChange={(e) => {
+                                const next = [...workList]
+                                next[index] = { ...next[index], description: e.target.value }
+                                setLocalCV((p) => ({ ...p, work_experience: next }))
+                              }}
+                            />
+                          </div>
+                        ) : readOnly ? (
+                          <>
+                            {(truthyStr(job.role) || truthyStr(job.company)) ? (
+                              <p className="font-semibold text-gray-900">
+                                {[job.role, job.company].filter(truthyStr).join(" — ")}
+                              </p>
+                            ) : null}
+                            {dates ? <p className="mb-2 text-xs text-gray-500">{dates}</p> : null}
+                            {truthyStr(job.description) ? <p className="text-sm text-gray-800">{job.description}</p> : null}
+                          </>
+                        ) : null}
+                      </div>
+                    )
+                  })}
+                </div>
+              </section>
+            ) : null}
+
+            {showEducation ? (
+              <section className="border-t border-gray-200 pt-5">
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-600">განათლება</h3>
+                  {!readOnly ? (
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-blue-600"
+                      onClick={() =>
+                        setLocalCV((p) => ({
+                          ...p,
+                          education: [...eduList, { school: "", degree: "", field_of_study: "", end_date: "" }],
+                        }))
+                      }
+                    >
+                      + დამატება
+                    </button>
+                  ) : null}
+                </div>
+                <div className="mt-3 space-y-3">
+                  {eduList.map((edu, index) => {
+                    const hasContent =
+                      truthyStr(edu.school) || truthyStr(edu.degree) || truthyStr(edu.field_of_study) || truthyStr(edu.end_date)
+                    if (readOnly && !hasContent) return null
+                    const editing = editingEduIdx === index && !readOnly
+                    return (
+                      <div key={`edu-${index}`} className="rounded border border-gray-100 p-4">
+                        <div className="mb-2 flex justify-end gap-1">
+                          {!readOnly ? (
+                            <>
+                              <PencilButton onClick={() => setEditingEduIdx(editing ? null : index)} label="რედაქტირება" />
+                              <button
+                                type="button"
+                                className="text-xs text-red-600"
+                                onClick={() =>
+                                  setLocalCV((p) => ({
+                                    ...p,
+                                    education: eduList.filter((_, i) => i !== index),
+                                  }))
+                                }
+                              >
+                                წაშლა
+                              </button>
+                            </>
+                          ) : null}
+                        </div>
+                        {editing ? (
+                          <div className="space-y-2 text-sm">
+                            <input
+                              className="w-full rounded border px-2 py-1"
+                              placeholder="სასწავლებელი"
+                              value={edu.school}
+                              onChange={(e) => {
+                                const next = [...eduList]
+                                next[index] = { ...next[index], school: e.target.value }
+                                setLocalCV((p) => ({ ...p, education: next }))
+                              }}
+                            />
+                            <input
+                              className="w-full rounded border px-2 py-1"
+                              placeholder="ხარისხი (მაგ. ბაკალავრი)"
+                              value={edu.degree}
+                              onChange={(e) => {
+                                const next = [...eduList]
+                                next[index] = { ...next[index], degree: e.target.value }
+                                setLocalCV((p) => ({ ...p, education: next }))
+                              }}
+                            />
+                            <input
+                              className="w-full rounded border px-2 py-1"
+                              placeholder="მიმართულება"
+                              value={edu.field_of_study}
+                              onChange={(e) => {
+                                const next = [...eduList]
+                                next[index] = { ...next[index], field_of_study: e.target.value }
+                                setLocalCV((p) => ({ ...p, education: next }))
+                              }}
+                            />
+                            <input
+                              type="date"
+                              className="w-full rounded border px-2 py-1"
+                              value={edu.end_date?.slice(0, 10) ?? ""}
+                              onChange={(e) => {
+                                const next = [...eduList]
+                                next[index] = { ...next[index], end_date: e.target.value }
+                                setLocalCV((p) => ({ ...p, education: next }))
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          <>
+                            {truthyStr(edu.degree) || truthyStr(edu.field_of_study) ? (
+                              <p className="font-semibold text-gray-900">{[edu.degree, edu.field_of_study].filter(truthyStr).join(" — ")}</p>
+                            ) : null}
+                            {truthyStr(edu.school) ? <p className="text-sm text-gray-700">{edu.school}</p> : null}
+                            {truthyStr(edu.end_date) ? (
+                              <p className="text-xs text-gray-500">{formatGeorgianMonthYear(String(edu.end_date))}</p>
+                            ) : null}
+                          </>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </section>
+            ) : null}
+          </main>
+        </article>
+      </div>
+    </div>
+  )
+}

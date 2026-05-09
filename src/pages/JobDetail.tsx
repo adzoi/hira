@@ -1,15 +1,21 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useParams } from "react-router-dom"
 import Navbar from "../components/Navbar.tsx"
-import ErrorState from "../components/ui/ErrorState.tsx"
+import VIPUpgrade from "../components/VIPUpgrade.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
 import { useToast } from "../components/ui/ToastProvider.tsx"
+import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
+import { jobVacancyStats } from "../lib/jobVacancies.ts"
+import { jobVipIsActive } from "../lib/vipJobTiers.ts"
 
 type JobData = {
   id: string
   title: string
   description: string
+  status: string
+  vacancies: number
+  accepted_count: number
   created_at: string
   views_count: number
   is_urgent: boolean
@@ -33,17 +39,27 @@ type JobData = {
   hirer_email: string
   hirer_phone: string | null
   contact_preference: string
+  is_vip: boolean
+  vip_tier: string | null
+  vip_expires_at: string | null
+  vipActive: boolean
 }
 
 type OtherJob = { id: string; title: string; budget_min: number | null; budget_max: number | null; budget_type: string }
 
 function formatDate(dateString: string) {
+  if (!dateString.trim()) return "—"
+  const t = new Date(dateString).getTime()
+  if (!Number.isFinite(t)) return "—"
   return new Date(dateString).toLocaleDateString("ka-GE")
 }
 
 function formatRelativeTime(dateString: string) {
+  if (!dateString.trim()) return "—"
+  const parsed = new Date(dateString).getTime()
+  if (!Number.isFinite(parsed)) return "—"
   const now = Date.now()
-  const diffMs = now - new Date(dateString).getTime()
+  const diffMs = now - parsed
   const minute = 60 * 1000
   const hour = 60 * minute
   const day = 24 * hour
@@ -57,6 +73,17 @@ function getInitials(value: string) {
   const parts = value.trim().split(" ").filter(Boolean)
   if (parts.length === 0) return "დ"
   return `${parts[0][0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase()
+}
+
+/** PostgREST + RLS sometimes yields null, []; normalize to one row or null before reading fields. */
+function normalizeSingleRelation<T extends Record<string, unknown>>(embedded: unknown): T | null {
+  if (embedded == null) return null
+  if (Array.isArray(embedded)) {
+    const first = embedded[0]
+    return first != null && typeof first === "object" ? (first as T) : null
+  }
+  if (typeof embedded === "object") return embedded as T
+  return null
 }
 
 export default function JobDetailPage() {
@@ -74,6 +101,9 @@ export default function JobDetailPage() {
   const [submitError, setSubmitError] = useState("")
   const [submitSuccess, setSubmitSuccess] = useState("")
   const [submitting, setSubmitting] = useState(false)
+  const [viewerUserId, setViewerUserId] = useState<string | null>(null)
+  const [vipModalOpen, setVipModalOpen] = useState(false)
+  const trackedJobViewRef = useRef<string | null>(null)
 
   useEffect(() => {
     document.title = "სამუშაოები — გიგორი"
@@ -82,18 +112,46 @@ export default function JobDetailPage() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!supabase || !job?.id) return
+    if (trackedJobViewRef.current === job.id) return
+    trackedJobViewRef.current = job.id
+    void (async () => {
+      try {
+        const { data, error } = await supabase.rpc("increment_job_views", { p_job_id: job.id })
+        if (error) return
+        const next = Number(data ?? 0)
+        if (!Number.isFinite(next)) return
+        setJob((prev) => (prev && prev.id === job.id ? { ...prev, views_count: next } : prev))
+      } catch {
+        /* non-blocking */
+      }
+    })()
+  }, [job?.id])
+
   const loadData = async () => {
       if (!id) {
-        setError("განცხადება ვერ მოიძებნა")
+        setJob(null)
+        setError("სამუშაო ვერ მოიძებნა")
         setLoading(false)
         return
       }
 
       if (!isSupabaseConfigured || !supabase) {
+        setJob(null)
         setError("Supabase არ არის კონფიგურირებული.")
         setLoading(false)
         return
       }
+
+      setLoading(true)
+      setError("")
+      setJob(null)
+      setOtherJobs([])
+      setAlreadyApplied(false)
+      setFreelancerProfileId(null)
+      setAuthedUserType("guest")
+      setViewerUserId(null)
 
       try {
         const { data: jobRow, error: jobError } = await supabase
@@ -114,48 +172,110 @@ export default function JobDetailPage() {
             )
           `)
           .eq("id", id)
-          .single()
+          .maybeSingle()
 
-        if (jobError || !jobRow) {
-          setError("განცხადება ვერ მოიძებნა")
-          setLoading(false)
+        let rowUnknown: Record<string, unknown> | null = null
+        if (jobRow == null || jobRow === undefined) {
+          rowUnknown = null
+        } else if (Array.isArray(jobRow)) {
+          const first = jobRow[0]
+          rowUnknown = first != null && typeof first === "object" && !Array.isArray(first) ? (first as Record<string, unknown>) : null
+        } else if (typeof jobRow === "object") {
+          rowUnknown = jobRow as Record<string, unknown>
+        }
+
+        if (jobError || rowUnknown == null || typeof rowUnknown.id !== "string") {
+          setError("")
+          setJob(null)
           return
         }
 
-        const hirerProfile = (jobRow as any).hirer_profiles
-        const hirerP = hirerProfile?.profiles
+        const hirerProfilesRaw = normalizeSingleRelation<Record<string, unknown>>(
+          (jobRow as { hirer_profiles?: unknown }).hirer_profiles ?? rowUnknown.hirer_profiles,
+        )
+        const hirerP =
+          hirerProfilesRaw?.profiles !== undefined && hirerProfilesRaw.profiles !== null
+            ? normalizeSingleRelation<Record<string, unknown>>(hirerProfilesRaw.profiles)
+            : null
+
+        const jobSkillsUnknown = rowUnknown.job_skills
+        const jobSkillsRows = Array.isArray(jobSkillsUnknown) ? jobSkillsUnknown : []
+
+        const hirerProfileIdSafe =
+          hirerProfilesRaw && typeof hirerProfilesRaw.id === "string" ? hirerProfilesRaw.id : ""
+        const hirerUserIdSafe =
+          hirerProfilesRaw && typeof hirerProfilesRaw.user_id === "string" ? hirerProfilesRaw.user_id : ""
+
+        const vacStats = jobVacancyStats(rowUnknown.vacancies as number | null | undefined, rowUnknown.accepted_count as number | null | undefined)
+
         const mappedJob: JobData = {
-          id: jobRow.id,
-          title: jobRow.title,
-          description: jobRow.description,
-          created_at: jobRow.created_at,
-          views_count: jobRow.views_count,
-          is_urgent: jobRow.is_urgent,
-          budget_type: jobRow.budget_type,
-          budget_min: jobRow.budget_min,
-          budget_max: jobRow.budget_max,
-          duration_type: jobRow.duration_type,
-          location_type: jobRow.location_type,
-          application_deadline: jobRow.application_deadline,
-          category_name: (jobRow as any).categories?.name_ka ?? "კატეგორია",
-          subcategory_name: (jobRow as any).subcategories?.name_ka ?? null,
-          skills:
-            (jobRow as any).job_skills
-              ?.map((item: any) => item.skills)
-              .filter(Boolean)
-              .map((skill: any) => ({ id: skill.id, name: skill.name })) ?? [],
-          hirer_profile_id: hirerProfile?.id,
-          hirer_company_name: hirerProfile?.company_name || hirerP?.full_name || "დამქირავებელი",
-          hirer_jobs_posted_count: hirerProfile?.jobs_posted_count ?? 0,
-          hirer_user_id: hirerProfile?.user_id,
-          hirer_full_name: hirerP?.full_name ?? "დამქირავებელი",
-          hirer_avatar_url: hirerP?.avatar_url ?? null,
-          hirer_city: hirerP?.city ?? null,
-          hirer_member_since: hirerP?.member_since ?? new Date().toISOString(),
-          hirer_email: hirerP?.email ?? "",
-          hirer_phone: hirerP?.phone ?? null,
-          contact_preference: jobRow.contact_preference,
+          id: String(rowUnknown.id),
+          title: String(rowUnknown.title ?? ""),
+          description: String(rowUnknown.description ?? ""),
+          status: String(rowUnknown.status ?? "open"),
+          vacancies: vacStats.vacancies,
+          accepted_count: vacStats.acceptedCount,
+          created_at: String(rowUnknown.created_at ?? ""),
+          views_count: Number(rowUnknown.views_count ?? 0),
+          is_urgent: Boolean(rowUnknown.is_urgent),
+          budget_type: String(rowUnknown.budget_type ?? ""),
+          budget_min:
+            rowUnknown.budget_min === null || rowUnknown.budget_min === undefined ? null : Number(rowUnknown.budget_min),
+          budget_max:
+            rowUnknown.budget_max === null || rowUnknown.budget_max === undefined ? null : Number(rowUnknown.budget_max),
+          duration_type: String(rowUnknown.duration_type ?? ""),
+          location_type: String(rowUnknown.location_type ?? ""),
+          application_deadline:
+            rowUnknown.application_deadline === null || rowUnknown.application_deadline === undefined
+              ? null
+              : String(rowUnknown.application_deadline),
+          category_name:
+            normalizeSingleRelation<{ name_ka?: string }>(rowUnknown.categories)?.name_ka?.trim() || "კატეგორია",
+          subcategory_name:
+            normalizeSingleRelation<{ name_ka?: string }>(rowUnknown.subcategories)?.name_ka?.trim() ?? null,
+          skills: jobSkillsRows
+            .map((item) =>
+              normalizeSingleRelation<{ id?: unknown; name?: unknown }>((item as { skills?: unknown }).skills ?? null),
+            )
+            .filter(
+              (s): s is { id: string; name: string } =>
+                s != null &&
+                typeof s.id === "string" &&
+                s.id.length > 0 &&
+                typeof s.name === "string" &&
+                s.name.length > 0,
+            )
+            .map((skill) => ({ id: skill.id, name: skill.name })),
+          hirer_profile_id: hirerProfileIdSafe,
+          hirer_company_name:
+            (typeof hirerProfilesRaw?.company_name === "string" && hirerProfilesRaw.company_name.trim()
+              ? hirerProfilesRaw.company_name
+              : null) ||
+            (typeof hirerP?.full_name === "string" && hirerP.full_name.trim() ? hirerP.full_name : null) ||
+            "დამქირავებელი",
+          hirer_jobs_posted_count: Number(hirerProfilesRaw?.jobs_posted_count ?? 0),
+          hirer_user_id: hirerUserIdSafe,
+          hirer_full_name:
+            (typeof hirerP?.full_name === "string" && hirerP.full_name.trim() ? hirerP.full_name : "") || "დამქირავებელი",
+          hirer_avatar_url: hirerP?.avatar_url != null ? String(hirerP.avatar_url) : null,
+          hirer_city: hirerP?.city != null ? String(hirerP.city) : null,
+          hirer_member_since:
+            hirerP?.member_since != null ? String(hirerP.member_since) : new Date().toISOString(),
+          hirer_email: hirerP?.email != null ? String(hirerP.email) : "",
+          hirer_phone: hirerP?.phone != null ? String(hirerP.phone) : null,
+          contact_preference: String(rowUnknown.contact_preference ?? ""),
+          is_vip: Boolean(rowUnknown.is_vip),
+          vip_tier: rowUnknown.vip_tier != null ? String(rowUnknown.vip_tier) : null,
+          vip_expires_at: rowUnknown.vip_expires_at != null ? String(rowUnknown.vip_expires_at) : null,
+          vipActive: jobVipIsActive(Boolean(rowUnknown.is_vip), rowUnknown.vip_expires_at != null ? String(rowUnknown.vip_expires_at) : null),
         }
+
+        if (!mappedJob.hirer_profile_id) {
+          setError("")
+          setJob(null)
+          return
+        }
+
         setJob(mappedJob)
 
         const { data: others, error: othersError } = await supabase
@@ -175,17 +295,20 @@ export default function JobDetailPage() {
 
         if (!user) {
           setAuthedUserType("guest")
+          setViewerUserId(null)
           setLoading(false)
           return
         }
+        setViewerUserId(user.id)
 
         const { data: profile, error: profileError } = await supabase
           .from("profiles")
           .select("id,user_type")
           .eq("id", user.id)
-          .single()
+          .maybeSingle()
         if (profileError || !profile) {
           setAuthedUserType("guest")
+          setViewerUserId(null)
           setLoading(false)
           return
         }
@@ -213,6 +336,7 @@ export default function JobDetailPage() {
           setAuthedUserType("guest")
         }
       } catch (loadError) {
+        setJob(null)
         setError(loadError instanceof Error ? loadError.message : "მონაცემები ვერ ჩაიტვირთა.")
       } finally {
         setLoading(false)
@@ -245,6 +369,11 @@ export default function JobDetailPage() {
     return "შემოთავაზებული ფასი (₾)"
   }, [job])
 
+  const isJobOwner =
+    Boolean(job) && authedUserType === "hirer" && Boolean(viewerUserId) && viewerUserId === job!.hirer_user_id
+
+  const vacancySnap = job ? jobVacancyStats(job.vacancies, job.accepted_count) : null
+
   const handleApply = async () => {
     if (!supabase || !job || !freelancerProfileId) return
     setSubmitError("")
@@ -252,6 +381,12 @@ export default function JobDetailPage() {
 
     if (coverLetter.trim().length > 0 && coverLetter.trim().length < 50) {
       setSubmitError("კომენტარი მინიმუმ 50 სიმბოლო უნდა იყოს ან დატოვე ცარიელი.")
+      return
+    }
+
+    const vs = jobVacancyStats(job.vacancies, job.accepted_count)
+    if (job.status !== "open" || vs.isFull) {
+      setSubmitError("ამ განცხადებაზე ახალი განცხადება აღარ არის შესაძლებელი.")
       return
     }
 
@@ -308,14 +443,29 @@ export default function JobDetailPage() {
     )
   }
 
-  if (error || !job) {
+  if (!job) {
+    const headline = error.trim().length > 0 ? error : "სამუშაო ვერ მოიძებნა"
     return (
       <div className="min-h-screen bg-slate-50">
         <Navbar />
         <main className="mx-auto max-w-[1000px] px-6 py-10">
-          <ErrorState message={error} onRetry={loadData} />
-          <div className="mt-4 text-center">
-            <Link to="/jobs" className="text-sm font-semibold text-[#D4A843] hover:underline">სამუშაოებზე დაბრუნება</Link>
+          <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+            <p className="text-5xl opacity-70" aria-hidden>
+              ❗
+            </p>
+            <p className="mt-4 text-xl font-semibold text-[#1B2B4B]">{headline}</p>
+            <button
+              type="button"
+              onClick={() => void loadData()}
+              className="mt-6 h-11 rounded-lg border border-[#1B2B4B] bg-white px-5 text-sm font-semibold text-[#1B2B4B] transition hover:bg-[#1B2B4B] hover:text-white"
+            >
+              თავიდან ცდა
+            </button>
+          </div>
+          <div className="mt-6 text-center">
+            <Link to="/jobs" className="text-sm font-semibold text-[#D4A843] hover:underline">
+              სამუშაოებზე დაბრუნება
+            </Link>
           </div>
         </main>
       </div>
@@ -331,12 +481,30 @@ export default function JobDetailPage() {
             <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h1 className="text-3xl font-bold text-[#1B2B4B]">{job.title}</h1>
-                {job.is_urgent ? (
-                  <span className="rounded-full bg-red-500 px-3 py-1 text-xs font-semibold text-white">
-                    გადაუდებელი
-                  </span>
-                ) : null}
+                <div className="flex flex-wrap items-center gap-2">
+                  {job.vipActive ? (
+                    <span className="rounded-full bg-[#D4A843] px-3 py-1 text-xs font-bold uppercase tracking-wide text-[#1B2B4B]">
+                      VIP · Featured
+                    </span>
+                  ) : null}
+                  {job.is_urgent ? (
+                    <span className="rounded-full bg-red-500 px-3 py-1 text-xs font-semibold text-white">
+                      გადაუდებელი
+                    </span>
+                  ) : null}
+                </div>
               </div>
+              {isJobOwner ? (
+                <div className="mt-4">
+                  <button
+                    type="button"
+                    onClick={() => setVipModalOpen(true)}
+                    className="inline-flex h-10 items-center rounded-lg border border-[#D4A843] bg-amber-50 px-4 text-sm font-semibold text-[#1B2B4B] transition hover:bg-[#D4A843]/50"
+                  >
+                    VIP / Featured გაუმჯობესება
+                  </button>
+                </div>
+              ) : null}
               <p className="mt-2 text-sm text-slate-500">
                 {formatRelativeTime(job.created_at)} • {job.views_count} ნახვა
               </p>
@@ -346,7 +514,7 @@ export default function JobDetailPage() {
             <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <h2 className="border-l-4 border-[#D4A843] pl-3 text-xl font-bold text-[#1B2B4B]">საჭირო უნარები</h2>
               <div className="mt-4 flex flex-wrap gap-2">
-                {job.skills.map((skill) => (
+                {(job.skills ?? []).map((skill) => (
                   <span key={skill.id} className="rounded-full border border-[#D4A843] px-3 py-1 text-xs font-medium text-[#1B2B4B]">
                     {skill.name}
                   </span>
@@ -370,6 +538,19 @@ export default function JobDetailPage() {
                 <div className="rounded-lg bg-slate-50 p-3 text-sm">
                   ვადა: {job.application_deadline ? formatDate(job.application_deadline) : "არ არის მითითებული"}
                 </div>
+                <div className="rounded-lg bg-slate-50 p-3 text-sm sm:col-span-2">
+                  <span className="font-semibold text-[#1B2B4B]">
+                    {vacancySnap?.acceptedCount ?? 0}/{vacancySnap?.vacancies ?? 1} ვაკანსია შევსებულია
+                  </span>
+                  {" "}
+                  <span className="text-slate-600">
+                    ({vacancySnap?.acceptedCount ?? 0} of {vacancySnap?.vacancies ?? 1} vacancies filled)
+                  </span>
+                  {" · "}
+                  <span className="text-slate-700">
+                    {vacancySnap?.isFull ? "დაკომლექტებულია · ახალი განცხადება აღარ იღებს" : `${vacancySnap?.remaining ?? 0} თავისუფალი ადგილი`}
+                  </span>
+                </div>
               </div>
             </article>
 
@@ -386,6 +567,10 @@ export default function JobDetailPage() {
               ) : alreadyApplied ? (
                 <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-700">
                   განცხადება გაგზავნილია ✓
+                </div>
+              ) : job.status !== "open" || (vacancySnap?.isFull ?? false) ? (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                  ამ განცხადებაზე განცხადება ახლა აღარ იღებს — ყველა ადგილი შევსებულია ან განცხადება დაიხურა.
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -431,7 +616,12 @@ export default function JobDetailPage() {
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center gap-3">
                 {job.hirer_avatar_url ? (
-                  <img src={job.hirer_avatar_url} alt={`${job.hirer_company_name} ავატარი`} loading="lazy" className="h-14 w-14 rounded-full object-cover" />
+                  <img
+                    src={avatarImageUrl(supabase, job.hirer_avatar_url) ?? job.hirer_avatar_url}
+                    alt={`${job.hirer_company_name} ავატარი`}
+                    loading="lazy"
+                    className="h-14 w-14 rounded-full object-cover"
+                  />
                 ) : (
                   <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#1B2B4B] text-sm font-bold text-white">
                     {getInitials(job.hirer_company_name)}
@@ -475,6 +665,16 @@ export default function JobDetailPage() {
           </aside>
         </div>
       </main>
+
+      {job && isJobOwner ? (
+        <VIPUpgrade
+          open={vipModalOpen}
+          jobId={job.id}
+          jobTitle={job.title}
+          onClose={() => setVipModalOpen(false)}
+          onSuccess={() => void loadData()}
+        />
+      ) : null}
     </div>
   )
 }

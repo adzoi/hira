@@ -1,0 +1,9 @@
+# Edge Function gateway: requireJWT blocks anon-only requests (apikey only).
+# cv-get serves public slug/user_id reads using service role inside the handler — JWT is enforced there where needed.
+# get-homepage-vip is a public homepage feed.
+
+[functions.cv-get]
+verify_jwt = false
+
+[functions.get-homepage-vip]
+verify_jwt = false

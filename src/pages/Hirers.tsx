@@ -4,19 +4,22 @@ import Navbar from "../components/Navbar.tsx"
 import EmptyState from "../components/ui/EmptyState.tsx"
 import ErrorState from "../components/ui/ErrorState.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
-import MarketplaceCatalogToolbar from "../components/MarketplaceCatalogToolbar.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
+import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
-import { matchesLocationFilter } from "../lib/marketplaceFilters.ts"
+import { formatCityForDisplay, matchesLocationFilter } from "../lib/marketplaceFilters.ts"
 
 type HirerRow = {
   id: string
+  ownerUserId: string
   companyName: string
   industry: string | null
   description: string | null
   websiteUrl: string | null
   jobsPosted: number
   completedJobs: number
+  averageRating: number
+  ratingCount: number
   contactName: string
   avatarUrl: string | null
   city: string | null
@@ -53,15 +56,23 @@ function ExternalLinkArrowIcon({ className }: { className?: string }) {
   )
 }
 
+function ratingStars(value: number) {
+  const rounded = Math.round(value)
+  return `${"★".repeat(Math.max(0, rounded))}${"☆".repeat(Math.max(0, 5 - rounded))}`
+}
+
 const mockHirers: HirerRow[] = [
   {
     id: "00000000-0000-0000-0000-000000000001",
+    ownerUserId: "00000000-0000-0000-0000-000000000011",
     companyName: "TechStart Georgia",
     industry: "ტექნოლოგია",
     description: "პარალელური პროდუქტის გუნდი თბილისიდან — ვახერხებთ ვებ და მობაილ შეკვეთებს.",
     websiteUrl: null,
     jobsPosted: 4,
     completedJobs: 12,
+    averageRating: 4.7,
+    ratingCount: 9,
     contactName: "ლაშა რ.",
     avatarUrl: null,
     city: "თბილისი",
@@ -69,12 +80,15 @@ const mockHirers: HirerRow[] = [
   },
   {
     id: "00000000-0000-0000-0000-000000000002",
+    ownerUserId: "00000000-0000-0000-0000-000000000012",
     companyName: "Café Leila",
     industry: "სტუმართმოყვარეობა",
     description: "ოჯახური რესტორნის ბრენდი — ხშირად გვესაჭიროება მარკეტინგი და შინაარსი.",
     websiteUrl: null,
     jobsPosted: 8,
     completedJobs: 20,
+    averageRating: 4.9,
+    ratingCount: 15,
     contactName: "მარიამი ხ.",
     avatarUrl: null,
     city: "ბათუმი",
@@ -140,6 +154,7 @@ export default function HirersPage() {
           .select(
             `
             id,
+            user_id,
             company_name,
             description,
             industry,
@@ -167,12 +182,15 @@ export default function HirersPage() {
           const company = row.company_name?.trim() || "დამქირავებელი"
           return {
             id: row.id as string,
+            ownerUserId: row.user_id as string,
             companyName: company,
             industry: row.industry ?? null,
             description: row.description ?? null,
             websiteUrl: row.website_url ?? null,
             jobsPosted: Number(row.jobs_posted_count ?? 0),
             completedJobs: Number(row.completed_jobs_count ?? 0),
+            averageRating: 0,
+            ratingCount: 0,
             contactName: profile?.full_name?.trim() || "საკონტაქტო პირი",
             avatarUrl: profile?.avatar_url ?? null,
             city: profile?.city ?? null,
@@ -190,8 +208,19 @@ export default function HirersPage() {
               .eq("status", "completed")
               .in("hirer_profile_id", ids),
           ])
+          const ownerIds = Array.from(new Set(mapped.map((h) => h.ownerUserId).filter(Boolean)))
+          const ownerToHirerId = mapped.reduce<Record<string, string>>((acc, h) => {
+            if (h.ownerUserId) acc[h.ownerUserId] = h.id
+            return acc
+          }, {})
+          const { data: reviewRows, error: reviewErr } = await supabase
+            .from("reviews")
+            .select("reviewee_id, rating_overall")
+            .in("reviewee_id", ownerIds)
 
           const countMap: Record<string, number> = Object.fromEntries(ids.map((id) => [id, 0]))
+          const ratingSumMap: Record<string, number> = Object.fromEntries(ids.map((id) => [id, 0]))
+          const ratingCountMap: Record<string, number> = Object.fromEntries(ids.map((id) => [id, 0]))
 
           if (!cjErr && cjRows) {
             for (const row of cjRows) {
@@ -210,9 +239,21 @@ export default function HirersPage() {
               countMap[hp] = (countMap[hp] ?? 0) + 1
             }
           }
+          if (!reviewErr && reviewRows) {
+            for (const row of reviewRows) {
+              const hp = ownerToHirerId[String(row.reviewee_id ?? "")]
+              const rating = Number(row.rating_overall ?? 0)
+              if (!hp || !Number.isFinite(rating) || rating <= 0) continue
+              ratingSumMap[hp] = (ratingSumMap[hp] ?? 0) + rating
+              ratingCountMap[hp] = (ratingCountMap[hp] ?? 0) + 1
+            }
+          }
 
           for (const item of mapped) {
             item.completedJobs = countMap[item.id] ?? 0
+            const reviewCount = ratingCountMap[item.id] ?? 0
+            item.ratingCount = reviewCount
+            item.averageRating = reviewCount > 0 ? (ratingSumMap[item.id] ?? 0) / reviewCount : 0
           }
         }
 
@@ -307,12 +348,12 @@ export default function HirersPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F8F9FC]">
+      <div className="min-h-screen bg-white page-enter">
         <Navbar />
-        <main className="mx-auto w-full max-w-[1200px] px-4 py-8 md:px-6">
+        <main className="mx-auto w-full max-w-7xl px-6 py-6 font-sans text-slate-600 md:px-8 md:py-8">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
-              <SkeletonCard key={i} />
+              <SkeletonCard key={i} avatar lines={4} />
             ))}
           </div>
         </main>
@@ -320,137 +361,272 @@ export default function HirersPage() {
     )
   }
 
+  const websiteChipClass =
+    "inline-flex items-center gap-1 rounded-full border border-[#D1D5DB] bg-white px-2.5 py-1 text-xs font-medium text-[#374151]"
+
   return (
-    <div className="min-h-screen bg-[#F8F9FC] page-enter">
+    <div className="min-h-screen bg-white page-enter">
       <Navbar />
-      <main className="mx-auto w-full max-w-[1200px] px-4 py-6 md:px-6 md:py-8">
-        <MarketplaceCatalogToolbar
-          eyebrow="საჯარო წინადადებები"
-          title="დამქირავებლები"
-          searchValue={searchText}
-          onSearchChange={setSearchText}
-          searchPlaceholder="კომპანია, ინდუსტრია, ქალაქი ან აღწერა"
-          categories={industryCategories}
-          categoryId={categoryId}
-          onCategoryChange={setCategoryId}
-          categoryLabel="ინდუსტრია"
-          sortValue={sortBy}
-          onSortChange={(value) => setSortBy(value as SortOption)}
-          sortOptions={[
-            { value: "jobs_desc", label: "განცხადებების რაოდენობა" },
-            { value: "completed_desc", label: "დასრულებული სამუშაო" },
-            { value: "newest", label: "ახალი რეგისტრაცია" },
-          ]}
-          advancedDropdownOpen={advancedDropdownOpen}
-          advancedFilterCount={advancedFilterCount}
-          onToggleAdvanced={openAdvancedDropdown}
-          advancedDropdownRef={advancedDropdownRef}
-          onDismissAdvanced={() => setAdvancedDropdownOpen(false)}
-          onSaveAdvanced={saveAdvancedFilters}
-          onClearDraftAdvanced={clearDraftAdvanced}
-          childrenAdvancedBody={
-            <label className="block pb-1">
-              <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">ლოკაცია / ქალაქი</span>
-              <LocationFilterSelect
-                value={draftLocationFilter}
-                onChange={setDraftLocationFilter}
-                className="h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
-              />
-            </label>
-          }
-        />
+      <main className="mx-auto w-full max-w-7xl px-6 py-6 font-sans text-slate-600 md:px-8 md:py-8">
+        <section className="p-1 md:p-0">
+          <div className="mt-5 p-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <div className="min-w-[220px] flex-[0_1_320px]">
+                <input
+                  value={searchText}
+                  onChange={(event) => setSearchText(event.target.value)}
+                  className="h-10 w-full rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#2563EB]"
+                  placeholder="კომპანია, ინდუსტრია, ქალაქი ან აღწერა"
+                />
+              </div>
 
-        <p className="mt-3 text-sm text-slate-600">პლატფორმაზე რეგისტრირებული კომპანიები და გუნდები — ნაჩვენებია {sorted.length} შედეგი.</p>
+              <label className="relative inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500">
+                <span className="truncate">ინდუსტრია</span>
+                <span className="ml-auto text-slate-400">▾</span>
+                <select
+                  value={categoryId}
+                  onChange={(event) => setCategoryId(event.target.value)}
+                  className="absolute inset-0 cursor-pointer opacity-0"
+                  aria-label="ინდუსტრია"
+                >
+                  <option value="">ყველა ინდუსტრია</option>
+                  {industryCategories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name_ka}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-        {error ? <ErrorState message={error} /> : null}
+              <label className="relative inline-flex h-10 min-w-[10.5rem] max-w-[14rem] shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500">
+                <span className="pointer-events-none min-w-0 flex-1 truncate">
+                  {locationFilter.trim() ? formatCityForDisplay(locationFilter) ?? locationFilter : "ლოკაცია / ქალაქი"}
+                </span>
+                <span className="shrink-0 text-slate-400">▾</span>
+                <LocationFilterSelect
+                  value={locationFilter}
+                  onChange={setLocationFilter}
+                  className="absolute inset-0 z-10 h-full w-full min-h-[2.5rem] min-w-0 cursor-pointer opacity-0"
+                />
+              </label>
 
-        {!error && sorted.length === 0 ? (
-          <div className="mt-6">
-            <EmptyState message="დამქირავებლები ჯერ არ ჩანს ან შედეგები ცარიელია საძიებლო შეკითხვით." actionLabel="ფილტრების გასუფთავება" onAction={clearFilters} />
-          </div>
-        ) : (
-          <>
-            {!error ? (
-              <ul className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {visible.map((h) => {
-                  const desc = (h.description ?? "").trim()
-                  const snippet = desc.length > 140 ? `${desc.slice(0, 140)}…` : desc || "კომპანიის შესახებ ტექსტი ხელმისაწვდომი იქნება პროფილიდან."
-                  return (
-                    <li key={h.id} className="flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-[#D4A843]/70">
-                      <div className="flex items-start gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setAvatarPreview({ companyName: h.companyName, avatarUrl: h.avatarUrl })}
-                          className="group relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#1B2B4B]/5 text-xs font-black text-[#1B2B4B] ring-[#1B2B4B] ring-offset-2 ring-offset-white transition hover:ring-2 focus:outline-none focus-visible:ring-2"
-                          aria-label="ლოგოს გადიდება"
-                        >
-                          {h.avatarUrl ? (
-                            <img src={h.avatarUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
-                          ) : (
-                            companyInitials(h.companyName)
-                          )}
-                        </button>
-                        <div className="min-w-0 flex-1">
-                          <h2 className="text-lg font-extrabold text-[#1B2B4B]">{h.companyName}</h2>
-                          <p className="text-xs font-semibold text-slate-500">{[h.industry, h.city].filter(Boolean).join(" · ") || "Georgia"}</p>
-                        </div>
-                      </div>
-                      <p className="mt-3 flex-1 text-sm leading-relaxed text-slate-700">{snippet}</p>
-                      <dl className="mt-4 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 text-sm">
-                        <div>
-                          <dt className="text-xs uppercase text-slate-500">განცხადებები</dt>
-                          <dd className="font-bold text-[#1B2B4B]">{h.jobsPosted}</dd>
-                        </div>
-                        <div>
-                          <dt className="text-xs uppercase text-slate-500">დასრულებული</dt>
-                          <dd className="font-bold text-[#1B2B4B]">{h.completedJobs}</dd>
-                        </div>
-                        <div className="col-span-2 pt-1 text-xs text-slate-600">საკონტაქტო: {h.contactName}</div>
-                      </dl>
-                      <div className="mt-2 flex flex-wrap gap-2 text-sm">
-                        {h.websiteUrl ? (
-                          <a
-                            href={h.websiteUrl.startsWith("http") ? h.websiteUrl : `https://${h.websiteUrl}`}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                            className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-1 text-[#1B2B4B] hover:border-[#D4A843]"
-                          >
-                            ვებგვერდი
-                            <ExternalLinkArrowIcon className="h-3.5 w-3.5 opacity-80" />
-                          </a>
-                        ) : (
-                          <span
-                            className="inline-flex cursor-default items-center rounded-full border border-red-200 bg-red-50 px-3 py-1 text-red-400"
-                            title="ბმული არ არის დამატებული"
-                          >
-                            ვებგვერდი
-                          </span>
-                        )}
-                      </div>
-                      <Link
-                        to={`/hirer/${h.id}`}
-                        className="mt-4 inline-flex h-10 items-center justify-center rounded-lg bg-[#1B2B4B] px-4 text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B]"
-                      >
-                        პროფილი
-                      </Link>
-                    </li>
-                  )
-                })}
-              </ul>
-            ) : null}
-            {!error && visible.length < sorted.length ? (
-              <div className="mt-8 flex justify-center">
+              <div className="relative" ref={advancedDropdownRef}>
                 <button
                   type="button"
-                  onClick={() => setVisibleCount((c) => c + 24)}
-                  className="rounded-lg border border-[#D4A843] px-6 py-3 text-sm font-semibold text-[#1B2B4B] hover:bg-amber-50"
+                  aria-expanded={advancedDropdownOpen}
+                  aria-haspopup="dialog"
+                  onClick={() => (advancedDropdownOpen ? setAdvancedDropdownOpen(false) : openAdvancedDropdown())}
+                  className="inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500 transition hover:border-slate-400"
                 >
-                  მეტის ნახვა
+                  <span>გაფართოებული ძიება</span>
+                  <span className="text-slate-400">▾</span>
+                  {advancedFilterCount > 0 ? (
+                    <span className="ml-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#2563EB] px-1 text-xs font-bold text-white">
+                      {advancedFilterCount}
+                    </span>
+                  ) : null}
                 </button>
+
+                {advancedDropdownOpen ? (
+                  <>
+                    <div className="fixed inset-0 z-40 bg-black/20 md:hidden" aria-hidden onClick={() => setAdvancedDropdownOpen(false)} />
+                    <div
+                      role="dialog"
+                      aria-modal="true"
+                      aria-label="დეტალური ფილტრები"
+                      className="absolute right-0 z-50 mt-2 flex max-h-[min(72vh,560px)] w-[min(100vw-2rem,24rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
+                    >
+                      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-4">
+                        <h2 className="border-l-4 border-[#2563EB] pl-3 text-base font-bold text-[#1B2B4B]">გაფართოებული ფილტრები</h2>
+                        <div className="mt-4 space-y-4">
+                          <label className="block pb-1">
+                            <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">ლოკაცია / ქალაქი</span>
+                            <LocationFilterSelect
+                              value={draftLocationFilter}
+                              onChange={setDraftLocationFilter}
+                              className="h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-[#2563EB] focus:ring-2"
+                            />
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 space-y-2 border-t border-slate-100 bg-white p-3">
+                        <button
+                          type="button"
+                          onClick={clearDraftAdvanced}
+                          className="h-11 w-full rounded-lg border border-[#2563EB] text-sm font-semibold text-[#1B2B4B] hover:bg-blue-50"
+                        >
+                          ფილტრების გასუფთავება
+                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setAdvancedDropdownOpen(false)}
+                            className="h-11 flex-1 rounded-lg border border-slate-300 text-sm font-semibold text-[#1B2B4B] hover:bg-slate-50"
+                          >
+                            გაუქმება
+                          </button>
+                          <button
+                            type="button"
+                            onClick={saveAdvancedFilters}
+                            className="h-11 flex-1 rounded-lg bg-[#2563EB] text-sm font-semibold text-white hover:bg-blue-700"
+                          >
+                            შენახვა
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : null}
               </div>
-            ) : null}
-          </>
-        )}
+
+              <label className="relative inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500">
+                <span className="truncate">სორტირება</span>
+                <span className="ml-auto text-slate-400">▾</span>
+                <select
+                  value={sortBy}
+                  onChange={(event) => setSortBy(event.target.value as SortOption)}
+                  className="absolute inset-0 cursor-pointer opacity-0"
+                  aria-label="სორტირება"
+                >
+                  <option value="jobs_desc">განცხადებების რაოდენობა</option>
+                  <option value="completed_desc">დასრულებული სამუშაო</option>
+                  <option value="newest">ახალი რეგისტრაცია</option>
+                </select>
+              </label>
+
+              <button
+                type="button"
+                onClick={() => setAdvancedDropdownOpen(false)}
+                className="ml-auto inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-[#2563EB] px-8 text-base font-bold text-white transition hover:bg-blue-700"
+              >
+                ძიება
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-6 min-w-0">
+          <p className="text-sm font-medium text-slate-600">შედეგი {sorted.length} დამქირავებელი</p>
+
+          {error ? <ErrorState message={error} /> : null}
+
+          {!error && sorted.length === 0 ? (
+            <div className="mt-6">
+              <EmptyState
+                message="დამქირავებლები ჯერ არ ჩანს ან შედეგები ცარიელია საძიებლო შეკითხვით."
+                actionLabel="ფილტრების გასუფთავება"
+                onAction={clearFilters}
+              />
+            </div>
+          ) : (
+            <>
+              {!error ? (
+                <ul className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {visible.map((h) => {
+                    const desc = (h.description ?? "").trim()
+                    const snippet =
+                      desc.length > 160 ? `${desc.slice(0, 160)}…` : desc || "კომპანიის შესახებ ტექსტი ხელმისაწვდომი იქნება პროფილიდან."
+                    return (
+                      <li
+                        key={h.id}
+                        className="flex h-full flex-col rounded-2xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-4 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#2563EB] hover:shadow-[-4px_0_12px_rgba(37,99,235,0.25)]"
+                      >
+                        <div className="flex items-start gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setAvatarPreview({ companyName: h.companyName, avatarUrl: h.avatarUrl })}
+                            className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#1B2B4B] text-sm font-bold text-white ring-[#1B2B4B] ring-offset-2 ring-offset-white transition hover:ring-2 focus:outline-none focus-visible:ring-2"
+                            aria-label="ლოგოს გადიდება"
+                          >
+                            {h.avatarUrl ? (
+                              <img
+                                src={avatarImageUrl(supabase, h.avatarUrl) ?? h.avatarUrl}
+                                alt=""
+                                loading="lazy"
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              companyInitials(h.companyName)
+                            )}
+                          </button>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-lg font-bold text-gray-900">{h.companyName}</p>
+                            <p className="truncate text-sm text-slate-500">{h.industry?.trim() || "ინდუსტრია"}</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              📍 {formatCityForDisplay(h.city) ?? h.city ?? "ქალაქი უცნობია"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <p className="mt-3 line-clamp-2 flex-1 text-sm leading-relaxed text-slate-600">{snippet}</p>
+
+                        <div className="mt-3 flex items-center justify-between text-sm">
+                          <p className="font-semibold">
+                            <span className="text-amber-500">{ratingStars(h.averageRating)}</span>
+                            <span className="text-gray-900"> {h.averageRating.toFixed(1)}</span>
+                          </p>
+                          <p className="text-slate-500">({h.ratingCount} შეფასება)</p>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <p className="text-xs text-slate-500">განცხადებები</p>
+                            <p className="font-bold text-gray-900">{h.jobsPosted}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-500">დასრულებული</p>
+                            <p className="font-bold text-gray-900">{h.completedJobs}</p>
+                          </div>
+                        </div>
+
+                        <p className="mt-2 text-xs text-slate-500">საკონტაქტო: {h.contactName}</p>
+
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {h.websiteUrl ? (
+                            <a
+                              href={h.websiteUrl.startsWith("http") ? h.websiteUrl : `https://${h.websiteUrl}`}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                              className={`${websiteChipClass} hover:border-[#2563EB] hover:text-[#2563EB]`}
+                            >
+                              ვებგვერდი
+                              <ExternalLinkArrowIcon className="h-3.5 w-3.5 opacity-80" />
+                            </a>
+                          ) : (
+                            <span className={`${websiteChipClass} cursor-default text-slate-400`} title="ბმული არ არის დამატებული">
+                              ვებგვერდი
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="mt-auto pt-3">
+                          <Link
+                            to={`/hirer/${h.id}`}
+                            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-[#2563EB] px-4 text-sm font-bold text-white transition hover:bg-[#1D4ED8]"
+                          >
+                            პროფილი
+                          </Link>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              ) : null}
+              {!error && visible.length < sorted.length ? (
+                <div className="mt-8 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => setVisibleCount((c) => c + 24)}
+                    className="h-11 rounded-lg border border-[#2563EB] px-6 text-sm font-semibold text-[#2563EB] transition hover:bg-blue-50"
+                  >
+                    მეტის ნახვა
+                  </button>
+                </div>
+              ) : null}
+            </>
+          )}
+        </section>
       </main>
 
       {avatarPreview ? (
@@ -468,7 +644,7 @@ export default function HirersPage() {
           >
             {avatarPreview.avatarUrl ? (
               <img
-                src={avatarPreview.avatarUrl}
+                src={avatarImageUrl(supabase, avatarPreview.avatarUrl) ?? avatarPreview.avatarUrl}
                 alt={`${avatarPreview.companyName} ლოგო`}
                 className="max-h-[min(85vh,900px)] max-w-[min(85vw,900px)] rounded-2xl object-contain sm:rounded-full"
               />

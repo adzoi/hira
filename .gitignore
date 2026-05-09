@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Env (secrets — use .env.example for templates)
+.env
+.env.*
+!.env.example
+
+# Supabase CLI cache
+supabase/.temp/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -22,3 +30,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Playwright
+test-results
+playwright-report
+blob-report
+playwright/.cache

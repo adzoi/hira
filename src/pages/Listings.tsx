@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import Navbar from "../components/Navbar.tsx"
 import EmptyState from "../components/ui/EmptyState.tsx"
 import ErrorState from "../components/ui/ErrorState.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
-import MarketplaceCatalogToolbar from "../components/MarketplaceCatalogToolbar.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
 import { useToast } from "../components/ui/ToastProvider.tsx"
+import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
+import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
-import { matchesLocationFilter } from "../lib/marketplaceFilters.ts"
-
+import { mergeFreelancerCompletedWorkCounts } from "../lib/freelancerCompletedWorkCounts.ts"
+import { formatCityForDisplay, matchesLocationFilter } from "../lib/marketplaceFilters.ts"
 type ListingMeta = { categoryId: string | null; tags: string[] }
 type Availability = "full_time" | "part_time" | "weekends"
 type SkillItem = { id: string; name: string; category_id: string | null }
@@ -20,13 +21,11 @@ const META_SUFFIX = "-->"
 function parseListingDescription(raw: string | null): { description: string; meta: ListingMeta } {
   const fallback: ListingMeta = { categoryId: null, tags: [] }
   if (!raw) return { description: "", meta: fallback }
-  if (!raw.startsWith(META_PREFIX)) {
-    return { description: raw, meta: fallback }
-  }
+  if (!raw.startsWith(META_PREFIX)) return { description: stripLegacyPricePrefix(raw), meta: fallback }
   const endIndex = raw.indexOf(META_SUFFIX)
-  if (endIndex < 0) return { description: raw, meta: fallback }
+  if (endIndex < 0) return { description: stripLegacyPricePrefix(raw), meta: fallback }
   const metaChunk = raw.slice(META_PREFIX.length, endIndex).trim()
-  const body = raw.slice(endIndex + META_SUFFIX.length).trimStart()
+  const body = stripLegacyPricePrefix(raw.slice(endIndex + META_SUFFIX.length))
   try {
     const parsed = JSON.parse(metaChunk) as Partial<ListingMeta>
     return {
@@ -39,7 +38,7 @@ function parseListingDescription(raw: string | null): { description: string; met
       },
     }
   } catch {
-    return { description: raw, meta: fallback }
+    return { description: stripLegacyPricePrefix(raw), meta: fallback }
   }
 }
 
@@ -61,9 +60,12 @@ type ListingRow = {
   bio: string | null
   availability: string | null
   averageRating: number
+  completedJobsCount: number
+  viewsCount: number
   skillIds: string[]
   categoryId: string | null
   tags: string[]
+  vipActive: boolean
 }
 
 type CategoryItem = { id: string; name_ka: string }
@@ -79,6 +81,11 @@ function isNegotiable(price: number, description: string) {
   return description.toLowerCase().includes("შეთანხმებით")
 }
 
+function ratingStars(value: number) {
+  const rounded = Math.round(value)
+  return `${"★".repeat(Math.max(0, rounded))}${"☆".repeat(Math.max(0, 5 - rounded))}`
+}
+
 function listingMatchesSkillIds(item: ListingRow, skillIds: string[], skillById: Map<string, SkillItem>): boolean {
   if (skillIds.length === 0) return true
   return skillIds.every((id) => {
@@ -89,6 +96,8 @@ function listingMatchesSkillIds(item: ListingRow, skillIds: string[], skillById:
     return item.tags.some((t) => t.trim().toLowerCase() === nameLower)
   })
 }
+
+const LISTINGS_PAGE_SIZE = 20
 
 const mockListings: ListingRow[] = [
   {
@@ -107,9 +116,12 @@ const mockListings: ListingRow[] = [
     bio: null,
     availability: "full_time",
     averageRating: 4.8,
+    completedJobsCount: 31,
+    viewsCount: 0,
     skillIds: [],
     categoryId: null,
     tags: ["React", "TypeScript"],
+    vipActive: false,
   },
   {
     id: "mock-2",
@@ -127,9 +139,12 @@ const mockListings: ListingRow[] = [
     bio: null,
     availability: "part_time",
     averageRating: 4.9,
+    completedJobsCount: 22,
+    viewsCount: 0,
     skillIds: [],
     categoryId: null,
     tags: [],
+    vipActive: false,
   },
 ]
 
@@ -145,7 +160,10 @@ export default function ListingsPage() {
   const [searchText, setSearchText] = useState("")
   const [categoryId, setCategoryId] = useState("")
   const [sortBy, setSortBy] = useState<SortOption>("newest")
-  const [visibleCount, setVisibleCount] = useState(24)
+  const [listingsTotal, setListingsTotal] = useState(0)
+  const [listingsNextOffset, setListingsNextOffset] = useState(0)
+  const listingsNextOffsetRef = useRef(0)
+  const [listingsLoadingMore, setListingsLoadingMore] = useState(false)
 
   const [advancedDropdownOpen, setAdvancedDropdownOpen] = useState(false)
   const advancedDropdownRef = useRef<HTMLDivElement>(null)
@@ -162,7 +180,6 @@ export default function ListingsPage() {
   const [draftMinRating, setDraftMinRating] = useState<0 | 3 | 4 | 5>(0)
   const [draftMinPrice, setDraftMinPrice] = useState("")
   const [draftMaxPrice, setDraftMaxPrice] = useState("")
-  const [draftLocationFilter, setDraftLocationFilter] = useState("")
 
   const [viewerType, setViewerType] = useState<"hirer" | "freelancer" | null>(null)
   const [viewerFreelancerProfileId, setViewerFreelancerProfileId] = useState<string | null>(null)
@@ -294,126 +311,188 @@ export default function ListingsPage() {
     }
   }, [advancedDropdownOpen])
 
-  useEffect(() => {
-    const load = async () => {
+  const fetchListingsPage = useCallback(
+    async (append: boolean) => {
       if (!isSupabaseConfigured || !supabase) {
         setListings(mockListings)
         setCategories([])
         setSkills([])
+        listingsNextOffsetRef.current = mockListings.length
+        setListingsNextOffset(mockListings.length)
+        setListingsTotal(mockListings.length)
         setLoading(false)
+        setListingsLoadingMore(false)
         return
       }
 
-      setLoading(true)
+      if (!append) {
+        listingsNextOffsetRef.current = 0
+        setListingsNextOffset(0)
+        setLoading(true)
+      } else {
+        setListingsLoadingMore(true)
+      }
       setError("")
       try {
-        const [servicesRes, catRes, skillsRes] = await Promise.all([
-          supabase
-            .from("services")
-            .select(
-              `
-              id,
-              freelancer_profile_id,
-              title,
-              description,
-              price,
-              delivery_days,
-              created_at,
-              freelancer_profiles (
-                slug,
-                professional_title,
-                is_public,
-                bio,
-                availability,
-                average_rating,
-                profiles:profiles!freelancer_profiles_user_id_fkey (
-                  full_name,
-                  avatar_url,
-                  city
-                ),
-                freelancer_skills (
-                  skills (id, name)
-                )
-              )
-            `,
-            )
-            .eq("is_active", true)
-            .order("created_at", { ascending: false })
-            .limit(120),
-          supabase.from("categories").select("id,name_ka").eq("is_active", true).order("sort_order"),
-          supabase.from("skills").select("id,name,category_id").eq("is_approved", true).order("name").limit(200),
-        ])
+        const offset = append ? listingsNextOffsetRef.current : 0
+        const page = Math.floor(offset / LISTINGS_PAGE_SIZE) + 1
+        const category = categoryId.trim() || undefined
+        const { data, error: fnErr } = await supabase.functions.invoke("get-listings-page", {
+          body: { category, page },
+        })
+        if (fnErr) throw fnErr
+        if (!data || typeof data !== "object" || !("ok" in data) || (data as { ok?: unknown }).ok !== true) {
+          const errMsg =
+            data && typeof data === "object" && "error" in data
+              ? String((data as { error?: unknown }).error)
+              : "მონაცემების ჩატვირთვა ვერ მოხერხდა."
+          throw new Error(errMsg)
+        }
 
-        if (servicesRes.error) throw servicesRes.error
-        if (catRes.error) console.warn(catRes.error)
-        if (skillsRes.error) console.warn(skillsRes.error)
+        const payload = (data as { data: unknown }).data as null | {
+          services?: unknown
+          categories?: unknown
+          skills?: unknown
+          total?: unknown
+          total_count?: unknown
+        }
+        const servicesData = Array.isArray(payload?.services) ? payload.services : []
+        const categoriesData = Array.isArray(payload?.categories) ? payload.categories : []
+        const skillsPayload = Array.isArray(payload?.skills) ? payload.skills : []
+        const totalRaw = payload?.total_count ?? payload?.total
+        const total = Number(totalRaw)
+        const safeTotal = Number.isFinite(total) ? total : 0
 
         const mapped: ListingRow[] = []
-        for (const row of servicesRes.data ?? []) {
-          const fp = row.freelancer_profiles as unknown as null | {
+        for (const row of servicesData) {
+          const r = row as {
+            id: string
+            freelancer_profile_id: string
+            title: string | null
+            description: string | null
+            price: number | string | null
+            delivery_days: number | string | null
+            views_count?: number | string | null
+            created_at: string | null
+            is_vip?: boolean | null
+            vip_expires_at?: string | null
             slug: string | null
             professional_title: string | null
             is_public: boolean | null
             bio: string | null
             availability: string | null
-            average_rating: number | null
-            profiles: null | {
-              full_name: string | null
-              avatar_url: string | null
-              city: string | null
-            }
-            freelancer_skills?: Array<{ skills: null | { id: string; name: string } }>
+            average_rating: number | string | null
+            completed_jobs_count: number | string | null
+            full_name: string | null
+            avatar_url: string | null
+            city: string | null
+            skills: unknown
           }
-          if (!fp?.slug || fp.is_public === false) continue
-          const prof = fp.profiles
-          const parsed = parseListingDescription(row.description ?? null)
-          const fsRows = fp.freelancer_skills ?? []
-          const skillIds = fsRows
-            .map((x) => x.skills?.id)
-            .filter((x): x is string => Boolean(x))
+          if (!r.slug || r.is_public === false) continue
+          const parsed = parseListingDescription(r.description ?? null)
+          const skillsArr = Array.isArray(r.skills) ? r.skills : []
+          const skillIds = skillsArr
+            .map((x) => (x && typeof x === "object" && "id" in x ? String((x as { id?: unknown }).id ?? "") : ""))
+            .filter((id): id is string => Boolean(id))
+          const vipActive =
+            r.is_vip === true &&
+            Boolean(r.vip_expires_at) &&
+            new Date(String(r.vip_expires_at)) > new Date()
           mapped.push({
-            id: row.id,
-            freelancerProfileId: String(row.freelancer_profile_id ?? ""),
-            title: row.title ?? "სერვისი",
-            descriptionRaw: row.description,
-            price: Number(row.price ?? 0),
-            deliveryDays: Number(row.delivery_days ?? 0),
-            createdAt: row.created_at ?? new Date().toISOString(),
-            freelancerSlug: fp.slug,
-            professionalTitle: fp.professional_title ?? "",
-            fullName: prof?.full_name?.trim() || "ფრილანსერი",
-            avatarUrl: prof?.avatar_url ?? null,
-            city: prof?.city ?? null,
-            bio: fp.bio ?? null,
-            availability: fp.availability ?? null,
-            averageRating: Number(fp.average_rating ?? 0),
+            id: r.id,
+            freelancerProfileId: String(r.freelancer_profile_id ?? ""),
+            title: r.title ?? "სერვისი",
+            descriptionRaw: r.description,
+            price: Number(r.price ?? 0),
+            deliveryDays: Number(r.delivery_days ?? 0),
+            createdAt: r.created_at ?? new Date().toISOString(),
+            freelancerSlug: r.slug,
+            professionalTitle: r.professional_title ?? "",
+            fullName: r.full_name?.trim() || "ფრილანსერი",
+            avatarUrl: r.avatar_url ?? null,
+            city: r.city ?? null,
+            bio: r.bio ?? null,
+            availability: r.availability ?? null,
+            averageRating: Number(r.average_rating ?? 0),
+            completedJobsCount: Number(r.completed_jobs_count ?? 0),
+            viewsCount: Number(r.views_count ?? 0),
             skillIds,
             categoryId: parsed.meta.categoryId,
             tags: parsed.meta.tags,
+            vipActive,
           })
         }
 
-        setListings(mapped)
-        if (!catRes.error) {
-          setCategories((catRes.data ?? []).map((c) => ({ id: c.id, name_ka: c.name_ka })))
+        if (mapped.length > 0) {
+          const fallbackByFp = Object.fromEntries(
+            mapped.map((item) => [item.freelancerProfileId, item.completedJobsCount]),
+          )
+          const countMap = await mergeFreelancerCompletedWorkCounts(
+            supabase,
+            mapped.map((item) => item.freelancerProfileId),
+            fallbackByFp,
+          )
+          for (const item of mapped) {
+            item.completedJobsCount = countMap[item.freelancerProfileId] ?? item.completedJobsCount
+          }
         }
-        if (!skillsRes.error) {
-          setSkills((skillsRes.data ?? []) as SkillItem[])
+
+        if (!append) {
+          setListings(mapped)
+          listingsNextOffsetRef.current = LISTINGS_PAGE_SIZE
+          setListingsNextOffset(LISTINGS_PAGE_SIZE)
+        } else {
+          setListings((prev) => {
+            const seen = new Set(prev.map((x) => x.id))
+            const merged = [...prev]
+            for (const item of mapped) {
+              if (!seen.has(item.id)) {
+                seen.add(item.id)
+                merged.push(item)
+              }
+            }
+            return merged
+          })
+          listingsNextOffsetRef.current += LISTINGS_PAGE_SIZE
+          setListingsNextOffset(listingsNextOffsetRef.current)
         }
+
+        setListingsTotal(safeTotal)
+
+        setCategories(
+          categoriesData.map((c) => {
+            const row = c as { id?: string; name_ka?: string }
+            return { id: String(row.id ?? ""), name_ka: String(row.name_ka ?? "") }
+          }),
+        )
+        setSkills(
+          skillsPayload.map((sk) => {
+            const row = sk as { id?: string; name?: string; category_id?: string | null }
+            return {
+              id: String(row.id ?? ""),
+              name: String(row.name ?? ""),
+              category_id: row.category_id ?? null,
+            }
+          }),
+        )
       } catch (e) {
         const message =
           e && typeof e === "object" && "message" in e
             ? String((e as { message: unknown }).message)
             : "მონაცემების ჩატვირთვა ვერ მოხერხდა."
         setError(message)
-        setListings([])
+        if (!append) setListings([])
       } finally {
         setLoading(false)
+        setListingsLoadingMore(false)
       }
-    }
+    },
+    [categoryId],
+  )
 
-    void load()
-  }, [])
+  useEffect(() => {
+    void fetchListingsPage(false)
+  }, [categoryId, fetchListingsPage])
 
   const skillById = useMemo(() => new Map(skills.map((s) => [s.id, s])), [skills])
 
@@ -435,7 +514,6 @@ export default function ListingsPage() {
     setDraftMinRating(minimumRating)
     setDraftMinPrice(minPrice)
     setDraftMaxPrice(maxPrice)
-    setDraftLocationFilter(locationFilter)
     setAdvancedDropdownOpen(true)
   }
 
@@ -445,7 +523,6 @@ export default function ListingsPage() {
     setMinimumRating(draftMinRating)
     setMinPrice(draftMinPrice)
     setMaxPrice(draftMaxPrice)
-    setLocationFilter(draftLocationFilter)
     setAdvancedDropdownOpen(false)
   }
 
@@ -455,13 +532,17 @@ export default function ListingsPage() {
     setDraftMinRating(0)
     setDraftMinPrice("")
     setDraftMaxPrice("")
-    setDraftLocationFilter("")
   }
 
   const availabilityLabel: Record<Availability, string> = {
     full_time: "სრული განაკვეთი",
     part_time: "ნახევარი განაკვეთი",
     weekends: "შაბათ-კვირა",
+  }
+  const availabilityBadgeClass: Record<Availability, string> = {
+    full_time: "bg-green-100 text-green-700",
+    part_time: "bg-blue-100 text-blue-700",
+    weekends: "bg-orange-100 text-orange-700",
   }
 
   const toggleDraftAvailability = (value: Availability) => {
@@ -484,7 +565,6 @@ export default function ListingsPage() {
     clearDraftAdvanced()
     setAdvancedDropdownOpen(false)
     setSortBy("newest")
-    setVisibleCount(24)
   }
 
   const advancedFilterCount = useMemo(() => {
@@ -546,6 +626,8 @@ export default function ListingsPage() {
     })
 
     list = [...list].sort((a, b) => {
+      const vipOrder = (b.vipActive ? 1 : 0) - (a.vipActive ? 1 : 0)
+      if (vipOrder !== 0) return vipOrder
       if (sortBy === "price_asc") return a.price - b.price
       if (sortBy === "price_desc") return b.price - a.price
       if (sortBy === "delivery") return a.deliveryDays - b.deliveryDays
@@ -566,7 +648,7 @@ export default function ListingsPage() {
     locationFilter,
   ])
 
-  const visible = filteredSorted.slice(0, visibleCount)
+  const listingsHasMore = listingsNextOffset < listingsTotal
 
   const openListingQueryId = searchParams.get("open")
 
@@ -575,28 +657,41 @@ export default function ListingsPage() {
     const idx = filteredSorted.findIndex((x) => x.id === openListingQueryId)
     const openId = openListingQueryId
 
-    const run = () => {
-      if (idx < 0) {
-        setSearchParams(
-          (p) => {
-            p.delete("open")
-            return p
-          },
-          { replace: true },
-        )
-        return
-      }
-      setVisibleCount((c) => Math.max(c, idx + 1))
-      setPendingScrollToListingId(openId)
+    if (idx >= 0) {
+      const t = window.setTimeout(() => {
+        setPendingScrollToListingId(openId)
+      }, 0)
+      return () => window.clearTimeout(t)
     }
 
-    const t = window.setTimeout(run, 0)
+    if (listingsHasMore && !listingsLoadingMore) {
+      void fetchListingsPage(true)
+      return
+    }
+
+    const t = window.setTimeout(() => {
+      setSearchParams(
+        (p) => {
+          p.delete("open")
+          return p
+        },
+        { replace: true },
+      )
+    }, 0)
     return () => window.clearTimeout(t)
-  }, [loading, openListingQueryId, filteredSorted, setSearchParams])
+  }, [
+    loading,
+    openListingQueryId,
+    filteredSorted,
+    listingsHasMore,
+    listingsLoadingMore,
+    fetchListingsPage,
+    setSearchParams,
+  ])
 
   useEffect(() => {
     if (!pendingScrollToListingId) return
-    if (!visible.some((v) => v.id === pendingScrollToListingId)) return
+    if (!filteredSorted.some((v) => v.id === pendingScrollToListingId)) return
 
     const id = pendingScrollToListingId
 
@@ -618,227 +713,401 @@ export default function ListingsPage() {
 
     const t = window.setTimeout(run, 0)
     return () => window.clearTimeout(t)
-  }, [pendingScrollToListingId, visible, setSearchParams])
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#F8F9FC]">
-        <Navbar />
-        <main className="mx-auto w-full max-w-[1200px] px-4 py-8 md:px-6">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <SkeletonCard key={i} />
-            ))}
-          </div>
-        </main>
-      </div>
-    )
-  }
+  }, [pendingScrollToListingId, filteredSorted, setSearchParams])
 
   return (
-    <div className="min-h-screen bg-[#F8F9FC] page-enter">
+    <div className="min-h-screen bg-white page-enter">
       <Navbar />
-      <main className="mx-auto w-full max-w-[1200px] px-4 py-6 md:px-6 md:py-8">
-        <MarketplaceCatalogToolbar
-          eyebrow="მარკეტპლეისი"
-          title="ფრილანსერების ლისტინგები"
-          searchValue={searchText}
-          onSearchChange={setSearchText}
-          searchPlaceholder="საკვანძო სიტყვა, სათაური ან დამამრგვარებლი"
-          categories={categories}
-          categoryId={categoryId}
-          onCategoryChange={setCategoryId}
-          sortValue={sortBy}
-          onSortChange={(value) => setSortBy(value as SortOption)}
-          sortOptions={[
-            { value: "newest", label: "უახლესი" },
-            { value: "price_asc", label: "ფასი ▲" },
-            { value: "price_desc", label: "ფასი ▼" },
-            { value: "delivery", label: "მოკლე ვადა" },
-          ]}
-          advancedDropdownOpen={advancedDropdownOpen}
-          advancedFilterCount={advancedFilterCount}
-          onToggleAdvanced={openAdvancedDropdown}
-          advancedDropdownRef={advancedDropdownRef}
-          onDismissAdvanced={() => setAdvancedDropdownOpen(false)}
-          onSaveAdvanced={saveAdvancedFilters}
-          onClearDraftAdvanced={clearDraftAdvanced}
-          childrenAdvancedBody={
-            <>
-              <div>
-                <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">უნარები</p>
-                <div className="max-h-40 space-y-2 overflow-auto rounded-lg border border-slate-200 p-2">
-                  {topSkills.map((skill) => (
-                    <label key={skill.id} className="flex items-center gap-2 text-sm text-slate-700">
-                      <input type="checkbox" checked={draftSkillIds.includes(skill.id)} onChange={() => toggleDraftSkill(skill.id)} />
-                      {skill.name}
-                    </label>
-                  ))}
-                </div>
+      <main className="mx-auto w-full max-w-7xl px-6 py-6 font-sans text-slate-600 md:px-8 md:py-8">
+        <section className="p-1 md:p-0">
+          <div className="mt-5 p-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <div className="min-w-[220px] flex-[0_1_320px]">
+                <input
+                  value={searchText}
+                  onChange={(event) => setSearchText(event.target.value)}
+                  className="h-10 w-full rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#2563EB]"
+                  placeholder="საძიებო სიტყვა, სათაური ან დამამრგვალებელი"
+                />
               </div>
 
-              <div>
-                <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">დატვირთვა</p>
-                <div className="space-y-2">
-                  {(Object.keys(availabilityLabel) as Availability[]).map((value) => (
-                    <label key={value} className="flex items-center gap-2 text-sm text-slate-700">
-                      <input type="checkbox" checked={draftAvailability.includes(value)} onChange={() => toggleDraftAvailability(value)} />
-                      {availabilityLabel[value]}
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <label className="block">
-                <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">მინ. რეიტინგი (ფრილანსერი)</span>
+              <label className="relative inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500">
+                <span aria-hidden></span>
+                <span className="truncate">კატეგორიები</span>
+                <span className="ml-auto text-slate-400">▾</span>
                 <select
-                  value={draftMinRating}
-                  onChange={(event) => setDraftMinRating(Number(event.target.value) as 0 | 3 | 4 | 5)}
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
+                  value={categoryId}
+                  onChange={(event) => setCategoryId(event.target.value)}
+                  className="absolute inset-0 cursor-pointer opacity-0"
+                  aria-label="კატეგორია"
                 >
-                  <option value={0}>ნებისმიერი</option>
-                  <option value={3}>3+</option>
-                  <option value={4}>4+</option>
-                  <option value={5}>5</option>
+                  <option value="">ყველა კატეგორია</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name_ka}
+                    </option>
+                  ))}
                 </select>
               </label>
 
-              <div>
-                <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">ფასის დიაპაზონი (ლისტინგი ₾)</p>
-                <p className="mb-2 text-xs text-slate-500">შეთანხმებით ფასები ფასის საზღვრებს არ ექვემდებარება.</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="number"
-                    min={0}
-                    value={draftMinPrice}
-                    onChange={(event) => setDraftMinPrice(event.target.value)}
-                    placeholder="მინ"
-                    className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
-                  />
-                  <input
-                    type="number"
-                    min={0}
-                    value={draftMaxPrice}
-                    onChange={(event) => setDraftMaxPrice(event.target.value)}
-                    placeholder="მაქს"
-                    className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
-                  />
-                </div>
-              </div>
-
-              <label className="block pb-1">
-                <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">ლოკაცია / ქალაქი</span>
+              <label className="relative inline-flex h-10 min-w-[10.5rem] max-w-[14rem] shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500">
+                <span className="pointer-events-none min-w-0 flex-1 truncate">
+                  {locationFilter.trim() ? formatCityForDisplay(locationFilter) ?? locationFilter : "ლოკაცია / ქალაქი"}
+                </span>
+                <span className="shrink-0 text-slate-400">▾</span>
                 <LocationFilterSelect
-                  value={draftLocationFilter}
-                  onChange={setDraftLocationFilter}
-                  className="h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
+                  value={locationFilter}
+                  onChange={setLocationFilter}
+                  className="absolute inset-0 z-10 h-full w-full min-h-[2.5rem] min-w-0 cursor-pointer opacity-0"
                 />
               </label>
-            </>
-          }
-        />
 
-        <p className="mt-4 text-sm text-slate-600">{filteredSorted.length} აქტიური შეთავაში</p>
-
-        {error ? <ErrorState message={error} /> : null}
-
-        {!error && filteredSorted.length === 0 ? (
-          <div className="mt-6">
-            <EmptyState
-              message="ახლა საჯარო აქტიური სერვისები არ ჩანს. სცადეთ განსხვავებული ძიება ან მოგვიანებით."
-              actionLabel="ფილტრების გასუფთავება"
-              onAction={clearFilters}
-            />
-          </div>
-        ) : (
-          <>
-            {!error ? (
-              <ul className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {visible.map((item) => {
-                  const { description } = parseListingDescription(item.descriptionRaw)
-                  const negotiable = isNegotiable(item.price, description)
-                  const snippet =
-                    description.length > 120 ? `${description.slice(0, 120)}…` : description || "დეტალური აღწერა გიგორში."
-                  return (
-                    <li
-                      id={`listing-card-${item.id}`}
-                      key={item.id}
-                      className={`flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-[#D4A843]/70 ${
-                        flashListingId === item.id ? "ring-2 ring-[#D4A843] ring-offset-2 ring-offset-[#F8F9FC]" : ""
-                      }`}
-                    >
-                      <Link to={`/freelancer/${item.freelancerSlug}`} className="group flex shrink-0 items-center gap-3 border-b border-slate-100 pb-3">
-                        <span className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-xs font-bold text-[#1B2B4B]">
-                          {item.avatarUrl ? (
-                            <img src={item.avatarUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
-                          ) : (
-                            getInitials(item.fullName)
-                          )}
-                        </span>
-                        <div className="min-w-0 text-left">
-                          <p className="truncate text-sm font-bold text-[#1B2B4B] group-hover:text-[#D4A843]">{item.fullName}</p>
-                          <p className="truncate text-xs text-slate-600">{item.professionalTitle || item.city || "Georgian freelancer"}</p>
-                        </div>
-                      </Link>
-
-                      <h2 className="mt-3 line-clamp-2 text-base font-extrabold text-[#1B2B4B]">{item.title}</h2>
-                      <p className="mt-2 flex-1 text-sm leading-relaxed text-slate-700">{snippet}</p>
-
-                      {item.tags.length > 0 ? (
-                        <div className="mt-3 flex flex-wrap gap-1.5">
-                          {item.tags.slice(0, 4).map((tag) => (
-                            <span key={tag} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
-
-                      <div className="mt-4 flex flex-wrap items-end justify-between gap-2 border-t border-slate-100 pt-3">
-                        <div>
-                          <p className="text-xs font-semibold uppercase text-slate-500">{negotiable ? "ფასი" : "ფასი / ვადა"}</p>
-                          <p className="text-lg font-extrabold text-[#1B2B4B]">
-                            {negotiable ? "შეთანხმებით" : `${item.price.toLocaleString("ka-GE")} ₾`}
-                          </p>
-                          {!negotiable ? <p className="text-xs text-slate-600">{item.deliveryDays} სამუშაო დღე</p> : null}
-                        </div>
-                        <div className="flex flex-wrap justify-end gap-2">
-                          {viewerType === "hirer" && viewerFreelancerProfileId !== item.freelancerProfileId ? (
-                            <button
-                              type="button"
-                              onClick={() => openListingInquiry(item)}
-                              className="inline-flex h-10 items-center rounded-lg border border-[#D4A843] bg-amber-50 px-4 text-sm font-semibold text-[#1B2B4B] transition hover:bg-[#D4A843]/40"
-                            >
-                              შეთავაზება
-                            </button>
-                          ) : null}
-                          <Link
-                            to={`/freelancer/${item.freelancerSlug}`}
-                            className="inline-flex h-10 items-center rounded-lg bg-[#1B2B4B] px-4 text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B]"
-                          >
-                            პროფილი
-                          </Link>
-                        </div>
-                      </div>
-                    </li>
-                  )
-                })}
-              </ul>
-            ) : null}
-
-            {!error && visible.length < filteredSorted.length ? (
-              <div className="mt-8 flex justify-center">
+              <div className="relative" ref={advancedDropdownRef}>
                 <button
                   type="button"
-                  onClick={() => setVisibleCount((c) => c + 24)}
-                  className="rounded-lg border border-[#D4A843] px-6 py-3 text-sm font-semibold text-[#1B2B4B] hover:bg-amber-50"
+                  aria-expanded={advancedDropdownOpen}
+                  aria-haspopup="dialog"
+                  onClick={() => (advancedDropdownOpen ? setAdvancedDropdownOpen(false) : openAdvancedDropdown())}
+                  className="inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500 transition hover:border-slate-400"
                 >
-                  მეტის ნახვა
+                  <span aria-hidden></span>
+                  <span>დეტალური ძებნა</span>
+                  <span className="text-slate-400">▾</span>
+                  {advancedFilterCount > 0 ? (
+                    <span className="ml-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#2563EB] px-1 text-xs font-bold text-white">
+                      {advancedFilterCount}
+                    </span>
+                  ) : null}
                 </button>
+
+                {advancedDropdownOpen ? (
+                  <>
+                    <div className="fixed inset-0 z-40 bg-black/20 md:hidden" aria-hidden onClick={() => setAdvancedDropdownOpen(false)} />
+                    <div
+                      role="dialog"
+                      aria-modal="true"
+                      aria-label="დეტალური ფილტრები"
+                      className="absolute right-0 z-50 mt-2 flex max-h-[min(72vh,560px)] w-[min(100vw-2rem,24rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
+                    >
+                      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-4">
+                        <h2 className="border-l-4 border-[#2563EB] pl-3 text-base font-bold text-[#1B2B4B]">დეტალური ფილტრები</h2>
+                        <div className="mt-4 space-y-4">
+                          <div>
+                            <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">უნარები</p>
+                            <div className="max-h-40 space-y-2 overflow-auto rounded-lg border border-slate-200 p-2">
+                              {topSkills.map((skill) => (
+                                <label key={skill.id} className="flex items-center gap-2 text-sm text-slate-700">
+                                  <input type="checkbox" checked={draftSkillIds.includes(skill.id)} onChange={() => toggleDraftSkill(skill.id)} />
+                                  {skill.name}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div>
+                            <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">დატვირთვა</p>
+                            <div className="space-y-2">
+                              {(Object.keys(availabilityLabel) as Availability[]).map((value) => (
+                                <label key={value} className="flex items-center gap-2 text-sm text-slate-700">
+                                  <input type="checkbox" checked={draftAvailability.includes(value)} onChange={() => toggleDraftAvailability(value)} />
+                                  {availabilityLabel[value]}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+
+                          <label className="block">
+                            <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">მინ. რეიტინგი (ფრილანსერი)</span>
+                            <select
+                              value={draftMinRating}
+                              onChange={(event) => setDraftMinRating(Number(event.target.value) as 0 | 3 | 4 | 5)}
+                              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#2563EB] focus:ring-2"
+                            >
+                              <option value={0}>ნებისმიერი</option>
+                              <option value={3}>3+ ვარსკვლავი</option>
+                              <option value={4}>4+ ვარსკვლავი</option>
+                              <option value={5}>5 ვარსკვლავი</option>
+                            </select>
+                          </label>
+
+                          <div>
+                            <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">ფასის დიაპაზონი (ლისტინგი ₾)</p>
+                            <p className="mb-2 text-xs text-slate-500">შეთანხმებით ფასები ფასის საზღვრებს არ ექვემდებარება.</p>
+                            <div className="grid grid-cols-2 gap-2">
+                              <input
+                                type="number"
+                                min={0}
+                                value={draftMinPrice}
+                                onChange={(event) => setDraftMinPrice(event.target.value)}
+                                placeholder="მინ"
+                                className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#2563EB] focus:ring-2"
+                              />
+                              <input
+                                type="number"
+                                min={0}
+                                value={draftMaxPrice}
+                                onChange={(event) => setDraftMaxPrice(event.target.value)}
+                                placeholder="მაქს"
+                                className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#2563EB] focus:ring-2"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 space-y-2 border-t border-slate-100 bg-white p-3">
+                        <button
+                          type="button"
+                          onClick={clearDraftAdvanced}
+                          className="h-11 w-full rounded-lg border border-[#2563EB] text-sm font-semibold text-[#1B2B4B] hover:bg-blue-50"
+                        >
+                          ფილტრების გასუფთავება
+                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setAdvancedDropdownOpen(false)}
+                            className="h-11 flex-1 rounded-lg border border-slate-300 text-sm font-semibold text-[#1B2B4B] hover:bg-slate-50"
+                          >
+                            გაუქმება
+                          </button>
+                          <button
+                            type="button"
+                            onClick={saveAdvancedFilters}
+                            className="h-11 flex-1 rounded-lg bg-[#2563EB] text-sm font-semibold text-white hover:bg-blue-700"
+                          >
+                            შენახვა
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : null}
               </div>
-            ) : null}
-          </>
-        )}
+
+              <label className="relative inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500">
+                <span aria-hidden></span>
+                <span className="truncate">სორტირება</span>
+                <span className="ml-auto text-slate-400">▾</span>
+                <select
+                  value={sortBy}
+                  onChange={(event) => setSortBy(event.target.value as SortOption)}
+                  className="absolute inset-0 cursor-pointer opacity-0"
+                  aria-label="სორტირება"
+                >
+                  <option value="newest">უახლესი</option>
+                  <option value="price_asc">ფასი: იაფიდან</option>
+                  <option value="price_desc">ფასი: ძვირიდან</option>
+                  <option value="delivery">მოკლე მიწოდება</option>
+                </select>
+              </label>
+
+              <button
+                type="button"
+                onClick={() => setAdvancedDropdownOpen(false)}
+                className="ml-auto inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-[#2563EB] px-8 text-base font-bold text-white transition hover:bg-blue-700"
+              >
+                ძიება
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-6 min-w-0">
+          {error ? (
+            <ErrorState message={error} onRetry={() => void fetchListingsPage(false)} />
+          ) : loading ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <SkeletonCard key={`skeleton-${index}`} avatar lines={4} />
+              ))}
+            </div>
+          ) : (
+            <>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-slate-600">შედეგი {filteredSorted.length} ლისტინგი</p>
+              </div>
+
+              {filteredSorted.length === 0 ? (
+                <EmptyState
+                  message="ახლა საჯარო აქტიური სერვისები არ ჩანს. სცადეთ განსხვავებული ძიება ან მოგვიანებით."
+                  actionLabel="ფილტრების გასუფთავება"
+                  onAction={clearFilters}
+                />
+              ) : (
+                <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {filteredSorted.map((item) => {
+                    const { description } = parseListingDescription(item.descriptionRaw)
+                    const negotiable = isNegotiable(item.price, description)
+                    const availKey = item.availability as Availability | null
+                    const hasAvailBadge =
+                      availKey !== null &&
+                      (availKey === "full_time" || availKey === "part_time" || availKey === "weekends")
+                    const availabilityText =
+                      hasAvailBadge && availKey ? availabilityLabel[availKey] : null
+                    return (
+                      <li
+                        id={`listing-card-${item.id}`}
+                        key={item.id}
+                        role="link"
+                        tabIndex={0}
+                        className={`relative flex h-full cursor-pointer flex-col rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[#2563EB] ${
+                          flashListingId === item.id ? "ring-2 ring-[#2563EB] ring-offset-2 ring-offset-white" : ""
+                        }`}
+                        onClick={() => navigate(`/listing/${encodeURIComponent(item.id)}`)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault()
+                            navigate(`/listing/${encodeURIComponent(item.id)}`)
+                          }
+                        }}
+                      >
+                        <div className="shrink-0">
+                          <div className="flex items-start gap-3">
+                            <Link
+                              to={`/freelancer/${item.freelancerSlug}`}
+                              className="shrink-0"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {item.avatarUrl ? (
+                                <img
+                                  src={avatarImageUrl(supabase, item.avatarUrl) ?? item.avatarUrl}
+                                  alt=""
+                                  loading="lazy"
+                                  className="h-16 w-16 rounded-full object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#1B2B4B] text-lg font-bold text-white">
+                                  {getInitials(item.fullName)}
+                                </div>
+                              )}
+                            </Link>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Link
+                                  to={`/freelancer/${item.freelancerSlug}`}
+                                  className="truncate text-lg font-bold text-gray-900 hover:text-[#2563EB]"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {item.fullName}
+                                </Link>
+                                {item.vipActive ? (
+                                  <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#2563EB]">
+                                    VIP
+                                  </span>
+                                ) : null}
+                              </div>
+                              <p className="truncate text-sm text-slate-500">{item.professionalTitle || "ფრილანსერი"}</p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                📍 {formatCityForDisplay(item.city) ?? item.city ?? "ქალაქი უცნობია"}
+                              </p>
+                            </div>
+                          </div>
+
+                          <p className="mt-2 line-clamp-2 text-sm font-semibold text-gray-900">
+                            {item.title}
+                          </p>
+
+                          <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-slate-600">
+                            {description.trim() || "დეტალური აღწერა გიგორში."}
+                          </p>
+
+                          <div className="mt-3 flex items-center justify-between text-sm">
+                            <p className="font-semibold">
+                              <span className="text-amber-500">{ratingStars(item.averageRating)}</span>
+                              <span className="text-gray-900"> {item.averageRating.toFixed(1)}</span>
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Fills vertical space: tag chips or blank white area */}
+                        <div className="mt-3 flex min-h-0 flex-1 flex-col">
+                          {item.tags.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {item.tags.slice(0, 4).map((tag) => (
+                                <span key={tag} className="rounded-full border border-slate-300 px-2 py-1 text-xs font-medium text-gray-900">
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                          <div className="min-h-0 flex-1" aria-hidden />
+                        </div>
+
+                        <div className="mt-3 shrink-0 space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-gray-900">
+                              {negotiable ? "შეთანხმებით" : `₾${item.price.toLocaleString("ka-GE")} დან`}
+                            </p>
+                            {hasAvailBadge && availabilityText ? (
+                              <span
+                                className={`shrink-0 rounded-full px-2 py-1 text-xs ${availabilityBadgeClass[availKey as Availability]}`}
+                              >
+                                {availabilityText}
+                              </span>
+                            ) : (
+                              <span className="text-right text-xs text-slate-500">
+                                {item.deliveryDays} სამუშაო დღე
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-500">
+                            💼 {item.completedJobsCount} შესრულებული · 👁 {item.viewsCount} ნახვა
+                          </p>
+                        </div>
+
+                        <div className="flex shrink-0 flex-nowrap gap-2 pt-3">
+                          {viewerType === "hirer" && viewerFreelancerProfileId !== item.freelancerProfileId ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  openListingInquiry(item)
+                                }}
+                                className="inline-flex h-11 min-w-0 flex-1 items-center justify-center rounded-lg border border-[#2563EB] bg-white px-3 text-sm font-semibold text-[#2563EB] transition hover:bg-blue-50"
+                              >
+                                შეთავაზება
+                              </button>
+                              <Link
+                                to={`/freelancer/${item.freelancerSlug}`}
+                                className="inline-flex h-11 min-w-0 flex-1 items-center justify-center rounded-lg bg-[#2563EB] px-3 text-sm font-semibold text-white transition hover:bg-[#1D4ED8]"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                პროფილის ნახვა
+                              </Link>
+                            </>
+                          ) : (
+                            <Link
+                              to={`/freelancer/${item.freelancerSlug}`}
+                              className="inline-flex h-11 w-full min-w-0 items-center justify-center rounded-lg bg-[#2563EB] px-4 text-sm font-semibold text-white transition hover:bg-[#1D4ED8]"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              პროფილის ნახვა
+                            </Link>
+                          )}
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+
+              {!error && listingsHasMore && filteredSorted.length > 0 ? (
+                <div className="mt-8 flex justify-center">
+                  <button
+                    type="button"
+                    disabled={listingsLoadingMore}
+                    onClick={() => void fetchListingsPage(true)}
+                    className="h-11 rounded-lg border border-[#2563EB] px-6 text-sm font-semibold text-[#2563EB] hover:bg-blue-50 disabled:opacity-60"
+                  >
+                    {listingsLoadingMore ? "იტვირთება…" : "მეტის ნახვა"}
+                  </button>
+                </div>
+              ) : null}
+            </>
+          )}
+        </section>
 
         {inquiryListing ? (
           <div
@@ -861,7 +1130,7 @@ export default function ListingsPage() {
                   value={inquiryMessage}
                   onChange={(e) => setInquiryMessage(e.target.value)}
                   rows={4}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-[#D4A843] focus:ring-2"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-[#2563EB] focus:ring-2"
                   placeholder="რა გჭირდება, ვადები, კონტექსტი…"
                 />
               </label>
@@ -872,7 +1141,7 @@ export default function ListingsPage() {
                   min={0}
                   value={inquiryBudget}
                   onChange={(e) => setInquiryBudget(e.target.value)}
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#D4A843] focus:ring-2"
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#2563EB] focus:ring-2"
                   placeholder="მაგ. 500"
                 />
               </label>
@@ -882,7 +1151,7 @@ export default function ListingsPage() {
                   type="button"
                   disabled={inquirySubmitting}
                   onClick={() => void submitListingInquiry()}
-                  className="flex-1 rounded-lg bg-[#1B2B4B] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:opacity-60"
+                  className="flex-1 rounded-lg bg-[#2563EB] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60"
                 >
                   {inquirySubmitting ? "იგზავნება…" : "გაგზავნა"}
                 </button>

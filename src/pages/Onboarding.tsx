@@ -1,18 +1,31 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import Navbar from "../components/Navbar"
 import { PROFILE_LANGUAGE_OPTIONS } from "../lib/profileLanguages.ts"
+import {
+  FREELANCER_EDUCATION_DEGREE_OPTIONS,
+  type FreelancerEducationDegreeLevel,
+} from "../lib/freelancerEducation.ts"
 import { parseGitHubField, parseLinkedInField, parseOptionalWebUrl } from "../lib/socialUrls.ts"
+import { avatarPublicUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 
 const industryOptions = ["ტექნოლოგია", "მარკეტინგი", "განათლება", "ფინანსები", "ჯანდაცვა", "უძრავი ქონება", "სხვა"]
 
-type ServiceForm = {
+type ExperienceForm = {
   title: string
+  organization: string
+  start_date: string
+  end_date: string
+  is_present: boolean
   description: string
-  price_type: "fixed" | "hourly" | "negotiable"
-  price: string
-  delivery_days: string
+}
+
+type EducationForm = {
+  institution: string
+  degree_level: FreelancerEducationDegreeLevel | ""
+  field_of_study: string
+  end_date: string
 }
 
 export default function OnboardingPage() {
@@ -41,10 +54,14 @@ export default function OnboardingPage() {
   const [avatarUrl, setAvatarUrl] = useState<string>("")
   const [avatarPreview, setAvatarPreview] = useState<string>("")
   const [avatarUploading, setAvatarUploading] = useState<boolean>(false)
+  const avatarInputRef = useRef<HTMLInputElement | null>(null)
   const [freelancerProfileId, setFreelancerProfileId] = useState<string | null>(null)
   const [freelancerSlug, setFreelancerSlug] = useState<string | null>(null)
-  const [services, setServices] = useState<ServiceForm[]>([
-    { title: "", description: "", price_type: "fixed", price: "", delivery_days: "" },
+  const [experiences, setExperiences] = useState<ExperienceForm[]>([
+    { title: "", organization: "", start_date: "", end_date: "", is_present: false, description: "" },
+  ])
+  const [educations, setEducations] = useState<EducationForm[]>([
+    { institution: "", degree_level: "", field_of_study: "", end_date: "" },
   ])
 
   const [companyName, setCompanyName] = useState("")
@@ -83,7 +100,8 @@ export default function OnboardingPage() {
           ])
 
           if (fp?.is_profile_complete) {
-            navigate("/dashboard", { replace: true })
+            const readySlug = typeof fp.slug === "string" && fp.slug.trim() ? fp.slug.trim() : ""
+            navigate(readySlug ? `/freelancer/${encodeURIComponent(readySlug)}` : "/profile", { replace: true })
             return
           }
 
@@ -104,19 +122,39 @@ export default function OnboardingPage() {
             setNoGithubProfile(!lidGh)
             setNoPortfolioWebsite(!lidPf)
 
-            const [{ data: selectedSkills }, { data: existingServices }] = await Promise.all([
+            const [{ data: selectedSkills }] = await Promise.all([
               supabase.from("freelancer_skills").select("skill_id").eq("freelancer_profile_id", fp.id),
-              supabase.from("services").select("*").eq("freelancer_profile_id", fp.id).order("created_at"),
             ])
             setSelectedSkillIds((selectedSkills ?? []).map((x) => x.skill_id))
-            if (existingServices && existingServices.length > 0) {
-              setServices(
-                existingServices.slice(0, 5).map((s) => ({
-                  title: s.title,
-                  description: s.description ?? "",
-                  price_type: "fixed",
-                  price: String(s.price),
-                  delivery_days: String(s.delivery_days),
+            const { data: existingExperience } = await supabase
+              .from("experience")
+              .select("title,organization,start_date,end_date,description")
+              .eq("freelancer_profile_id", fp.id)
+              .order("start_date", { ascending: false })
+            if (existingExperience && existingExperience.length > 0) {
+              setExperiences(
+                existingExperience.slice(0, 10).map((item) => ({
+                  title: item.title ?? "",
+                  organization: item.organization ?? "",
+                  start_date: item.start_date ?? "",
+                  end_date: item.end_date ?? "",
+                  is_present: !item.end_date,
+                  description: item.description ?? "",
+                })),
+              )
+            }
+            const { data: existingEducation } = await supabase
+              .from("freelancer_education")
+              .select("institution,degree_level,field_of_study,end_date")
+              .eq("freelancer_profile_id", fp.id)
+              .order("end_date", { ascending: false })
+            if (existingEducation && existingEducation.length > 0) {
+              setEducations(
+                existingEducation.slice(0, 10).map((item) => ({
+                  institution: item.institution ?? "",
+                  degree_level: (item.degree_level as FreelancerEducationDegreeLevel) ?? "",
+                  field_of_study: item.field_of_study ?? "",
+                  end_date: item.end_date ?? "",
                 })),
               )
             }
@@ -178,10 +216,7 @@ export default function OnboardingPage() {
       const filePath = `${user.id}/avatar.${fileExt}`
       const { error: uploadError } = await supabase.storage.from("avatars").upload(filePath, file, { upsert: true })
       if (uploadError) throw uploadError
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("avatars").getPublicUrl(filePath)
-      setAvatarUrl(publicUrl)
+      setAvatarUrl(avatarPublicUrl(supabase, filePath))
       setAvatarPreview(URL.createObjectURL(file))
     } catch (err: any) {
       setError(`ავატარის ატვირთვა ვერ მოხერხდა: ${err.message}`)
@@ -195,8 +230,20 @@ export default function OnboardingPage() {
   const toggleLanguage = (lng: string) =>
     setLanguages((prev) => (prev.includes(lng) ? prev.filter((x) => x !== lng) : [...prev, lng]))
 
-  const updateService = (idx: number, key: keyof ServiceForm, value: string) => {
-    setServices((prev) => prev.map((s, i) => (i === idx ? { ...s, [key]: value } : s)))
+  const updateExperience = (idx: number, key: keyof ExperienceForm, value: string | boolean) => {
+    setExperiences((prev) =>
+      prev.map((item, i) => {
+        if (i !== idx) return item
+        if (key === "is_present") {
+          return { ...item, is_present: Boolean(value), end_date: Boolean(value) ? "" : item.end_date }
+        }
+        return { ...item, [key]: value } as ExperienceForm
+      }),
+    )
+  }
+
+  const updateEducation = (idx: number, key: keyof EducationForm, value: string) => {
+    setEducations((prev) => prev.map((item, i) => (i === idx ? { ...item, [key]: value } : item)))
   }
 
   const nextFromStep1 = () => {
@@ -210,15 +257,45 @@ export default function OnboardingPage() {
 
   const nextFromStep2 = () => {
     if (selectedSkillIds.length < 3) return setError("აირჩიე მინიმუმ 3 უნარი.")
-    if (services.length < 1) return setError("მინიმუმ ერთი სერვისია საჭირო.")
-    for (let i = 0; i < services.length; i += 1) {
-      const s = services[i]
-      if (!s.title.trim()) return setError(`სერვისი #${i + 1}: სათაური სავალდებულოა.`)
-      if (s.description.length > 300) return setError(`სერვისი #${i + 1}: აღწერა მაქსიმუმ 300 სიმბოლო.`)
-      if (!s.delivery_days || Number(s.delivery_days) <= 0) return setError(`სერვისი #${i + 1}: მიუთითე ვადა.`)
-      if (s.price_type !== "negotiable" && (!s.price || Number(s.price) < 0)) {
-        return setError(`სერვისი #${i + 1}: მიუთითე ფასი.`)
+    const normalizedExperience = experiences
+      .map((item) => ({
+        title: item.title.trim(),
+        organization: item.organization.trim(),
+        start_date: item.start_date.trim(),
+        end_date: item.end_date.trim(),
+        is_present: item.is_present,
+        description: item.description.trim(),
+      }))
+      .filter((item) => item.title || item.organization || item.start_date || item.end_date || item.description)
+
+    if (normalizedExperience.length > 10) return setError("გამოცდილების მაქსიმუმ 10 ჩანაწერი შეგიძლია დაამატო.")
+    for (let i = 0; i < normalizedExperience.length; i += 1) {
+      const item = normalizedExperience[i]
+      if (!item.title) return setError(`გამოცდილება #${i + 1}: პოზიცია/სახელი სავალდებულოა.`)
+      if (!item.organization) return setError(`გამოცდილება #${i + 1}: სამუშაო ადგილი სავალდებულოა.`)
+      if (!item.start_date) return setError(`გამოცდილება #${i + 1}: დაწყების თარიღი სავალდებულოა.`)
+      if (!item.is_present && !item.end_date) return setError(`გამოცდილება #${i + 1}: დასრულების თარიღი ან „მიმდინარე“ სავალდებულოა.`)
+      if (!item.is_present && item.end_date && new Date(item.end_date).getTime() < new Date(item.start_date).getTime()) {
+        return setError(`გამოცდილება #${i + 1}: დასრულების თარიღი დაწყებაზე ადრე ვერ იქნება.`)
       }
+    }
+
+    const normalizedEducation = educations
+      .map((item) => ({
+        institution: item.institution.trim(),
+        degree_level: item.degree_level.trim(),
+        field_of_study: item.field_of_study.trim(),
+        end_date: item.end_date.trim(),
+      }))
+      .filter((item) => item.institution || item.degree_level || item.field_of_study || item.end_date)
+
+    if (normalizedEducation.length > 10) return setError("განათლების მაქსიმუმ 10 ჩანაწერი შეგიძლია დაამატო.")
+    for (let i = 0; i < normalizedEducation.length; i += 1) {
+      const item = normalizedEducation[i]
+      if (!item.institution) return setError(`განათლება #${i + 1}: სასწავლებელი სავალდებულოა.`)
+      if (!item.degree_level) return setError(`განათლება #${i + 1}: საფეხური (ბაკალავრი/მაგისტრი...) სავალდებულოა.`)
+      if (!item.field_of_study) return setError(`განათლება #${i + 1}: სპეციალობა/მიმართულება სავალდებულოა.`)
+      if (!item.end_date) return setError(`განათლება #${i + 1}: დასრულების თარიღი სავალდებულოა.`)
     }
     setError("")
     setStep(3)
@@ -230,11 +307,11 @@ export default function OnboardingPage() {
     setError("")
     try {
       const parsedLi = parseLinkedInField(noLinkedinProfile ? "" : linkedinUrl)
-      if (!parsedLi.ok) throw new Error(parsedLi.message)
+      if (parsedLi.ok === false) throw new Error(parsedLi.message)
       const parsedGh = parseGitHubField(noGithubProfile ? "" : githubUrl)
-      if (!parsedGh.ok) throw new Error(parsedGh.message)
+      if (parsedGh.ok === false) throw new Error(parsedGh.message)
       const parsedPf = parseOptionalWebUrl(noPortfolioWebsite ? "" : portfolioUrl)
-      if (!parsedPf.ok) throw new Error(parsedPf.message)
+      if (parsedPf.ok === false) throw new Error(parsedPf.message)
 
       const slug =
         freelancerSlug ??
@@ -272,23 +349,56 @@ export default function OnboardingPage() {
       )
       if (skillsError) throw skillsError
 
-      await supabase.from("services").delete().eq("freelancer_profile_id", fp.id)
-      const { error: servicesError } = await supabase.from("services").insert(
-        services.map((s) => ({
-          freelancer_profile_id: fp.id,
-          title: s.title.trim(),
-          description:
-            s.price_type === "fixed"
-              ? s.description.trim()
-              : `[ფასი: ${s.price_type === "hourly" ? "საათობრივი" : "შეთანხმებით"}] ${s.description.trim()}`,
-          price: s.price_type === "negotiable" ? 0 : Number(s.price),
-          delivery_days: Number(s.delivery_days),
-          is_active: true,
-        })),
-      )
-      if (servicesError) throw servicesError
+      await supabase.from("experience").delete().eq("freelancer_profile_id", fp.id)
+      const normalizedExperience = experiences
+        .map((item) => ({
+          title: item.title.trim(),
+          organization: item.organization.trim(),
+          start_date: item.start_date.trim(),
+          end_date: item.is_present ? null : item.end_date.trim() || null,
+          description: item.description.trim() || null,
+        }))
+        .filter((item) => item.title && item.organization && item.start_date)
+        .slice(0, 10)
+      if (normalizedExperience.length > 0) {
+        const { error: expErr } = await supabase.from("experience").insert(
+          normalizedExperience.map((item) => ({
+            freelancer_profile_id: fp.id,
+            title: item.title,
+            organization: item.organization,
+            start_date: item.start_date,
+            end_date: item.end_date,
+            description: item.description,
+            type: "work",
+          })),
+        )
+        if (expErr) throw expErr
+      }
 
-      navigate("/dashboard")
+      await supabase.from("freelancer_education").delete().eq("freelancer_profile_id", fp.id)
+      const normalizedEducation = educations
+        .map((item) => ({
+          institution: item.institution.trim(),
+          degree_level: item.degree_level.trim(),
+          field_of_study: item.field_of_study.trim(),
+          end_date: item.end_date.trim(),
+        }))
+        .filter((item) => item.institution && item.degree_level && item.field_of_study && item.end_date)
+        .slice(0, 10)
+      if (normalizedEducation.length > 0) {
+        const { error: eduErr } = await supabase.from("freelancer_education").insert(
+          normalizedEducation.map((item) => ({
+            freelancer_profile_id: fp.id,
+            institution: item.institution,
+            degree_level: item.degree_level,
+            field_of_study: item.field_of_study,
+            end_date: item.end_date,
+          })),
+        )
+        if (eduErr) throw eduErr
+      }
+
+      navigate(`/freelancer/${encodeURIComponent(slug)}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : "შენახვა ვერ მოხერხდა.")
     } finally {
@@ -414,27 +524,137 @@ export default function OnboardingPage() {
                       </div>
                     ))}
                   </div>
-                  <div className="space-y-2">
-                    {services.map((service, idx) => (
-                      <div key={`service-${idx}`} className="rounded-lg border border-slate-200 p-3">
-                        <input className="mb-2 h-10 w-full rounded border border-slate-300 px-2" placeholder="სერვისის სათაური" value={service.title} onChange={(e)=>updateService(idx,"title",e.target.value)} />
-                        <textarea className="mb-2 w-full rounded border border-slate-300 px-2 py-1" rows={3} maxLength={300} placeholder="აღწერა (მაქს 300)" value={service.description} onChange={(e)=>updateService(idx,"description",e.target.value)} />
-                        <div className="mb-2 flex gap-3 text-sm">
-                          {["fixed", "hourly", "negotiable"].map((pt) => (
-                            <label key={pt} className="flex items-center gap-1">
-                              <input type="radio" checked={service.price_type === pt} onChange={() => updateService(idx, "price_type", pt)} />
-                              {pt}
-                            </label>
-                          ))}
-                        </div>
+                  <div className="space-y-2 rounded-lg border border-slate-200 p-3">
+                    <p className="text-sm font-semibold text-[#1B2B4B]">გამოცდილება (მაქს. 10)</p>
+                    {experiences.map((exp, idx) => (
+                      <div key={`exp-${idx}`} className="rounded-lg border border-slate-200 p-3">
+                        <input
+                          className="mb-2 h-10 w-full rounded border border-slate-300 px-2"
+                          placeholder="პოზიცია / როლი"
+                          value={exp.title}
+                          onChange={(e) => updateExperience(idx, "title", e.target.value)}
+                        />
+                        <input
+                          className="mb-2 h-10 w-full rounded border border-slate-300 px-2"
+                          placeholder="სამუშაო ადგილი (კომპანია)"
+                          value={exp.organization}
+                          onChange={(e) => updateExperience(idx, "organization", e.target.value)}
+                        />
                         <div className="grid grid-cols-2 gap-2">
-                          {service.price_type !== "negotiable" ? <input className="h-10 rounded border border-slate-300 px-2" type="number" placeholder="ფასი (₾)" value={service.price} onChange={(e)=>updateService(idx,"price",e.target.value)} /> : <div className="h-10 rounded border border-slate-200 bg-slate-50 px-2 text-sm leading-10">ფასი შეთანხმებით</div>}
-                          <input className="h-10 rounded border border-slate-300 px-2" type="number" placeholder="მიწოდების ვადა" value={service.delivery_days} onChange={(e)=>updateService(idx,"delivery_days",e.target.value)} />
+                          <input
+                            type="date"
+                            className="h-10 rounded border border-slate-300 px-2"
+                            value={exp.start_date}
+                            onChange={(e) => updateExperience(idx, "start_date", e.target.value)}
+                          />
+                          <input
+                            type="date"
+                            disabled={exp.is_present}
+                            className="h-10 rounded border border-slate-300 px-2 disabled:bg-slate-100"
+                            value={exp.end_date}
+                            onChange={(e) => updateExperience(idx, "end_date", e.target.value)}
+                          />
                         </div>
-                        {services.length > 1 && <button type="button" onClick={()=>setServices((prev)=>prev.filter((_,i)=>i!==idx))} className="mt-2 text-xs text-red-600">წაშლა</button>}
+                        <label className="mt-2 flex items-center gap-2 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={exp.is_present}
+                            onChange={(e) => updateExperience(idx, "is_present", e.target.checked)}
+                          />
+                          მიმდინარე
+                        </label>
+                        <textarea
+                          className="mt-2 w-full rounded border border-slate-300 px-2 py-1"
+                          rows={3}
+                          placeholder="აღწერა"
+                          value={exp.description}
+                          onChange={(e) => updateExperience(idx, "description", e.target.value)}
+                        />
+                        {experiences.length > 1 ? (
+                          <button
+                            type="button"
+                            onClick={() => setExperiences((prev) => prev.filter((_, i) => i !== idx))}
+                            className="mt-2 text-xs text-red-600"
+                          >
+                            წაშლა
+                          </button>
+                        ) : null}
                       </div>
                     ))}
-                    <button type="button" disabled={services.length >= 5} onClick={() => setServices((prev)=>[...prev,{ title: "", description: "", price_type: "fixed", price: "", delivery_days: "" }])} className="text-sm font-semibold text-[#D4A843]">＋ სერვისის დამატება</button>
+                    <button
+                      type="button"
+                      disabled={experiences.length >= 10}
+                      onClick={() =>
+                        setExperiences((prev) => [
+                          ...prev,
+                          { title: "", organization: "", start_date: "", end_date: "", is_present: false, description: "" },
+                        ])
+                      }
+                      className="text-sm font-semibold text-[#D4A843]"
+                    >
+                      ＋ გამოცდილების დამატება
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 rounded-lg border border-slate-200 p-3">
+                    <p className="text-sm font-semibold text-[#1B2B4B]">განათლება (არასავალდებულო, მაქს. 10)</p>
+                    {educations.map((edu, idx) => (
+                      <div key={`edu-${idx}`} className="rounded-lg border border-slate-200 p-3">
+                        <input
+                          className="mb-2 h-10 w-full rounded border border-slate-300 px-2"
+                          placeholder="სად სწავლობ / სასწავლებელი"
+                          value={edu.institution}
+                          onChange={(e) => updateEducation(idx, "institution", e.target.value)}
+                        />
+                        <select
+                          className="mb-2 h-10 w-full rounded border border-slate-300 bg-white px-2"
+                          value={edu.degree_level}
+                          onChange={(e) => updateEducation(idx, "degree_level", e.target.value)}
+                        >
+                          <option value="">აირჩიე საფეხური</option>
+                          {FREELANCER_EDUCATION_DEGREE_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          className="mb-2 h-10 w-full rounded border border-slate-300 px-2"
+                          placeholder="რას სწავლობ (სპეციალობა / მიმართულება)"
+                          value={edu.field_of_study}
+                          onChange={(e) => updateEducation(idx, "field_of_study", e.target.value)}
+                        />
+                        <label className="mb-1 block text-xs text-slate-600">დასრულების თარიღი</label>
+                        <input
+                          type="date"
+                          className="h-10 w-full rounded border border-slate-300 px-2"
+                          value={edu.end_date}
+                          onChange={(e) => updateEducation(idx, "end_date", e.target.value)}
+                        />
+                        {educations.length > 1 ? (
+                          <button
+                            type="button"
+                            onClick={() => setEducations((prev) => prev.filter((_, i) => i !== idx))}
+                            className="mt-2 text-xs text-red-600"
+                          >
+                            წაშლა
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      disabled={educations.length >= 10}
+                      onClick={() =>
+                        setEducations((prev) => [
+                          ...prev,
+                          { institution: "", degree_level: "", field_of_study: "", end_date: "" },
+                        ])
+                      }
+                      className="text-sm font-semibold text-[#D4A843]"
+                    >
+                      ＋ განათლების დამატება
+                    </button>
                   </div>
                   {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
                   <div className="grid grid-cols-2 gap-2">
@@ -450,8 +670,30 @@ export default function OnboardingPage() {
                     {avatarPreview && (
                       <img src={avatarPreview} alt="Avatar preview" style={{ width: 100, height: 100, borderRadius: "50%", objectFit: "cover", marginBottom: 12 }} />
                     )}
-                    <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleAvatarUpload(file) }} disabled={avatarUploading} />
-                    {avatarUploading && <p>იტვირთება...</p>}
+                    <input
+                      ref={avatarInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) handleAvatarUpload(file)
+                      }}
+                      disabled={avatarUploading}
+                    />
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => avatarInputRef.current?.click()}
+                        disabled={avatarUploading}
+                        className="inline-flex h-10 items-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-[#1B2B4B] transition hover:border-[#D4A843] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        პროფილის ფოტოს დამატება
+                      </button>
+                      <span className="text-sm text-slate-500">
+                        {avatarUploading ? "იტვირთება..." : avatarPreview ? "ფოტო არჩეულია" : "ფაილი არჩეული არ არის"}
+                      </span>
+                    </div>
                   </div>
                   <div>
                     <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm text-slate-700">

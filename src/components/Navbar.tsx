@@ -1,8 +1,15 @@
-import type { SupabaseClient } from "@supabase/supabase-js"
 import type { MouseEvent } from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import type { Json } from "../lib/database.types"
+import {
+  fetchNotifications,
+  markAllAsRead,
+  markAsRead,
+  subscribeToNotifications,
+  type AppNotification,
+} from "../lib/notifications.ts"
+import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { supabase } from "../lib/supabase"
 
 const navLinks = [
@@ -17,17 +24,6 @@ function navLinkUnderlineActive(pathname: string, to: string) {
   if (to === "/hirers") return pathname === "/hirers" || pathname.startsWith("/hirer/")
   if (to === "/listings") return pathname === "/listings"
   return pathname === to
-}
-
-type NotificationRow = {
-  id: string
-  title: string
-  body: string | null
-  link: string | null
-  type: string
-  is_read: boolean
-  created_at: string
-  payload?: Json | null
 }
 
 type JobApplicationPayload = {
@@ -77,14 +73,24 @@ function splitCoverNoteAndRate(coverNote: string | null | undefined): { comment:
   return { comment: raw, rateLine: null }
 }
 
-async function fetchRecentNotifications(client: SupabaseClient, uid: string): Promise<NotificationRow[]> {
-  const { data } = await client
-    .from("notifications")
-    .select("id,title,body,link,type,is_read,created_at,payload")
-    .eq("user_id", uid)
-    .order("created_at", { ascending: false })
-    .limit(25)
-  return (data ?? []) as NotificationRow[]
+function formatNotificationRelativeTime(iso: string): string {
+  const now = Date.now()
+  const diffMs = now - new Date(iso).getTime()
+  const minute = 60 * 1000
+  const hour = 60 * minute
+  const day = 24 * hour
+  if (diffMs < minute) return "ახლახან"
+  if (diffMs < hour) return `${Math.max(1, Math.floor(diffMs / minute))} წუთის წინ`
+  if (diffMs < day) return `${Math.max(1, Math.floor(diffMs / hour))} საათის წინ`
+  if (diffMs < 7 * day) return `${Math.max(1, Math.floor(diffMs / day))} დღის წინ`
+  return new Date(iso).toLocaleDateString("ka-GE")
+}
+
+function truncateNotificationBody(text: string | null, max = 60): string | null {
+  if (!text) return null
+  const t = text.replace(/\s+/g, " ").trim()
+  if (t.length <= max) return t
+  return `${t.slice(0, max)}…`
 }
 
 export default function Navbar() {
@@ -97,12 +103,18 @@ export default function Navbar() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [fullName, setFullName] = useState("")
   const [userId, setUserId] = useState<string | null>(null)
-  const [notifications, setNotifications] = useState<NotificationRow[]>([])
+  const [publicProfileHref, setPublicProfileHref] = useState<string | null>(null)
+  const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const [detailNotification, setDetailNotification] = useState<NotificationRow | null>(null)
+  const [detailNotification, setDetailNotification] = useState<AppNotification | null>(null)
   const notificationsRef = useRef<HTMLDivElement>(null)
 
   const unreadCount = useMemo(() => notifications.filter((n) => !n.is_read).length, [notifications])
+
+  const navbarAvatarSrc = useMemo(() => {
+    if (!avatarUrl) return null
+    return avatarImageUrl(supabase, avatarUrl) ?? avatarUrl
+  }, [avatarUrl])
 
   useEffect(() => {
     const client = supabase
@@ -118,16 +130,29 @@ export default function Navbar() {
       if (!authed || !uid) {
         setAvatarUrl(null)
         setFullName("")
+        setPublicProfileHref(null)
         setNotifications([])
         setNotificationsOpen(false)
         return
       }
       const [{ data }, list] = await Promise.all([
-        client.from("profiles").select("avatar_url, full_name").eq("id", uid).maybeSingle(),
-        fetchRecentNotifications(client, uid),
+        client.from("profiles").select("avatar_url, full_name, user_type").eq("id", uid).maybeSingle(),
+        fetchNotifications(client),
       ])
       setAvatarUrl(data?.avatar_url ?? null)
       setFullName(data?.full_name ?? "")
+      const userType = data?.user_type
+      if (userType === "freelancer") {
+        const { data: fp } = await client.from("freelancer_profiles").select("slug").eq("user_id", uid).maybeSingle()
+        const slug = fp?.slug?.trim()
+        setPublicProfileHref(slug ? `/freelancer/${encodeURIComponent(slug)}` : null)
+      } else if (userType === "hirer") {
+        const { data: hp } = await client.from("hirer_profiles").select("id").eq("user_id", uid).maybeSingle()
+        const id = hp?.id?.trim()
+        setPublicProfileHref(id ? `/hirer/${encodeURIComponent(id)}` : null)
+      } else {
+        setPublicProfileHref(null)
+      }
       setNotifications(list)
     }
 
@@ -141,24 +166,28 @@ export default function Navbar() {
   useEffect(() => {
     const client = supabase
     if (!client || !userId || !isAuthed) return
-    void fetchRecentNotifications(client, userId).then(setNotifications)
+    void fetchNotifications(client).then(setNotifications)
   }, [location.pathname, userId, isAuthed])
+
+  useEffect(() => {
+    const client = supabase
+    if (!client || !userId || !isAuthed) return
+    const channel = subscribeToNotifications(client, userId, (n) => {
+      setNotifications((prev) => {
+        const next = [n, ...prev.filter((x) => x.id !== n.id)]
+        return next.slice(0, 30)
+      })
+    })
+    return () => {
+      client.removeChannel(channel)
+    }
+  }, [userId, isAuthed])
 
   const initials = useMemo(() => {
     const parts = fullName.trim().split(" ").filter(Boolean)
     if (parts.length === 0) return "გ"
     return `${parts[0][0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase()
   }, [fullName])
-
-  const logout = async () => {
-    if (!supabase) return
-    await supabase.auth.signOut()
-    setMenuOpen(false)
-    setMobileMenuOpen(false)
-    setNotificationsOpen(false)
-    setDetailNotification(null)
-    navigate("/")
-  }
 
   useEffect(() => {
     if (!notificationsOpen) return
@@ -185,15 +214,27 @@ export default function Navbar() {
     return () => document.removeEventListener("keydown", onKeyDown)
   }, [detailNotification, notificationsOpen])
 
-  const markNotificationRead = async (row: NotificationRow) => {
-    if (!supabase || !userId || row.is_read) return
-    const { error } = await supabase.from("notifications").update({ is_read: true }).eq("id", row.id).eq("user_id", userId)
-    if (!error) {
+  const markNotificationRead = async (row: AppNotification) => {
+    if (!supabase || row.is_read) return
+    try {
+      await markAsRead(supabase, row.id)
       setNotifications((prev) => prev.map((n) => (n.id === row.id ? { ...n, is_read: true } : n)))
+    } catch {
+      /* ignore */
     }
   }
 
-  const navigateFromNotification = async (row: NotificationRow) => {
+  const handleMarkAllNotificationsRead = async () => {
+    if (!supabase) return
+    try {
+      await markAllAsRead(supabase)
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })))
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const navigateFromNotification = async (row: AppNotification) => {
     await markNotificationRead(row)
     setNotificationsOpen(false)
     setMobileMenuOpen(false)
@@ -206,14 +247,14 @@ export default function Navbar() {
     navigate(href.startsWith("/") ? href : `/${href}`)
   }
 
-  const openJobApplicationDetail = async (row: NotificationRow) => {
+  const openJobApplicationDetail = async (row: AppNotification) => {
     await markNotificationRead(row)
     setDetailNotification(row)
     setNotificationsOpen(false)
     setMobileMenuOpen(false)
   }
 
-  const handleNotificationActivate = async (row: NotificationRow) => {
+  const handleNotificationActivate = async (row: AppNotification) => {
     if (row.type === "job_application") {
       const parsed = parseJobApplicationPayload(row.payload)
       if (parsed && (parsed.freelancer_slug || parsed.job_application_id)) {
@@ -270,25 +311,25 @@ export default function Navbar() {
 
   return (
     <>
-    <header
-      className={`sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur ${
-        isScrolled ? "shadow-sm" : ""
-      }`}
-    >
-      <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between px-4 py-3 md:px-6">
-        <Link to="/" className="text-3xl font-extrabold tracking-tight text-[#1B2B4B]">
-          გიგორი
+    <header className={`sticky top-0 z-40 border-b border-slate-200 bg-white font-sans ${isScrolled ? "shadow-sm" : ""}`}>
+      <div className="mx-auto flex w-full max-w-none items-center justify-between pl-20 pr-6 py-3 md:pr-8">
+        <Link to="/" className="inline-flex items-center" aria-label="მთავარი">
+          <img src="/images/logo.png" alt="გიგორი" className="h-[52px] w-auto object-contain" />
         </Link>
 
-        <nav className="hidden flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm font-semibold text-[#1B2B4B] md:flex lg:gap-x-6">
+        <nav className="hidden flex-wrap items-center justify-center gap-x-3 gap-y-2 text-sm font-medium md:flex lg:gap-x-4">
           {navLinks.map((link) => (
-            <div key={link.label} className="relative whitespace-nowrap">
-              <Link to={link.to} className="transition hover:text-[#D4A843]">
+            <div key={link.label} className="whitespace-nowrap">
+              <Link
+                to={link.to}
+                className={`inline-flex h-10 items-center rounded-full border px-4 transition ${
+                  navLinkUnderlineActive(location.pathname, link.to)
+                    ? "border-transparent bg-[#2563EB] text-white"
+                    : "border-slate-300 bg-white text-slate-500 hover:border-slate-400 hover:text-slate-700"
+                }`}
+              >
                 {link.label}
               </Link>
-              {navLinkUnderlineActive(location.pathname, link.to) ? (
-                <span className="absolute -bottom-2 left-0 h-[2px] w-full rounded bg-[#D4A843]" />
-              ) : null}
             </div>
           ))}
         </nav>
@@ -296,14 +337,14 @@ export default function Navbar() {
         <div className="hidden shrink-0 items-center gap-3 md:flex">
           {isAuthed ? (
             <Link
-              to="/messages"
-              className={`inline-flex h-11 items-center rounded-full border px-3 text-sm font-semibold transition ${
-                location.pathname.startsWith("/messages")
-                  ? "border-[#D4A843] bg-amber-50 text-[#1B2B4B]"
-                  : "border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+              to="/dashboard"
+              className={`inline-flex h-10 items-center rounded-full border px-4 text-sm font-medium transition ${
+                location.pathname.startsWith("/dashboard")
+                  ? "border-transparent bg-[#2563EB] text-white"
+                  : "border-[#BFDBFE] bg-[#EFF6FF] text-[#2563EB] hover:border-[#93C5FD] hover:bg-[#DBEAFE]"
               }`}
             >
-              ინბოქსი
+              დაშბორდი
             </Link>
           ) : null}
 
@@ -316,17 +357,19 @@ export default function Navbar() {
                 onClick={() =>
                   setNotificationsOpen((v) => {
                     const opening = !v
-                    if (opening && supabase && userId) {
-                      void fetchRecentNotifications(supabase, userId).then(setNotifications)
+                    if (opening && supabase) {
+                      void fetchNotifications(supabase).then(setNotifications)
                     }
                     return opening
                   })
                 }
-                className="relative inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white transition hover:border-[#D4A843]"
+                className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 transition hover:border-slate-400 hover:text-slate-700"
               >
-                <span className="text-lg">🔔</span>
+                <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.4-1.4a2 2 0 0 1-.6-1.4V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5m6 0a3 3 0 0 1-6 0m6 0H9" />
+                </svg>
                 {unreadCount > 0 ? (
-                  <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                  <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
                     {unreadCount > 99 ? "99+" : unreadCount}
                   </span>
                 ) : null}
@@ -335,35 +378,45 @@ export default function Navbar() {
               {notificationsOpen ? (
                 <div
                   role="menu"
-                  className="fixed left-4 right-4 top-[72px] z-50 max-h-[min(70vh,420px)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl md:absolute md:right-0 md:left-auto md:top-full md:mt-2 md:w-[min(100vw-2rem,22rem)]"
+                  className="fixed left-4 right-4 top-[72px] z-50 max-h-[min(70vh,420px)] overflow-hidden rounded-2xl border border-slate-200 bg-white text-[#1B2B4B] shadow-xl md:absolute md:right-0 md:left-auto md:top-full md:mt-2 md:w-[min(100vw-2rem,22rem)]"
                 >
-                  <div className="border-b border-slate-100 px-4 py-3">
-                    <p className="text-sm font-bold text-[#1B2B4B]">შეტყობინებები</p>
-                    <p className="text-xs text-slate-500">{notifications.length === 0 ? "ცარიელია" : `${notifications.length} ბოლო შეტყობინება`}</p>
+                  <div className="flex items-start justify-between gap-2 border-b border-slate-100 px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-[#1B2B4B]">შეტყობინებები</p>
+                      <p className="text-xs text-slate-500">
+                        {notifications.length === 0 ? "ცარიელია" : `${Math.min(10, notifications.length)} ბოლო შეტყობინება`}
+                      </p>
+                    </div>
+                    {notifications.some((n) => !n.is_read) ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleMarkAllNotificationsRead()}
+                        className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-[#1B2B4B] underline-offset-2 hover:bg-slate-50 hover:underline"
+                      >
+                        ყველა წაკითხულია
+                      </button>
+                    ) : null}
                   </div>
                   <div className="max-h-[min(52vh,340px)] overflow-y-auto overscroll-contain">
                     {notifications.length === 0 ? (
                       <p className="px-4 py-8 text-center text-sm text-slate-600">ახალი შეტყობინებები არ გაქვთ.</p>
                     ) : (
                       <ul className="divide-y divide-slate-100">
-                        {notifications.map((n) => (
+                        {notifications.slice(0, 10).map((n) => (
                           <li key={n.id} className="flex items-stretch gap-0">
                             <button
                               type="button"
                               role="menuitem"
                               onClick={() => void handleNotificationActivate(n)}
-                              className={`flex min-w-0 flex-1 flex-col gap-0.5 px-4 py-3 text-left transition hover:bg-slate-50 ${n.is_read ? "opacity-90" : "bg-amber-50/60"}`}
+                              className={`flex min-w-0 flex-1 flex-col gap-0.5 border-l-4 py-3 pl-3 pr-2 text-left transition hover:bg-slate-50 ${
+                                n.is_read ? "border-transparent opacity-90" : "border-[#D4A843] bg-amber-50/40"
+                              }`}
                             >
-                              <span className={`text-sm ${n.is_read ? "font-medium text-slate-800" : "font-bold text-[#1B2B4B]"}`}>{n.title}</span>
-                              {n.body ? <span className="line-clamp-2 text-xs text-slate-600">{n.body}</span> : null}
-                              <span className="text-[11px] text-slate-400">
-                                {new Date(n.created_at).toLocaleString("ka-GE", {
-                                  day: "numeric",
-                                  month: "short",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </span>
+                              <span className={`text-sm ${n.is_read ? "font-medium text-[#1B2B4B]/90" : "font-bold text-[#1B2B4B]"}`}>{n.title}</span>
+                              {n.body ? (
+                                <span className="text-xs text-slate-600">{truncateNotificationBody(n.body)}</span>
+                              ) : null}
+                              <span className="text-[11px] text-slate-400">{formatNotificationRelativeTime(n.created_at)}</span>
                             </button>
                             <button
                               type="button"
@@ -388,34 +441,30 @@ export default function Navbar() {
               <button
                 type="button"
                 onClick={() => setMenuOpen((v) => !v)}
-                className="flex h-11 items-center gap-2 rounded-full border border-slate-300 bg-white px-2 pr-3"
+                className="flex h-10 items-center gap-2 rounded-xl border border-slate-300 bg-white px-1.5 pr-2.5 transition hover:border-slate-400"
               >
                 <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-xs font-bold text-[#1B2B4B]">
                   {avatarUrl ? (
-                    <img src={avatarUrl} alt="მომხმარებლის ავატარი" loading="lazy" className="h-full w-full object-cover" />
+                    <img src={navbarAvatarSrc ?? avatarUrl} alt="მომხმარებლის ავატარი" loading="lazy" className="h-full w-full object-cover" />
                   ) : (
                     initials
                   )}
                 </span>
-                <span className="max-w-24 truncate text-sm font-semibold text-[#1B2B4B]">{userDisplayName}</span>
+                <span className="max-w-24 truncate text-sm font-medium text-slate-600">{userDisplayName}</span>
               </button>
               <div
                 className={`absolute right-0 top-12 w-48 origin-top-right rounded-lg border border-slate-200 bg-white p-2 shadow-lg transition ${
                   menuOpen ? "scale-100 opacity-100" : "pointer-events-none scale-95 opacity-0"
                 }`}
               >
-                <Link to="/profile" onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
-                  პროფილი
+                <Link to="/settings" onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
+                  პარამეტრები
                 </Link>
-                <Link to="/messages" onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
-                  ინბოქსი
-                </Link>
-                <Link to="/dashboard" onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
-                  დაშბორდი
-                </Link>
-                <button type="button" onClick={logout} className="block w-full rounded px-3 py-2 text-left text-sm hover:bg-slate-50">
-                  გამოსვლა
-                </button>
+                {publicProfileHref ? (
+                  <Link to={publicProfileHref} onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
+                    პროფილი
+                  </Link>
+                ) : null}
               </div>
             </div>
           ) : (
@@ -463,7 +512,7 @@ export default function Navbar() {
         <div className="mx-auto flex max-w-[1200px] flex-col gap-1 px-4 py-3">
           {navLinks.map((link) => (
             <Link
-              key={link.to}
+              key={link.label}
               to={link.to}
               onClick={() => setMobileMenuOpen(false)}
               className={`rounded-md px-3 py-3 text-sm font-semibold ${
@@ -488,18 +537,17 @@ export default function Navbar() {
                   <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">{unreadCount > 99 ? "99+" : unreadCount}</span>
                 ) : null}
               </button>
-              <Link to="/messages" onClick={() => setMobileMenuOpen(false)} className="rounded-md px-3 py-3 text-sm font-semibold text-[#1B2B4B]">
-                ინბოქსი
-              </Link>
               <Link to="/dashboard" onClick={() => setMobileMenuOpen(false)} className="rounded-md px-3 py-3 text-sm font-semibold text-[#1B2B4B]">
                 დაშბორდი
               </Link>
-              <Link to="/profile" onClick={() => setMobileMenuOpen(false)} className="rounded-md px-3 py-3 text-sm font-semibold text-[#1B2B4B]">
-                პროფილი
+              <Link to="/settings" onClick={() => setMobileMenuOpen(false)} className="rounded-md px-3 py-3 text-sm font-semibold text-[#1B2B4B]">
+                პარამეტრები
               </Link>
-              <button type="button" onClick={logout} className="rounded-md px-3 py-3 text-left text-sm font-semibold text-[#1B2B4B]">
-                გამოსვლა
-              </button>
+              {publicProfileHref ? (
+                <Link to={publicProfileHref} onClick={() => setMobileMenuOpen(false)} className="rounded-md px-3 py-3 text-sm font-semibold text-[#1B2B4B]">
+                  პროფილი
+                </Link>
+              ) : null}
             </>
           ) : (
             <div className="grid gap-2 pt-2">
@@ -556,11 +604,6 @@ export default function Navbar() {
                 <p className="font-semibold text-[#1B2B4B]">
                   {(detailPayload.average_rating ?? 0).toFixed(1)} ★
                 </p>
-              </div>
-              <div className="h-10 w-px bg-slate-200 self-center hidden sm:block" aria-hidden />
-              <div>
-                <p className="text-xs text-slate-500">დასრულებული სამუშაოები</p>
-                <p className="font-semibold text-[#1B2B4B]">{detailPayload.completed_jobs_count ?? 0}</p>
               </div>
             </div>
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import Navbar from "../components/Navbar.tsx"
 import EmptyState from "../components/ui/EmptyState.tsx"
@@ -7,7 +7,10 @@ import SkeletonCard from "../components/ui/SkeletonCard.tsx"
 import MarketplaceCatalogToolbar from "../components/MarketplaceCatalogToolbar.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
-import { jobMatchesUnifiedLocation } from "../lib/marketplaceFilters.ts"
+import { jobVacancyStats } from "../lib/jobVacancies.ts"
+import { formatCityForDisplay, jobMatchesUnifiedLocation } from "../lib/marketplaceFilters.ts"
+import { jobVipIsActive } from "../lib/vipJobTiers.ts"
+import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 
 type SortOption = "newest" | "budget_high" | "budget_low" | "applicants" | "deadline"
 type BudgetType = "fixed" | "hourly" | "monthly"
@@ -18,6 +21,7 @@ type JobItem = {
   categoryId: string
   title: string
   description: string
+  imagePath: string | null
   createdAt: string
   budgetType: string
   budgetMin: number | null
@@ -33,6 +37,13 @@ type JobItem = {
   city: string | null
   skills: Array<{ id: string; name: string }>
   applicantsCount: number
+  viewsCount: number
+  /** True when job has active paid VIP placement (not expired). */
+  vipActive: boolean
+  vacancies: number
+  acceptedCount: number
+  vacancyRemaining: number
+  vacancyFull: boolean
 }
 
 type CategoryItem = { id: string; name_ka: string }
@@ -48,6 +59,7 @@ const mockJobs: JobItem[] = [
     subcategoryName: null,
     description:
       "გვჭირდება გამოცდილი React დეველოპერი ონლაინ მაღაზიის შესაქმნელად. პროექტი მოიცავს პროდუქტების გვერდს, კალათას და გადახდის სისტემას.",
+    imagePath: null,
     budgetMin: 800,
     budgetMax: 1500,
     budgetType: "fixed",
@@ -60,6 +72,12 @@ const mockJobs: JobItem[] = [
       { id: "s3", name: "Tailwind CSS" },
     ],
     applicantsCount: 3,
+    viewsCount: 0,
+    vipActive: false,
+    vacancies: 1,
+    acceptedCount: 0,
+    vacancyRemaining: 1,
+    vacancyFull: false,
     createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
     applicationDeadline: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
     companyAvatar: null,
@@ -74,6 +92,7 @@ const mockJobs: JobItem[] = [
     subcategoryName: null,
     description:
       "ვეძებთ კრეატიულ დიზაინერს ახალი ტექნოლოგიური სტარტაპის ვიზუალური იდენტობის შესაქმნელად. საჭიროა ლოგო, ფერთა პალიტრა და ბრენდბუქი.",
+    imagePath: null,
     budgetMin: 300,
     budgetMax: 600,
     budgetType: "fixed",
@@ -86,6 +105,12 @@ const mockJobs: JobItem[] = [
       { id: "s6", name: "Branding" },
     ],
     applicantsCount: 7,
+    viewsCount: 0,
+    vipActive: false,
+    vacancies: 2,
+    acceptedCount: 1,
+    vacancyRemaining: 1,
+    vacancyFull: false,
     createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
     applicationDeadline: null,
     companyAvatar: null,
@@ -100,6 +125,7 @@ const mockJobs: JobItem[] = [
     subcategoryName: null,
     description:
       "კაფეს სოციალური მედიის მართვა Instagram და Facebook-ზე. კვირაში 3-4 პოსტი, სტორიები, კომენტარებზე პასუხი. ქართული და ინგლისური ენები.",
+    imagePath: null,
     budgetMin: 400,
     budgetMax: 400,
     budgetType: "monthly",
@@ -112,6 +138,12 @@ const mockJobs: JobItem[] = [
       { id: "s9", name: "Content Creation" },
     ],
     applicantsCount: 12,
+    viewsCount: 0,
+    vipActive: false,
+    vacancies: 1,
+    acceptedCount: 0,
+    vacancyRemaining: 1,
+    vacancyFull: false,
     createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
     applicationDeadline: null,
     companyAvatar: null,
@@ -126,6 +158,7 @@ const mockJobs: JobItem[] = [
     subcategoryName: null,
     description:
       "80 გვერდიანი სატურისტო ვებსაიტის თარგმნა ინგლისურიდან ქართულზე. ტექსტი მოიცავს ტურების აღწერებს, ბლოგ პოსტებს და FAQ გვერდს.",
+    imagePath: null,
     budgetMin: 200,
     budgetMax: 350,
     budgetType: "fixed",
@@ -138,6 +171,12 @@ const mockJobs: JobItem[] = [
       { id: "s12", name: "ინგლისური ენა" },
     ],
     applicantsCount: 2,
+    viewsCount: 0,
+    vipActive: false,
+    vacancies: 1,
+    acceptedCount: 1,
+    vacancyRemaining: 0,
+    vacancyFull: true,
     createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
     applicationDeadline: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
     companyAvatar: null,
@@ -173,10 +212,69 @@ function isDeadlineSoon(dateString: string) {
   return diff > 0 && diff <= 3 * 24 * 60 * 60 * 1000
 }
 
+const JOBS_PAGE_SIZE = 20
+
+function mapRpcRowsToJobs(jobRows: unknown[]): JobItem[] {
+  return jobRows.map((raw) => {
+    const row = raw as Record<string, unknown>
+    let skills: JobItem["skills"] = []
+    const skillsRaw = row.skills
+    if (Array.isArray(skillsRaw)) {
+      skills = skillsRaw
+        .map((item) => {
+          const s = item as Record<string, unknown>
+          return { id: String(s.id ?? ""), name: String(s.name ?? "").trim() }
+        })
+        .filter((s) => s.id && s.name)
+    }
+
+    const vipActive = jobVipIsActive(Boolean(row.is_vip), row.vip_expires_at != null ? String(row.vip_expires_at) : null)
+    const imagePaths = Array.isArray(row.image_urls)
+      ? (row.image_urls as unknown[]).map((v) => String(v)).filter(Boolean)
+      : []
+    const vac = jobVacancyStats(row.vacancies as number | null | undefined, row.accepted_count as number | null | undefined)
+
+    return {
+      id: String(row.id ?? ""),
+      categoryId: String(row.category_id ?? ""),
+      title: String(row.title ?? ""),
+      description: String(row.description ?? ""),
+      imagePath: imagePaths[0] ?? (row.image_path != null ? String(row.image_path) : null),
+      createdAt: String(row.created_at ?? ""),
+      budgetType: String(row.budget_type ?? ""),
+      budgetMin: row.budget_min != null ? Number(row.budget_min) : null,
+      budgetMax: row.budget_max != null ? Number(row.budget_max) : null,
+      locationType: String(row.location_type ?? ""),
+      durationType: String(row.duration_type ?? ""),
+      isUrgent: Boolean(row.is_urgent),
+      applicationDeadline: row.application_deadline != null ? String(row.application_deadline) : null,
+      categoryName: String(row.category_name ?? "").trim() || "კატეგორია",
+      subcategoryName: row.subcategory_name != null ? String(row.subcategory_name) : null,
+      companyName:
+        String(row.company_name ?? "").trim() ||
+        String(row.full_name ?? "").trim() ||
+        "დამქირავებელი",
+      companyAvatar: row.avatar_url != null ? String(row.avatar_url) : null,
+      city: row.city != null ? String(row.city) : null,
+      skills,
+      applicantsCount: Number(row.applicants_count ?? 0),
+      viewsCount: Number(row.views_count ?? 0),
+      vipActive,
+      vacancies: vac.vacancies,
+      acceptedCount: vac.acceptedCount,
+      vacancyRemaining: vac.remaining,
+      vacancyFull: vac.isFull,
+    }
+  })
+}
+
 export default function JobsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
-  const [visibleCount, setVisibleCount] = useState(20)
+  const [jobsTotal, setJobsTotal] = useState(0)
+  const [jobsNextOffset, setJobsNextOffset] = useState(0)
+  const jobsNextOffsetRef = useRef(0)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [jobs, setJobs] = useState<JobItem[]>([])
   const [categories, setCategories] = useState<CategoryItem[]>([])
 
@@ -230,87 +328,105 @@ export default function JobsPage() {
     }
   }, [advancedDropdownOpen])
 
-  const loadData = async () => {
-    if (!isSupabaseConfigured || !supabase) {
-      setJobs(mockJobs)
-      setCategories([])
-      setLoading(false)
-      return
-    }
-    setLoading(true)
-    setError("")
-    try {
-      const [jobsRes, categoriesRes] = await Promise.all([
-        supabase
-          .from("jobs")
-          .select(`
-            *,
-            categories (name_ka),
-            subcategories (name_ka),
-            hirer_profiles (
-              company_name,
-              profiles:profiles!hirer_profiles_user_id_fkey (full_name, avatar_url, city)
-            ),
-            job_skills (
-              skills (id, name)
-            ),
-            job_applications (id)
-          `)
-          .eq("status", "open")
-          .order("created_at", { ascending: false })
-          .limit(120),
-        supabase.from("categories").select("id,name_ka").eq("is_active", true).order("sort_order").limit(50),
-      ])
+  const fetchJobsPage = useCallback(
+    async (append: boolean) => {
+      if (!isSupabaseConfigured || !supabase) {
+        setJobs(mockJobs)
+        setCategories([])
+        setJobsTotal(mockJobs.length)
+        jobsNextOffsetRef.current = mockJobs.length
+        setJobsNextOffset(mockJobs.length)
+        setLoading(false)
+        setLoadingMore(false)
+        return
+      }
 
-      if (jobsRes.error) throw jobsRes.error
-      if (categoriesRes.error) throw categoriesRes.error
-
-      const mappedJobs: JobItem[] = (jobsRes.data ?? []).map((row: any) => {
-        const skills =
-          row.job_skills
-            ?.map((item: any) => item.skills)
-            .filter(Boolean)
-            .map((skill: any) => ({ id: skill.id, name: skill.name })) ?? []
-
-        const hirerProfile = row.hirer_profiles
-        const profile = hirerProfile?.profiles
-        const companyName = hirerProfile?.company_name || profile?.full_name || "დამქირავებელი"
-
-        return {
-          id: row.id,
-          categoryId: row.category_id,
-          title: row.title,
-          description: row.description,
-          createdAt: row.created_at,
-          budgetType: row.budget_type,
-          budgetMin: row.budget_min,
-          budgetMax: row.budget_max,
-          locationType: row.location_type,
-          durationType: row.duration_type,
-          isUrgent: row.is_urgent,
-          applicationDeadline: row.application_deadline,
-          categoryName: row.categories?.name_ka ?? "კატეგორია",
-          subcategoryName: row.subcategories?.name_ka ?? null,
-          companyName,
-          companyAvatar: profile?.avatar_url ?? null,
-          city: profile?.city ?? null,
-          skills,
-          applicantsCount: row.job_applications?.length ?? 0,
+      if (!append) {
+        jobsNextOffsetRef.current = 0
+        setJobsNextOffset(0)
+        setLoading(true)
+      } else {
+        setLoadingMore(true)
+      }
+      setError("")
+      try {
+        const offset = append ? jobsNextOffsetRef.current : 0
+        const page = Math.floor(offset / JOBS_PAGE_SIZE) + 1
+        const category = categoryId.trim() || undefined
+        const { data, error: fnErr } = await supabase.functions.invoke("get-jobs-page", {
+          body: { category, page },
+        })
+        if (fnErr) throw fnErr
+        if (!data || typeof data !== "object" || !("ok" in data) || (data as { ok?: unknown }).ok !== true) {
+          const errMsg =
+            data && typeof data === "object" && "error" in data
+              ? String((data as { error?: unknown }).error)
+              : "მონაცემები ვერ ჩაიტვირთა."
+          throw new Error(errMsg)
         }
-      })
 
-      setJobs(mappedJobs.length > 0 ? mappedJobs : mockJobs)
-      setCategories((categoriesRes.data ?? []) as CategoryItem[])
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "მონაცემები ვერ ჩაიტვირთა.")
-    } finally {
-      setLoading(false)
-    }
+        const payload = (data as { data: unknown }).data as Record<string, unknown> | null
+        const jobRows = Array.isArray(payload?.jobs) ? (payload.jobs as unknown[]) : []
+        const categoryRows = Array.isArray(payload?.categories) ? (payload.categories as unknown[]) : []
+        const totalRaw = payload?.total_count ?? payload?.total
+        const total = Number(totalRaw)
+        const safeTotal = Number.isFinite(total) ? total : 0
+
+        const mappedJobs = mapRpcRowsToJobs(jobRows)
+
+        if (!append) {
+          setJobs(mappedJobs.length > 0 ? mappedJobs : mockJobs)
+          jobsNextOffsetRef.current = JOBS_PAGE_SIZE
+          setJobsNextOffset(JOBS_PAGE_SIZE)
+        } else {
+          setJobs((prev) => {
+            const seen = new Set(prev.map((j) => j.id))
+            const merged = [...prev]
+            for (const j of mappedJobs) {
+              if (!seen.has(j.id)) {
+                seen.add(j.id)
+                merged.push(j)
+              }
+            }
+            return merged
+          })
+          jobsNextOffsetRef.current += JOBS_PAGE_SIZE
+          setJobsNextOffset(jobsNextOffsetRef.current)
+        }
+
+        setJobsTotal(safeTotal)
+
+        setCategories(
+          categoryRows.map((c) => {
+            const row = c as Record<string, unknown>
+            return { id: String(row.id ?? ""), name_ka: String(row.name_ka ?? "") }
+          }) as CategoryItem[],
+        )
+      } catch (loadError) {
+        setError(loadError instanceof Error ? loadError.message : "მონაცემები ვერ ჩაიტვირთა.")
+      } finally {
+        setLoading(false)
+        setLoadingMore(false)
+      }
+    },
+    [categoryId],
+  )
+
+  // Edge function only receives category + page; budget/location/skill filters run client-side on `filteredJobs`.
+  // Do not list applied* array state here — new array references each render would refetch endlessly.
+  useEffect(() => {
+    void fetchJobsPage(false)
+  }, [categoryId, fetchJobsPage])
+
+  const reloadJobsFirstPage = () => {
+    void fetchJobsPage(false)
   }
 
-  useEffect(() => {
-    loadData()
-  }, [])
+  const loadMoreJobs = () => {
+    void fetchJobsPage(true)
+  }
+
+  const jobsHasMore = jobsNextOffset < jobsTotal
 
   const budgetTypeLabels: Record<BudgetType, string> = {
     fixed: "ფიქსირებული",
@@ -400,7 +516,6 @@ export default function JobsPage() {
     clearDraftAdvanced()
     setAdvancedDropdownOpen(false)
     setSortBy("newest")
-    setVisibleCount(20)
   }
 
   const advancedFilterCount = useMemo(() => {
@@ -483,7 +598,11 @@ export default function JobsPage() {
   const sortedJobs = useMemo(() => {
     const list = [...filteredJobs]
     if (sortBy === "newest") {
-      return list.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
+      return list.sort((a, b) => {
+        const v = (b.vipActive ? 1 : 0) - (a.vipActive ? 1 : 0)
+        if (v !== 0) return v
+        return +new Date(b.createdAt) - +new Date(a.createdAt)
+      })
     }
     if (sortBy === "budget_high") {
       return list.sort((a, b) => (b.budgetMax ?? b.budgetMin ?? 0) - (a.budgetMax ?? a.budgetMin ?? 0))
@@ -514,36 +633,44 @@ export default function JobsPage() {
 
   const locationIcon = (type: string) => (type === "remote" ? "🌐" : "📍")
 
+  /** Outlined pills: #D1D5DB border, ~2px×10px padding, body #374151 (matches meta + skill row) */
+  const tagChipClass =
+    "inline-flex items-center rounded-full border border-[#D1D5DB] bg-white px-2.5 py-0.5 text-xs font-medium text-[#374151]"
+  const metaPillClass = tagChipClass
+
   return (
-    <div className="min-h-screen bg-[#F8F9FC] page-enter">
+    <div className="min-h-screen bg-white page-enter">
       <Navbar />
-      <main className="mx-auto w-full max-w-[1200px] px-4 py-6 md:px-6 md:py-8">
-        <MarketplaceCatalogToolbar
-          eyebrow="მარკეტპლეისი"
-          title="სამუშაოები"
-          searchValue={searchText}
-          onSearchChange={setSearchText}
-          searchPlaceholder="სათაური, აღწერა, კომპანია..."
-          categories={categories}
-          categoryId={categoryId}
-          onCategoryChange={setCategoryId}
-          sortValue={sortBy}
-          onSortChange={(value) => setSortBy(value as SortOption)}
-          sortOptions={[
-            { value: "newest", label: "ახალი" },
-            { value: "budget_high", label: "ბიუჯეტი: მაღალი" },
-            { value: "budget_low", label: "ბიუჯეტი: დაბალი" },
-            { value: "applicants", label: "განმცხადებლები" },
-            { value: "deadline", label: "ვადა იწურება" },
-          ]}
-          advancedDropdownOpen={advancedDropdownOpen}
-          advancedFilterCount={advancedFilterCount}
-          onToggleAdvanced={openAdvancedDropdown}
-          advancedDropdownRef={advancedDropdownRef}
-          onDismissAdvanced={() => setAdvancedDropdownOpen(false)}
-          onSaveAdvanced={saveAdvancedFilters}
-          onClearDraftAdvanced={clearDraftAdvanced}
-          childrenAdvancedBody={
+      <main className="mx-auto w-full max-w-7xl px-6 py-6 font-sans text-slate-600 md:px-8 md:py-8">
+        <section className="p-1 md:p-0">
+          <MarketplaceCatalogToolbar
+            eyebrow=""
+            title=""
+            showPageHeader={false}
+            searchValue={searchText}
+            onSearchChange={setSearchText}
+            searchPlaceholder="სათაური, აღწერა, კომპანია..."
+            categories={categories}
+            categoryId={categoryId}
+            onCategoryChange={setCategoryId}
+            locationDisplay={appliedLocationFilter}
+            sortValue={sortBy}
+            onSortChange={(value) => setSortBy(value as SortOption)}
+            sortOptions={[
+              { value: "newest", label: "ახალი" },
+              { value: "budget_high", label: "ბიუჯეტი: მაღალი" },
+              { value: "budget_low", label: "ბიუჯეტი: დაბალი" },
+              { value: "applicants", label: "განმცხადებლები" },
+              { value: "deadline", label: "ვადა იწურება" },
+            ]}
+            advancedDropdownOpen={advancedDropdownOpen}
+            advancedFilterCount={advancedFilterCount}
+            onToggleAdvanced={openAdvancedDropdown}
+            advancedDropdownRef={advancedDropdownRef}
+            onDismissAdvanced={() => setAdvancedDropdownOpen(false)}
+            onSaveAdvanced={saveAdvancedFilters}
+            onClearDraftAdvanced={clearDraftAdvanced}
+            childrenAdvancedBody={
             <>
               <div>
                 <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">უნარები</p>
@@ -617,12 +744,13 @@ export default function JobsPage() {
                 <input type="checkbox" checked={draftUrgentOnly} onChange={(event) => setDraftUrgentOnly(event.target.checked)} />
               </label>
             </>
-          }
-        />
+            }
+          />
+        </section>
 
         {error ? (
           <div className="mt-6">
-            <ErrorState message={error} onRetry={loadData} />
+            <ErrorState message={error} onRetry={reloadJobsFirstPage} />
           </div>
         ) : loading ? (
           <div className="mt-6 space-y-4">
@@ -632,85 +760,110 @@ export default function JobsPage() {
           </div>
         ) : (
           <>
-            <p className="mt-4 text-sm text-slate-600">ნაპოვნია {sortedJobs.length} განცხადება</p>
+            <p className="mt-6 text-sm font-medium text-slate-600">შედეგი {sortedJobs.length} განცხადება</p>
             {sortedJobs.length === 0 ? (
               <div className="mt-6">
                 <EmptyState message="განცხადებები ჯერ არ არის. იყავი პირველი!" actionLabel="ფილტრების გასუფთავება" onAction={clearFilters} />
               </div>
             ) : (
               <div className="mt-6 space-y-4">
-                {sortedJobs.slice(0, visibleCount).map((job) => (
+                {sortedJobs.map((job) => (
                   <article
                     key={job.id}
-                    className="rounded-2xl border-l-4 border-l-transparent border-slate-200 bg-white p-4 shadow-sm transition hover:border-l-[#D4A843] hover:shadow-md"
+                    className="relative flex w-full max-w-full flex-col rounded-2xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-4 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#2563EB] hover:shadow-[-4px_0_12px_rgba(37,99,235,0.25)]"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        {job.companyAvatar ? (
-                          <img src={job.companyAvatar} alt={`${job.companyName} ავატარი`} loading="lazy" className="h-10 w-10 rounded-full object-cover" />
-                        ) : (
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#1B2B4B] text-xs font-bold text-white">
-                            {getInitials(job.companyName)}
+                    {job.vipActive ? (
+                      <span className="absolute right-4 top-4 z-10 rounded-full bg-[#F59E0B] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
+                        VIP
+                      </span>
+                    ) : null}
+
+                    <div className={`flex items-start gap-3 ${job.vipActive ? "pr-14" : ""}`}>
+                      {job.companyAvatar ? (
+                        <img
+                          src={avatarImageUrl(supabase, job.companyAvatar) ?? job.companyAvatar}
+                          alt={`${job.companyName} ავატარი`}
+                          loading="lazy"
+                          className="h-14 w-14 shrink-0 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#1B2B4B] text-sm font-bold text-white">
+                          {getInitials(job.companyName)}
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-bold text-gray-900">{job.companyName}</p>
+                            <p className="mt-0.5 text-xs text-slate-500">
+                              {formatCityForDisplay(job.city) ?? job.city ?? "ქალაქი უცნობია"} • {formatRelativeTime(job.createdAt)}
+                            </p>
                           </div>
-                        )}
-                        <div>
-                          <p className="font-semibold text-[#1B2B4B]">{job.companyName}</p>
-                          <p className="text-xs text-slate-500">
-                            {job.city ?? "ქალაქი უცნობია"} • {formatRelativeTime(job.createdAt)}
-                          </p>
+                          {job.isUrgent ? (
+                            <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">
+                              გადაუდებელი
+                            </span>
+                          ) : null}
                         </div>
                       </div>
-                      {job.isUrgent ? <span className="rounded-full bg-red-500 px-2 py-1 text-xs font-semibold text-white">გადაუდებელი</span> : null}
                     </div>
 
-                    <Link to={`/job/${job.id}`} className="mt-3 block text-xl font-bold text-[#1B2B4B] hover:underline md:text-2xl">
-                      {job.title}
+                    <Link to={`/job/${job.id}`} className="group mt-3 block">
+                      <h2 className="text-lg font-bold text-gray-900 group-hover:text-[#2563EB] md:text-xl">{job.title}</h2>
                     </Link>
 
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <span className="rounded-full border border-[#D4A843] px-2 py-1 text-xs font-medium text-[#1B2B4B]">{job.categoryName}</span>
-                      {job.subcategoryName ? (
-                        <span className="rounded-full border border-slate-300 px-2 py-1 text-xs text-slate-600">{job.subcategoryName}</span>
-                      ) : null}
+                      <span className={tagChipClass}>{job.categoryName}</span>
+                      {job.subcategoryName ? <span className={tagChipClass}>{job.subcategoryName}</span> : null}
                     </div>
 
-                    <p className="mt-3 text-sm text-slate-700">
-                      {job.description.length > 120 ? `${job.description.slice(0, 120)}...` : job.description}
-                    </p>
+                    <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-slate-600">{job.description}</p>
 
                     <div className="mt-3 flex flex-wrap gap-2">
                       {job.skills.slice(0, 3).map((skill) => (
-                        <span key={skill.id} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700">
+                        <span key={skill.id} className={tagChipClass}>
                           {skill.name}
                         </span>
                       ))}
                       {job.skills.length > 3 ? (
-                        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700">+{job.skills.length - 3}</span>
+                        <span className={tagChipClass}>+{job.skills.length - 3}</span>
                       ) : null}
                     </div>
 
-                    <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-                      <span className="rounded-full bg-slate-100 px-2 py-1 font-semibold text-[#1B2B4B]">{budgetLabel(job)}</span>
-                      <span className="rounded-full bg-slate-100 px-2 py-1">
+                    <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
+                      <span className="shrink-0 text-sm font-semibold text-gray-900">{budgetLabel(job)}</span>
+                      <span className={metaPillClass}>
                         {durationLabels[(job.durationType as DurationType) ?? "one_time"] ?? job.durationType}
                       </span>
-                      <span className="rounded-full bg-slate-100 px-2 py-1">
+                      <span className={metaPillClass}>
                         {locationIcon(job.locationType)} {locationLabelsLegacy[job.locationType] ?? job.locationType}
                       </span>
-                      <span className="rounded-full bg-slate-100 px-2 py-1">{job.applicantsCount} განმცხადებელი</span>
+                      <span className={metaPillClass}>
+                        💼 {job.applicantsCount} განმცხადებელი
+                      </span>
+                      <span className={metaPillClass}>👁 {job.viewsCount} ნახვა</span>
+                      {job.vacancyFull ? (
+                        <span className={`${metaPillClass} font-medium text-amber-800`}>დაკომლექტებული</span>
+                      ) : (
+                        <span className={metaPillClass}>
+                          {job.vacancyRemaining} თავისუფალი ადგილი
+                        </span>
+                      )}
                       {job.applicationDeadline ? (
                         <span
-                          className={`rounded-full px-2 py-1 ${isDeadlineSoon(job.applicationDeadline) ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-700"}`}
+                          className={`${metaPillClass} ${
+                            isDeadlineSoon(job.applicationDeadline) ? "font-medium text-red-600" : ""
+                          }`}
                         >
-                          ბოლო ვადა: {deadlineText(job.applicationDeadline)}
+                          📅 ბოლო ვადა: {deadlineText(job.applicationDeadline)}
                         </span>
                       ) : null}
                     </div>
 
-                    <div className="mt-4">
+                    <div className="mt-4 flex justify-end">
                       <Link
                         to={`/job/${job.id}`}
-                        className="ml-auto inline-flex h-10 items-center justify-center rounded-lg bg-[#1B2B4B] px-4 text-sm font-semibold text-white hover:bg-[#D4A843] hover:text-[#1B2B4B]"
+                        className="inline-flex h-10 items-center justify-center rounded-lg bg-[#2563EB] px-4 text-sm font-semibold text-white transition hover:bg-[#1D4ED8]"
                       >
                         დეტალების ნახვა
                       </Link>
@@ -719,12 +872,13 @@ export default function JobsPage() {
                 ))}
               </div>
             )}
-            {visibleCount < sortedJobs.length ? (
+            {jobsHasMore ? (
               <div className="mt-5">
                 <button
                   type="button"
-                  onClick={() => setVisibleCount((prev) => prev + 20)}
-                  className="h-11 rounded-lg border border-[#1B2B4B] px-4 text-sm font-semibold text-[#1B2B4B]"
+                  disabled={loadingMore}
+                  onClick={loadMoreJobs}
+                  className="h-11 rounded-lg border border-[#2563EB] px-4 text-sm font-semibold text-[#2563EB] transition hover:bg-blue-50 disabled:opacity-60"
                 >
                   მეტის ჩატვირთვა
                 </button>

@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState } from "react"
-import { Link, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams } from "react-router-dom"
 import Navbar from "../components/Navbar.tsx"
+import { useToast } from "../components/ui/ToastProvider.tsx"
 import ErrorState from "../components/ui/ErrorState.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
 import { countHirerProfileVisits, recordProfileVisit } from "../lib/profileVisits.ts"
+import FollowListsModal, { FollowStatPills, type FollowModalTab } from "../components/FollowListsModal.tsx"
+import { countFollowers, countFollowing, followUser, isFollowing, unfollowUser } from "../lib/follows.ts"
+import { jobVacancyStats } from "../lib/jobVacancies.ts"
+import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -28,6 +33,8 @@ type OpenJobBrief = {
   budgetMin: number | null
   budgetMax: number | null
   budgetType: string
+  vacancies: number
+  acceptedCount: number
 }
 
 type HirerReviewDisplay = {
@@ -102,6 +109,8 @@ function formatBudget(job: OpenJobBrief) {
 }
 
 export default function HirerPublicPage() {
+  const { pushToast } = useToast()
+  const navigate = useNavigate()
   const { id } = useParams()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -110,12 +119,49 @@ export default function HirerPublicPage() {
   const [hirerReviews, setHirerReviews] = useState<HirerReviewDisplay[]>([])
   /** Shown only when logged-in viewer owns this hirer profile. */
   const [ownerVisitCount, setOwnerVisitCount] = useState<number | null>(null)
+  const [viewerUserId, setViewerUserId] = useState<string | null>(null)
+  const [followerCount, setFollowerCount] = useState(0)
+  const [followingCount, setFollowingCount] = useState(0)
+  const [followListsModalOpen, setFollowListsModalOpen] = useState(false)
+  const [followListsModalTab, setFollowListsModalTab] = useState<FollowModalTab>("followers")
+  const [followButtonMode, setFollowButtonMode] = useState<"hidden" | "loading" | "guest" | "follow" | "unfollow">(
+    "hidden",
+  )
+  const [followBusy, setFollowBusy] = useState(false)
 
   const hirerRatingSummary = useMemo(() => {
     if (hirerReviews.length === 0) return { average: 0, count: 0 }
     const sum = hirerReviews.reduce((acc, r) => acc + r.rating_overall, 0)
     return { average: sum / hirerReviews.length, count: hirerReviews.length }
   }, [hirerReviews])
+
+  const viewerOwnsHirer = Boolean(hirer?.ownerUserId && viewerUserId && viewerUserId === hirer.ownerUserId)
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return
+
+    const client = supabase
+    let cancelled = false
+
+    const readSession = async () => {
+      const {
+        data: { session },
+      } = await client.auth.getSession()
+      if (!cancelled) setViewerUserId(session?.user?.id ?? null)
+    }
+
+    void readSession()
+    const {
+      data: { subscription },
+    } = client.auth.onAuthStateChange(() => {
+      void readSession()
+    })
+
+    return () => {
+      cancelled = true
+      subscription.unsubscribe()
+    }
+  }, [])
 
   useEffect(() => {
     document.title = "დამქირავებლის პროფილი — გიგორი"
@@ -151,7 +197,15 @@ export default function HirerPublicPage() {
           city: "თბილისი",
         })
         setOpenJobs([
-          { id: "demo-job", title: "React Developer — კონტრაქტი", budgetMin: 800, budgetMax: 1200, budgetType: "fixed" },
+          {
+            id: "demo-job",
+            title: "React Developer — კონტრაქტი",
+            budgetMin: 800,
+            budgetMax: 1200,
+            budgetType: "fixed",
+            vacancies: 2,
+            acceptedCount: 1,
+          },
         ])
         setHirerReviews([])
         document.title = "TechStart Georgia (დემო) — გიგორი"
@@ -210,7 +264,7 @@ export default function HirerPublicPage() {
         ] = await Promise.all([
           supabase
             .from("jobs")
-            .select("id, title, budget_min, budget_max, budget_type")
+            .select("id, title, budget_min, budget_max, budget_type, vacancies, accepted_count")
             .eq("hirer_profile_id", id)
             .eq("status", "open")
             .order("created_at", { ascending: false })
@@ -257,13 +311,18 @@ export default function HirerPublicPage() {
           city: profile?.city ?? null,
         })
 
-        const jobsMapped: OpenJobBrief[] = (jobRows ?? []).map((j: any) => ({
-          id: j.id,
-          title: j.title ?? "",
-          budgetMin: j.budget_min != null ? Number(j.budget_min) : null,
-          budgetMax: j.budget_max != null ? Number(j.budget_max) : null,
-          budgetType: j.budget_type ?? "fixed",
-        }))
+        const jobsMapped: OpenJobBrief[] = (jobRows ?? []).map((j: any) => {
+          const vs = jobVacancyStats(j.vacancies as number | null | undefined, j.accepted_count as number | null | undefined)
+          return {
+            id: j.id,
+            title: j.title ?? "",
+            budgetMin: j.budget_min != null ? Number(j.budget_min) : null,
+            budgetMax: j.budget_max != null ? Number(j.budget_max) : null,
+            budgetType: j.budget_type ?? "fixed",
+            vacancies: vs.vacancies,
+            acceptedCount: vs.acceptedCount,
+          }
+        })
         setOpenJobs(jobsMapped)
 
         if (revErr) {
@@ -354,6 +413,89 @@ export default function HirerPublicPage() {
     }
   }, [hirer?.id, hirer?.ownerUserId])
 
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase || !hirer?.ownerUserId) {
+      setFollowerCount(0)
+      setFollowingCount(0)
+      setFollowButtonMode("hidden")
+      return
+    }
+
+    const profileSubjectId = hirer.ownerUserId
+    let cancelled = false
+
+    ;(async () => {
+      if (viewerOwnsHirer) setFollowButtonMode("hidden")
+
+      try {
+        const [n, nf] = await Promise.all([countFollowers(profileSubjectId), countFollowing(profileSubjectId)])
+        if (cancelled) return
+        setFollowerCount(Number.isFinite(n) ? n : 0)
+        setFollowingCount(Number.isFinite(nf) ? nf : 0)
+      } catch {
+        if (!cancelled) {
+          setFollowerCount(0)
+          setFollowingCount(0)
+        }
+      }
+
+      if (viewerOwnsHirer || cancelled) return
+
+      setFollowButtonMode("loading")
+      try {
+        const { data: sessionPayload } = await supabase.auth.getSession()
+        if (!sessionPayload.session?.user?.id) {
+          if (!cancelled) setFollowButtonMode("guest")
+          return
+        }
+        const f = await isFollowing(profileSubjectId).catch(() => false)
+        if (cancelled) return
+        setFollowButtonMode(f ? "unfollow" : "follow")
+      } catch {
+        if (!cancelled) setFollowButtonMode("guest")
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [hirer?.ownerUserId, viewerOwnsHirer])
+
+  const handleHirerFollowToggle = async () => {
+    if (!supabase || !hirer?.ownerUserId || viewerOwnsHirer || followBusy) return
+    const hirerProfileUuid = hirer.id
+
+    const path = `/hirer/${encodeURIComponent(hirerProfileUuid)}`
+    if (followButtonMode === "guest") {
+      navigate(`/login?reason=follow&redirect=${encodeURIComponent(path)}`)
+      return
+    }
+
+    if (followButtonMode !== "follow" && followButtonMode !== "unfollow") return
+
+    setFollowBusy(true)
+    try {
+      if (followButtonMode === "follow") {
+        await followUser(hirer.ownerUserId)
+        setFollowButtonMode("unfollow")
+        setFollowerCount((c) => Math.max(0, (Number.isFinite(c) ? c : 0) + 1))
+        pushToast({ type: "success", message: "გამოწერა დასრულდა." })
+      } else {
+        await unfollowUser(hirer.ownerUserId)
+        setFollowButtonMode("follow")
+        setFollowerCount((c) => Math.max(0, (Number.isFinite(c) ? c : 0) - 1))
+        pushToast({ type: "info", message: "გამოწერა გაუქმდა." })
+      }
+    } catch (e) {
+      pushToast({
+        type: "error",
+        message: e instanceof Error ? e.message : "დაფიქსირდა შეცდომა.",
+      })
+    } finally {
+      setFollowBusy(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F8F9FC]">
@@ -414,16 +556,37 @@ export default function HirerPublicPage() {
         </Link>
 
         <header className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-wrap items-start gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex min-w-0 flex-1 flex-wrap items-start gap-4">
             <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#1B2B4B]/5 text-lg font-black text-[#1B2B4B]">
               {hirer.avatarUrl ? (
-                <img src={hirer.avatarUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+                <img
+                  src={avatarImageUrl(supabase, hirer.avatarUrl) ?? hirer.avatarUrl}
+                  alt=""
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                />
               ) : (
                 companyInitials(hirer.companyName)
               )}
             </span>
             <div className="min-w-0 flex-1">
               <h1 className="text-2xl font-extrabold text-[#1B2B4B]">{hirer.companyName}</h1>
+              {hirer.ownerUserId ? (
+                <FollowStatPills
+                  followerCount={followerCount}
+                  followingCount={followingCount}
+                  className="mt-2"
+                  onOpenFollowers={() => {
+                    setFollowListsModalTab("followers")
+                    setFollowListsModalOpen(true)
+                  }}
+                  onOpenFollowing={() => {
+                    setFollowListsModalTab("following")
+                    setFollowListsModalOpen(true)
+                  }}
+                />
+              ) : null}
               <p className="mt-1 text-sm font-semibold text-slate-600">
                 {[hirer.industry, hirer.city].filter(Boolean).join(" · ") || "Georgia"}
               </p>
@@ -449,6 +612,29 @@ export default function HirerPublicPage() {
                 </a>
               ) : null}
             </div>
+            </div>
+            {hirer.ownerUserId && !viewerOwnsHirer && followButtonMode !== "hidden" ? (
+              <div className="w-full shrink-0 sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => void handleHirerFollowToggle()}
+                  disabled={followBusy || followButtonMode === "loading"}
+                  className={`h-11 w-full rounded-lg border px-5 text-sm font-semibold transition sm:w-auto disabled:pointer-events-none disabled:opacity-60 ${
+                    followButtonMode === "unfollow"
+                      ? "border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                      : "border-[#1B2B4B] bg-[#1B2B4B] text-white hover:bg-[#D4A843] hover:text-[#1B2B4B]"
+                  }`}
+                >
+                  {followBusy
+                    ? "მიმდინარეობს..."
+                    : followButtonMode === "loading"
+                      ? "იტვირთება…"
+                      : followButtonMode === "unfollow"
+                        ? "გამოწერილი"
+                        : "გამოწერა"}
+                </button>
+              </div>
+            ) : null}
           </div>
           <dl className="mt-6 grid gap-4 border-t border-slate-100 pt-6 text-sm sm:grid-cols-2">
             <div>
@@ -521,20 +707,41 @@ export default function HirerPublicPage() {
             </p>
           ) : (
             <ul className="space-y-3">
-              {openJobs.map((job) => (
-                <li key={job.id}>
-                  <Link
-                    to={`/job/${job.id}`}
-                    className="block min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-[#D4A843]/70"
-                  >
-                    <p className="break-words font-bold text-[#1B2B4B] [overflow-wrap:anywhere]">{job.title}</p>
-                    <p className="mt-1 text-sm text-slate-600">{formatBudget(job)}</p>
-                  </Link>
-                </li>
-              ))}
+              {openJobs.map((job) => {
+                const vac = jobVacancyStats(job.vacancies, job.acceptedCount)
+                return (
+                  <li key={job.id}>
+                    <Link
+                      to={`/job/${job.id}`}
+                      className="block min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-[#D4A843]/70"
+                    >
+                      <p className="break-words font-bold text-[#1B2B4B] [overflow-wrap:anywhere]">{job.title}</p>
+                      <p className="mt-1 text-sm text-slate-600">{formatBudget(job)}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {vac.isFull ? (
+                          <span className="font-semibold text-amber-800">დაკომლექტებული</span>
+                        ) : (
+                          <>
+                            {vac.remaining} თავისუფალი ადგილი · {vac.acceptedCount}/{vac.vacancies} შევსებული
+                          </>
+                        )}
+                      </p>
+                    </Link>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </section>
+
+        {hirer.ownerUserId ? (
+          <FollowListsModal
+            open={followListsModalOpen}
+            onClose={() => setFollowListsModalOpen(false)}
+            profileId={hirer.ownerUserId}
+            initialTab={followListsModalTab}
+          />
+        ) : null}
       </main>
     </div>
   )

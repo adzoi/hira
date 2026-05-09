@@ -1,16 +1,20 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
+import FollowListsModal, { FollowStatPills, type FollowModalTab } from "../components/FollowListsModal.tsx"
 import Navbar from "../components/Navbar"
+import VIPUpgrade from "../components/VIPUpgrade"
+import { countFollowers, countFollowing } from "../lib/follows.ts"
+import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { countFreelancerProfileVisits } from "../lib/profileVisits"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import type { Database } from "../lib/database.types"
+import { jobVacancyStats } from "../lib/jobVacancies.ts"
 
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"]
 type FreelancerProfileRow = Database["public"]["Tables"]["freelancer_profiles"]["Row"]
 type HirerProfileRow = Database["public"]["Tables"]["hirer_profiles"]["Row"]
 type JobRow = Database["public"]["Tables"]["jobs"]["Row"]
-type CategoryRow = Database["public"]["Tables"]["categories"]["Row"]
 type JobApplicationRow = Database["public"]["Tables"]["job_applications"]["Row"]
 
 type ServiceDraft = {
@@ -80,6 +84,9 @@ type DashboardFreelancerInquiry = {
   completedAt: string | null
   listingTitle: string
   hirerLabel: string
+  hirerProfileId: string | null
+  hirerUserId: string | null
+  serviceId: string | null
 }
 
 type DashboardHirerInquiry = {
@@ -92,7 +99,26 @@ type DashboardHirerInquiry = {
   listingTitle: string
   freelancerName: string
   freelancerSlug: string | null
+  freelancerUserId: string | null
 }
+
+type FreelancerPendingJobOffer = {
+  applicationId: string
+  jobId: string
+  jobTitle: string
+  hirerLabel: string
+  createdAt: string
+  status: string
+}
+
+type FreelancerJobOfferStatusTab = "all" | "pending" | "accepted" | "rejected"
+type FreelancerJobOfferTimeRange = "7d" | "30d" | "all"
+type FreelancerListingOfferStatusTab = "all" | "pending" | "accepted" | "rejected"
+type FreelancerListingOfferTimeRange = "7d" | "30d" | "all"
+type HirerListingOfferStatusTab = "all" | "pending" | "accepted" | "rejected"
+type HirerListingOfferTimeRange = "7d" | "30d" | "all"
+type HirerApplicantStatusTab = "pending" | "accepted" | "rejected"
+type HirerApplicantTimeRange = "7d" | "30d" | "all"
 
 function mapServiceInquiryRowsForFreelancer(rows: unknown[] | null | undefined): DashboardFreelancerInquiry[] {
   if (!rows?.length) return []
@@ -112,6 +138,9 @@ function mapServiceInquiryRowsForFreelancer(rows: unknown[] | null | undefined):
         typeof hp?.company_name === "string" && String(hp.company_name).trim()
           ? String(hp.company_name).trim()
           : "დამქირავებელი",
+      hirerProfileId: typeof hp?.id === "string" && hp.id.trim() ? hp.id : null,
+      hirerUserId: typeof hp?.user_id === "string" && hp.user_id.trim() ? hp.user_id : null,
+      serviceId: typeof svc?.id === "string" && svc.id.trim() ? svc.id : null,
     })
   }
   return out
@@ -138,6 +167,7 @@ function mapServiceInquiryRowsForHirer(rows: unknown[] | null | undefined): Dash
       listingTitle: typeof svc?.title === "string" && svc.title.trim() ? svc.title : "ლისტინგი",
       freelancerName: name,
       freelancerSlug: typeof fp?.slug === "string" ? fp.slug : null,
+      freelancerUserId: typeof fp?.user_id === "string" && fp.user_id.trim() ? fp.user_id : null,
     })
   }
   return out
@@ -155,6 +185,10 @@ function listingInquiryStatusLabel(status: string) {
       return "მიმდინარე"
     case "completed":
       return "დასრულებული"
+    case "freelancer_done":
+      return "ფრილანსერმა დაასრულა"
+    case "hirer_done":
+      return "დამქირავებელმა დაასრულა"
     case "cancelled":
       return "გაუქმებული"
     default:
@@ -192,6 +226,8 @@ function statusLabel(status: string) {
       return "ღია"
     case "in_progress":
       return "მიმდინარე"
+    case "closed":
+      return "დახურული"
     case "completed":
       return "დასრულებული"
     case "cancelled":
@@ -207,13 +243,80 @@ function statusLabel(status: string) {
   }
 }
 
+function freelancerJobOfferStatusLabel(status: string) {
+  switch (status) {
+    case "pending":
+      return "მოლოდინში"
+    case "accepted":
+    case "completed":
+      return "დადასტურებული"
+    case "rejected":
+      return "უარყოფილი"
+    default:
+      return statusLabel(status)
+  }
+}
+
+function withinFreelancerJobOfferRange(createdAt: string, range: FreelancerJobOfferTimeRange) {
+  if (range === "all") return true
+  const createdMs = Date.parse(createdAt)
+  if (!Number.isFinite(createdMs)) return false
+  const dayMs = 24 * 60 * 60 * 1000
+  const maxAgeMs = range === "7d" ? 7 * dayMs : 30 * dayMs
+  return Date.now() - createdMs <= maxAgeMs
+}
+
+function withinFreelancerListingOfferRange(createdAt: string, range: FreelancerListingOfferTimeRange) {
+  if (range === "all") return true
+  const createdMs = Date.parse(createdAt)
+  if (!Number.isFinite(createdMs)) return false
+  const dayMs = 24 * 60 * 60 * 1000
+  const maxAgeMs = range === "7d" ? 7 * dayMs : 30 * dayMs
+  return Date.now() - createdMs <= maxAgeMs
+}
+
+function isFreelancerListingOfferAcceptedStatus(status: string) {
+  return ["accepted", "in_progress", "freelancer_done", "hirer_done", "completed"].includes(status)
+}
+
+function withinHirerListingOfferRange(createdAt: string, range: HirerListingOfferTimeRange) {
+  if (range === "all") return true
+  const createdMs = Date.parse(createdAt)
+  if (!Number.isFinite(createdMs)) return false
+  const dayMs = 24 * 60 * 60 * 1000
+  const maxAgeMs = range === "7d" ? 7 * dayMs : 30 * dayMs
+  return Date.now() - createdMs <= maxAgeMs
+}
+
+function withinHirerApplicantRange(createdAt: string, range: HirerApplicantTimeRange) {
+  if (range === "all") return true
+  const createdMs = Date.parse(createdAt)
+  if (!Number.isFinite(createdMs)) return false
+  const dayMs = 24 * 60 * 60 * 1000
+  const maxAgeMs = range === "7d" ? 7 * dayMs : 30 * dayMs
+  return Date.now() - createdMs <= maxAgeMs
+}
+
+function isHirerListingOfferAcceptedStatus(status: string) {
+  return ["accepted", "in_progress", "freelancer_done", "hirer_done", "completed"].includes(status)
+}
+
+function isHirerApplicantAcceptedStatus(status: string) {
+  return ["accepted", "completed"].includes(status)
+}
+
+/** Accepted hire can proceed while job listing is still open (multi-slot), closed after fill, or legacy in-progress. */
+function hirerAcceptedApplicantShowsJobActions(jobStatus: string) {
+  return ["in_progress", "open", "closed"].includes(jobStatus)
+}
+
 function stripListingMeta(raw: string) {
   const prefix = "<!--gigori-meta:"
   const suffix = "-->"
-  if (!raw.startsWith(prefix)) return raw
+  if (!raw.startsWith(prefix)) return stripLegacyPricePrefix(raw)
   const endIndex = raw.indexOf(suffix)
-  if (endIndex < 0) return raw
-  return raw.slice(endIndex + suffix.length).trimStart()
+  if (endIndex < 0) return stripLegacyPricePrefix(raw)
+  return stripLegacyPricePrefix(raw.slice(endIndex + suffix.length))
 }
 
 async function fetchHirerDashboardSection(
@@ -316,6 +419,47 @@ function embedJoinOne<T extends Record<string, unknown>>(v: T | T[] | null | und
   return Array.isArray(v) ? (v[0] as T | undefined) ?? null : v
 }
 
+type FreelancerCompletedPlatformJob = {
+  completedJobId: string
+  jobDescription: string
+  hirerDisplayName: string
+  hirerAvatarUrl: string | null
+}
+
+function mapFreelancerCompletedPlatformJobRows(rows: unknown[] | null | undefined): FreelancerCompletedPlatformJob[] {
+  if (!rows?.length) return []
+  const out: FreelancerCompletedPlatformJob[] = []
+  for (const raw of rows as Array<Record<string, unknown>>) {
+    const job = embedJoinOne(raw.jobs as Record<string, unknown> | Record<string, unknown>[] | null)
+    const hp = embedJoinOne(raw.hirer_profiles as Record<string, unknown> | Record<string, unknown>[] | null)
+    const completedAt = raw.completed_at != null ? String(raw.completed_at) : ""
+    if (!completedAt) continue
+    const completedJobId = typeof raw.id === "string" ? raw.id : ""
+    if (!completedJobId) continue
+
+    const descRaw = job?.description != null ? String(job.description) : ""
+    const titleFallback = typeof job?.title === "string" && job.title.trim() ? job.title.trim() : ""
+    const jobDescription = descRaw.trim() || titleFallback || "აღწერა არ არის."
+
+    const profiles = hp ? embedJoinOne(hp.profiles as Record<string, unknown> | Record<string, unknown>[] | null) : null
+    const company = typeof hp?.company_name === "string" ? hp.company_name.trim() : ""
+    const profileName = typeof profiles?.full_name === "string" ? String(profiles.full_name).trim() : ""
+    const hirerDisplayName = company || profileName || "დამქირავებელი"
+    const hirerAvatarUrl =
+      profiles?.avatar_url != null && String(profiles.avatar_url).trim()
+        ? String(profiles.avatar_url).trim()
+        : null
+
+    out.push({
+      completedJobId,
+      jobDescription,
+      hirerDisplayName,
+      hirerAvatarUrl,
+    })
+  }
+  return out
+}
+
 async function loadFreelancerHirerReviewQueue(
   client: SupabaseClient,
   freelancerProfileId: string,
@@ -383,8 +527,6 @@ export default function DashboardPage() {
   const [freelancerProfile, setFreelancerProfile] = useState<FreelancerProfileRow | null>(null)
   const [hirerProfile, setHirerProfile] = useState<HirerProfileRow | null>(null)
   const [hirerCompletedJobsCount, setHirerCompletedJobsCount] = useState(0)
-  const [openJobs, setOpenJobs] = useState<JobRow[]>([])
-  const [categoriesById, setCategoriesById] = useState<Record<string, string>>({})
   const [myJobs, setMyJobs] = useState<JobRow[]>([])
   const [jobApplicationsByJobId, setJobApplicationsByJobId] = useState<Record<string, number>>({})
   const [hirerApplications, setHirerApplications] = useState<HirerApplicationRow[]>([])
@@ -402,6 +544,9 @@ export default function DashboardPage() {
   const [servicesSaving, setServicesSaving] = useState(false)
   const [servicesError, setServicesError] = useState("")
   const [servicesSuccess, setServicesSuccess] = useState("")
+  const [vipOpen, setVipOpen] = useState(false)
+  const [vipListingId, setVipListingId] = useState<string | null>(null)
+  const [vipListingTitle, setVipListingTitle] = useState("ჩემი სერვისი")
   const [initialServicesSnapshot, setInitialServicesSnapshot] = useState("[]")
   /** Distinct logged-in hirers who visited this freelancer profile (via RPC). */
   const [hirerProfileViewerCount, setHirerProfileViewerCount] = useState(0)
@@ -413,13 +558,96 @@ export default function DashboardPage() {
   const [freelancerHirerReviewModal, setFreelancerHirerReviewModal] = useState<FreelancerHirerReviewRow | null>(null)
   const [freelancerHirerReviewSubmitting, setFreelancerHirerReviewSubmitting] = useState(false)
   const [freelancerHirerReviewError, setFreelancerHirerReviewError] = useState("")
+  const [freelancerListingCompleteModal, setFreelancerListingCompleteModal] = useState<DashboardFreelancerInquiry | null>(null)
+  const [freelancerListingReviewStars, setFreelancerListingReviewStars] = useState(5)
+  const [freelancerListingReviewComment, setFreelancerListingReviewComment] = useState("")
+  const [freelancerListingReviewSubmitting, setFreelancerListingReviewSubmitting] = useState(false)
+  const [freelancerListingReviewError, setFreelancerListingReviewError] = useState("")
   const [freelancerListingInquiries, setFreelancerListingInquiries] = useState<DashboardFreelancerInquiry[]>([])
+  const [freelancerCompletedPlatformJobs, setFreelancerCompletedPlatformJobs] = useState<FreelancerCompletedPlatformJob[]>(
+    [],
+  )
+  const [freelancerPendingJobOffers, setFreelancerPendingJobOffers] = useState<FreelancerPendingJobOffer[]>([])
+  const [freelancerJobOfferStatusTab, setFreelancerJobOfferStatusTab] = useState<FreelancerJobOfferStatusTab>("all")
+  const [freelancerJobOfferTimeRange, setFreelancerJobOfferTimeRange] = useState<FreelancerJobOfferTimeRange>("7d")
+  const [freelancerListingOfferStatusTab, setFreelancerListingOfferStatusTab] =
+    useState<FreelancerListingOfferStatusTab>("pending")
+  const [freelancerListingOfferTimeRange, setFreelancerListingOfferTimeRange] =
+    useState<FreelancerListingOfferTimeRange>("7d")
+  const [freelancerDashboardTab, setFreelancerDashboardTab] = useState<
+    "listing_offers" | "job_offers" | "my_services" | "ongoing" | "completed"
+  >("listing_offers")
   const [hirerListingInquiries, setHirerListingInquiries] = useState<DashboardHirerInquiry[]>([])
+  const [hirerListingOfferStatusTab, setHirerListingOfferStatusTab] = useState<HirerListingOfferStatusTab>("all")
+  const [hirerListingOfferTimeRange, setHirerListingOfferTimeRange] = useState<HirerListingOfferTimeRange>("7d")
+  const [hirerApplicantStatusTab, setHirerApplicantStatusTab] = useState<HirerApplicantStatusTab>("pending")
+  const [hirerApplicantTimeRange, setHirerApplicantTimeRange] = useState<HirerApplicantTimeRange>("7d")
+  const [hirerReviewedListingInquiryIds, setHirerReviewedListingInquiryIds] = useState<Record<string, true>>({})
+  const [hirerReviewedJobApplicationIds, setHirerReviewedJobApplicationIds] = useState<Record<string, true>>({})
+  const [hirerListingReviewModal, setHirerListingReviewModal] = useState<DashboardHirerInquiry | null>(null)
+  const [hirerListingReviewStars, setHirerListingReviewStars] = useState(5)
+  const [hirerListingReviewComment, setHirerListingReviewComment] = useState("")
+  const [hirerListingReviewSubmitting, setHirerListingReviewSubmitting] = useState(false)
+  const [hirerListingReviewError, setHirerListingReviewError] = useState("")
   const [listingInquiryBusyId, setListingInquiryBusyId] = useState<string | null>(null)
+  const [hirerDashboardTab, setHirerDashboardTab] = useState<
+    "applicants" | "my_jobs" | "listing_offers" | "ongoing" | "completed"
+  >(
+    "applicants",
+  )
+  const [dashFollowersCount, setDashFollowersCount] = useState(0)
+  const [dashFollowingCount, setDashFollowingCount] = useState(0)
+  const [followListsModalOpen, setFollowListsModalOpen] = useState(false)
+  const [followListsModalTab, setFollowListsModalTab] = useState<FollowModalTab>("followers")
+
+  const notifyUser = useCallback(
+    async (targetUserId: string | null | undefined, title: string, body: string, link: string, type = "status_update") => {
+      if (!supabase || !targetUserId) return
+      try {
+        await supabase.from("notifications").insert({
+          user_id: targetUserId,
+          title,
+          body,
+          link,
+          type,
+          is_read: false,
+          payload: {},
+        })
+      } catch {
+        /* non-blocking */
+      }
+    },
+    [supabase],
+  )
+  void hirerCompletedJobsCount
+  void freelancerCompletedJobsCount
+  void freelancerCompletedPlatformJobs
 
   useEffect(() => {
     document.title = "დაშბორდი — გიგორი"
   }, [])
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase || !profile?.id || loading) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const [n, nf] = await Promise.all([countFollowers(profile.id), countFollowing(profile.id)])
+        if (!cancelled) {
+          setDashFollowersCount(Number.isFinite(n) ? n : 0)
+          setDashFollowingCount(Number.isFinite(nf) ? nf : 0)
+        }
+      } catch {
+        if (!cancelled) {
+          setDashFollowersCount(0)
+          setDashFollowingCount(0)
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [profile?.id, loading])
 
   useEffect(() => {
     const state = location.state as { successMessage?: string } | null
@@ -520,8 +748,8 @@ export default function DashboardPage() {
                   proposed_budget,
                   status,
                   completed_at,
-                  services ( title ),
-                  hirer_profiles ( company_name )
+                  services ( id, title ),
+                  hirer_profiles ( id, company_name, user_id )
                 `,
                 )
                 .eq("freelancer_profile_id", freelancerData.id)
@@ -532,6 +760,75 @@ export default function DashboardPage() {
             } catch (inqErr) {
               if (import.meta.env.DEV) console.warn("[dashboard] service_inquiries load:", inqErr)
               setFreelancerListingInquiries([])
+            }
+
+            try {
+              const { data: pendingAppsRows, error: pendingAppsErr } = await supabase
+                .from("job_applications")
+                .select(
+                  `
+                  id,
+                  job_id,
+                  created_at,
+                  status,
+                  jobs (
+                    title,
+                    hirer_profiles (
+                      company_name,
+                      profiles:profiles!hirer_profiles_user_id_fkey ( full_name )
+                    )
+                  )
+                `,
+                )
+                .eq("freelancer_profile_id", freelancerData.id)
+                .order("created_at", { ascending: false })
+              if (pendingAppsErr) throw pendingAppsErr
+
+              const mappedOffers = ((pendingAppsRows ?? []) as Array<Record<string, unknown>>).map((row) => {
+                const job = embedJoinRow(row.jobs as Record<string, unknown> | Record<string, unknown>[] | null)
+                const hp = embedJoinRow(job?.hirer_profiles as Record<string, unknown> | Record<string, unknown>[] | null)
+                const hpProfile = embedJoinRow(hp?.profiles as Record<string, unknown> | Record<string, unknown>[] | null)
+                const companyName = typeof hp?.company_name === "string" ? hp.company_name.trim() : ""
+                const fullName = typeof hpProfile?.full_name === "string" ? hpProfile.full_name.trim() : ""
+                return {
+                  applicationId: String(row.id ?? ""),
+                  jobId: String(row.job_id ?? ""),
+                  createdAt: String(row.created_at ?? ""),
+                  jobTitle: typeof job?.title === "string" && job.title.trim() ? job.title : "განცხადება",
+                  hirerLabel: companyName || fullName || "დამქირავებელი",
+                  status: String(row.status ?? "pending"),
+                }
+              })
+              setFreelancerPendingJobOffers(mappedOffers.filter((item) => item.applicationId))
+            } catch (pendingAppsLoadErr) {
+              if (import.meta.env.DEV) console.warn("[dashboard] freelancer pending job offers:", pendingAppsLoadErr)
+              setFreelancerPendingJobOffers([])
+            }
+
+            try {
+              const { data: cjRows, error: cjRowsErr } = await supabase
+                .from("completed_jobs")
+                .select(
+                  `
+                  id,
+                  completed_at,
+                  job_id,
+                  jobs ( title, description ),
+                  hirer_profiles (
+                    company_name,
+                    profiles:profiles!hirer_profiles_user_id_fkey ( full_name, avatar_url )
+                  )
+                `,
+                )
+                .eq("freelancer_profile_id", freelancerData.id)
+                .not("completed_at", "is", null)
+                .order("completed_at", { ascending: false })
+                .limit(80)
+              if (cjRowsErr) throw cjRowsErr
+              setFreelancerCompletedPlatformJobs(mapFreelancerCompletedPlatformJobRows(cjRows as unknown[]))
+            } catch (cjListErr) {
+              if (import.meta.env.DEV) console.warn("[dashboard] completed_jobs list:", cjListErr)
+              setFreelancerCompletedPlatformJobs([])
             }
 
             const [{ data: hirerVisitorsRpc, error: hirerVisitorsRpcError }, totalVisits] = await Promise.all([
@@ -582,31 +879,11 @@ export default function DashboardPage() {
             setFreelancerCompletedJobsCount(0)
             setFreelancerHirerReviewQueue([])
             setFreelancerListingInquiries([])
+            setFreelancerCompletedPlatformJobs([])
+            setFreelancerPendingJobOffers([])
             setHirerProfileViewerCount(0)
             setOverallProfileVisitCount(0)
           }
-
-          const [{ data: openJobsData, error: openJobsError }, { data: categoriesData, error: categoriesError }] =
-            await Promise.all([
-              supabase
-                .from("jobs")
-                .select("*")
-                .eq("status", "open")
-                .order("created_at", { ascending: false })
-                .limit(5),
-              supabase.from("categories").select("id, name_ka"),
-            ])
-
-          if (openJobsError) throw new Error("ღია განცხადებები ვერ ჩაიტვირთა.")
-          if (categoriesError) throw new Error("კატეგორიები ვერ ჩაიტვირთა.")
-
-          setOpenJobs(openJobsData ?? [])
-          const categoryMap =
-            categoriesData?.reduce<Record<string, string>>((acc, category: Pick<CategoryRow, "id" | "name_ka">) => {
-              acc[category.id] = category.name_ka
-              return acc
-            }, {}) ?? {}
-          setCategoriesById(categoryMap)
         }
 
         if (profileData.user_type === "hirer") {
@@ -658,6 +935,7 @@ export default function DashboardPage() {
                   completed_at,
                   services ( title ),
                   freelancer_profiles (
+                    user_id,
                     slug,
                     profiles:profiles!freelancer_profiles_user_id_fkey ( full_name )
                   )
@@ -667,19 +945,42 @@ export default function DashboardPage() {
                 .order("created_at", { ascending: false })
                 .limit(40)
               if (hInqErr) throw hInqErr
-              setHirerListingInquiries(mapServiceInquiryRowsForHirer(hInqRows as unknown[]))
+              const mappedHirerInquiries = mapServiceInquiryRowsForHirer(hInqRows as unknown[])
+              setHirerListingInquiries(mappedHirerInquiries)
+              if (mappedHirerInquiries.length > 0) {
+                const inquiryIds = mappedHirerInquiries.map((item) => item.id)
+                const { data: myReviewsRows, error: myReviewsErr } = await supabase
+                  .from("reviews")
+                  .select("service_inquiry_id")
+                  .eq("reviewer_id", profileData.id)
+                  .in("service_inquiry_id", inquiryIds)
+                if (!myReviewsErr) {
+                  const reviewedMap = (myReviewsRows ?? []).reduce<Record<string, true>>((acc, row) => {
+                    const inquiryId = String(row.service_inquiry_id ?? "")
+                    if (inquiryId) acc[inquiryId] = true
+                    return acc
+                  }, {})
+                  setHirerReviewedListingInquiryIds(reviewedMap)
+                }
+              } else {
+                setHirerReviewedListingInquiryIds({})
+              }
             } catch (hInqLoadErr) {
               if (import.meta.env.DEV) console.warn("[dashboard] hirer service_inquiries:", hInqLoadErr)
               setHirerListingInquiries([])
+              setHirerReviewedListingInquiryIds({})
             }
 
             const { myJobs, applications, counts } = await fetchHirerDashboardSection(supabase, hirerData.id)
             setMyJobs(myJobs)
             setHirerApplications(applications)
             setJobApplicationsByJobId(counts)
+            await loadHirerApplicationReviewedFlags(applications)
           } else {
             setHirerCompletedJobsCount(0)
             setHirerListingInquiries([])
+            setHirerReviewedListingInquiryIds({})
+            setHirerReviewedJobApplicationIds({})
             setMyJobs([])
             setHirerApplications([])
             setJobApplicationsByJobId({})
@@ -700,6 +1001,138 @@ export default function DashboardPage() {
     () => myJobs.filter((job) => job.status === "open").length,
     [myJobs],
   )
+  const hirerOngoingListingInquiries = useMemo(
+    () =>
+      hirerListingInquiries.filter((q) =>
+        ["pending", "accepted", "in_progress", "freelancer_done", "hirer_done"].includes(q.status),
+      ),
+    [hirerListingInquiries],
+  )
+  const hirerCompletedListingInquiries = useMemo(
+    () => hirerListingInquiries.filter((q) => q.status === "completed"),
+    [hirerListingInquiries],
+  )
+  const hirerOngoingApplications = useMemo(
+    () => hirerApplications.filter((item) => item.status !== "completed" && item.jobStatus !== "completed"),
+    [hirerApplications],
+  )
+  const hirerCompletedApplications = useMemo(
+    () => hirerApplications.filter((item) => item.status === "completed" || item.jobStatus === "completed"),
+    [hirerApplications],
+  )
+  const hirerListingOffersInRange = useMemo(
+    () =>
+      hirerListingInquiries.filter((item) => withinHirerListingOfferRange(item.createdAt, hirerListingOfferTimeRange)),
+    [hirerListingInquiries, hirerListingOfferTimeRange],
+  )
+  const hirerListingOffersFiltered = useMemo(
+    () =>
+      hirerListingOffersInRange.filter((item) => {
+        if (hirerListingOfferStatusTab === "all") return true
+        if (hirerListingOfferStatusTab === "accepted") return isHirerListingOfferAcceptedStatus(item.status)
+        if (hirerListingOfferStatusTab === "rejected") return ["declined", "rejected", "cancelled"].includes(item.status)
+        return item.status === "pending"
+      }),
+    [hirerListingOfferStatusTab, hirerListingOffersInRange],
+  )
+  const hirerListingOfferCounts = useMemo(
+    () => ({
+      all: hirerListingOffersInRange.length,
+      pending: hirerListingOffersInRange.filter((item) => item.status === "pending").length,
+      accepted: hirerListingOffersInRange.filter((item) => isHirerListingOfferAcceptedStatus(item.status)).length,
+      rejected: hirerListingOffersInRange.filter((item) => ["declined", "rejected", "cancelled"].includes(item.status)).length,
+    }),
+    [hirerListingOffersInRange],
+  )
+  const hirerApplicantsInRange = useMemo(
+    () => hirerApplications.filter((item) => withinHirerApplicantRange(item.createdAt, hirerApplicantTimeRange)),
+    [hirerApplications, hirerApplicantTimeRange],
+  )
+  const hirerApplicantsFiltered = useMemo(
+    () =>
+      hirerApplicantsInRange.filter((item) => {
+        if (hirerApplicantStatusTab === "accepted") return isHirerApplicantAcceptedStatus(item.status)
+        if (hirerApplicantStatusTab === "rejected") return item.status === "rejected"
+        return item.status === "pending"
+      }),
+    [hirerApplicantStatusTab, hirerApplicantsInRange],
+  )
+  const hirerApplicantCounts = useMemo(
+    () => ({
+      pending: hirerApplicantsInRange.filter((item) => item.status === "pending").length,
+      accepted: hirerApplicantsInRange.filter((item) => isHirerApplicantAcceptedStatus(item.status)).length,
+      rejected: hirerApplicantsInRange.filter((item) => item.status === "rejected").length,
+    }),
+    [hirerApplicantsInRange],
+  )
+  const freelancerOngoingListingInquiries = useMemo(
+    () =>
+      freelancerListingInquiries.filter((q) =>
+        ["accepted", "in_progress", "freelancer_done", "hirer_done"].includes(q.status),
+      ),
+    [freelancerListingInquiries],
+  )
+  const freelancerCompletedListingInquiries = useMemo(
+    () => freelancerListingInquiries.filter((q) => q.status === "completed"),
+    [freelancerListingInquiries],
+  )
+  const freelancerListingOffersInRange = useMemo(
+    () =>
+      freelancerListingInquiries.filter((item) =>
+        withinFreelancerListingOfferRange(item.createdAt, freelancerListingOfferTimeRange),
+      ),
+    [freelancerListingInquiries, freelancerListingOfferTimeRange],
+  )
+  const freelancerListingOffersFiltered = useMemo(
+    () =>
+      freelancerListingOffersInRange.filter((item) => {
+        if (freelancerListingOfferStatusTab === "all") return true
+        if (freelancerListingOfferStatusTab === "accepted") return isFreelancerListingOfferAcceptedStatus(item.status)
+        if (freelancerListingOfferStatusTab === "rejected") return ["declined", "rejected", "cancelled"].includes(item.status)
+        return item.status === "pending"
+      }),
+    [freelancerListingOfferStatusTab, freelancerListingOffersInRange],
+  )
+  const freelancerListingOfferCounts = useMemo(
+    () => ({
+      pending: freelancerListingOffersInRange.filter((item) => item.status === "pending").length,
+      accepted: freelancerListingOffersInRange.filter((item) => isFreelancerListingOfferAcceptedStatus(item.status)).length,
+      rejected: freelancerListingOffersInRange.filter((item) => ["declined", "rejected", "cancelled"].includes(item.status)).length,
+    }),
+    [freelancerListingOffersInRange],
+  )
+  const freelancerOngoingJobOffers = useMemo(
+    () => freelancerPendingJobOffers.filter((offer) => ["accepted"].includes(offer.status)),
+    [freelancerPendingJobOffers],
+  )
+  const freelancerJobOffersInRange = useMemo(
+    () =>
+      freelancerPendingJobOffers.filter((offer) =>
+        withinFreelancerJobOfferRange(offer.createdAt, freelancerJobOfferTimeRange),
+      ),
+    [freelancerPendingJobOffers, freelancerJobOfferTimeRange],
+  )
+  const freelancerJobOffersFiltered = useMemo(
+    () =>
+      freelancerJobOffersInRange.filter((offer) => {
+        if (freelancerJobOfferStatusTab === "all") return true
+        if (freelancerJobOfferStatusTab === "accepted") return ["accepted", "completed"].includes(offer.status)
+        return offer.status === freelancerJobOfferStatusTab
+      }),
+    [freelancerJobOfferStatusTab, freelancerJobOffersInRange],
+  )
+  const freelancerJobOfferCounts = useMemo(
+    () => ({
+      all: freelancerJobOffersInRange.length,
+      pending: freelancerJobOffersInRange.filter((offer) => offer.status === "pending").length,
+      accepted: freelancerJobOffersInRange.filter((offer) => ["accepted", "completed"].includes(offer.status)).length,
+      rejected: freelancerJobOffersInRange.filter((offer) => offer.status === "rejected").length,
+    }),
+    [freelancerJobOffersInRange],
+  )
+  const reviewModalAlreadyReviewed = reviewModalItem
+    ? Boolean(hirerReviewedJobApplicationIds[reviewModalItem.applicationId])
+    : false
 
   const handleDeleteJob = async (jobId: string) => {
     if (!supabase || !hirerProfile?.id) return
@@ -741,15 +1174,72 @@ export default function DashboardPage() {
       setMyJobs(myJobs)
       setHirerApplications(applications)
       setJobApplicationsByJobId(counts)
+      await loadHirerApplicationReviewedFlags(applications)
     } catch {
       /* refetch failed silently */
     }
   }, [hirerProfile?.id, supabase])
 
+  const loadHirerApplicationReviewedFlags = useCallback(
+    async (applications: HirerApplicationRow[]) => {
+      if (!supabase || !profile?.id || applications.length === 0) {
+        setHirerReviewedJobApplicationIds({})
+        return
+      }
+      try {
+        const jobIds = Array.from(new Set(applications.map((item) => item.jobId).filter(Boolean)))
+        if (jobIds.length === 0) {
+          setHirerReviewedJobApplicationIds({})
+          return
+        }
+        const { data: completedRows, error: completedErr } = await supabase
+          .from("completed_jobs")
+          .select("id, job_id")
+          .in("job_id", jobIds)
+        if (completedErr || !completedRows || completedRows.length === 0) {
+          setHirerReviewedJobApplicationIds({})
+          return
+        }
+        const completedIds = completedRows.map((row) => row.id)
+        const { data: reviewRows, error: reviewErr } = await supabase
+          .from("reviews")
+          .select("completed_job_id")
+          .eq("reviewer_id", profile.id)
+          .in("completed_job_id", completedIds)
+        if (reviewErr || !reviewRows || reviewRows.length === 0) {
+          setHirerReviewedJobApplicationIds({})
+          return
+        }
+        const reviewedCompletedIds = new Set(
+          reviewRows.map((row) => String(row.completed_job_id ?? "")).filter(Boolean),
+        )
+        const reviewedJobIds = new Set(
+          completedRows
+            .filter((row) => reviewedCompletedIds.has(String(row.id ?? "")))
+            .map((row) => String(row.job_id ?? ""))
+            .filter(Boolean),
+        )
+        const reviewedAppMap = applications.reduce<Record<string, true>>((acc, item) => {
+          if (reviewedJobIds.has(item.jobId)) acc[item.applicationId] = true
+          return acc
+        }, {})
+        setHirerReviewedJobApplicationIds(reviewedAppMap)
+      } catch {
+        setHirerReviewedJobApplicationIds({})
+      }
+    },
+    [profile?.id, supabase],
+  )
+
   const reloadFreelancerListingInquiries = useCallback(async () => {
     if (!supabase || !freelancerProfile?.id) return
     try {
-      const [{ count: cjCount }, { count: listingDoneCount }, { data: inqRows, error: inqErr }] = await Promise.all([
+      const [
+        { count: cjCount },
+        { count: listingDoneCount },
+        { data: inqRows, error: inqErr },
+        { data: cjListRows, error: cjListErr },
+      ] = await Promise.all([
         supabase.from("completed_jobs").select("id", { count: "exact", head: true }).eq("freelancer_profile_id", freelancerProfile.id),
         supabase
           .from("service_inquiries")
@@ -766,16 +1256,37 @@ export default function DashboardPage() {
             proposed_budget,
             status,
             completed_at,
-            services ( title ),
-            hirer_profiles ( company_name )
+            services ( id, title ),
+            hirer_profiles ( id, company_name, user_id )
           `,
           )
           .eq("freelancer_profile_id", freelancerProfile.id)
           .order("created_at", { ascending: false })
           .limit(40),
+        supabase
+          .from("completed_jobs")
+          .select(
+            `
+            id,
+            completed_at,
+            job_id,
+            jobs ( title, description ),
+            hirer_profiles (
+              company_name,
+              profiles:profiles!hirer_profiles_user_id_fkey ( full_name, avatar_url )
+            )
+          `,
+          )
+          .eq("freelancer_profile_id", freelancerProfile.id)
+          .not("completed_at", "is", null)
+          .order("completed_at", { ascending: false })
+          .limit(80),
       ])
       if (!inqErr) {
         setFreelancerListingInquiries(mapServiceInquiryRowsForFreelancer(inqRows as unknown[]))
+      }
+      if (!cjListErr) {
+        setFreelancerCompletedPlatformJobs(mapFreelancerCompletedPlatformJobRows(cjListRows as unknown[]))
       }
       const jobDone =
         typeof cjCount === "number" ? cjCount : Number(freelancerProfile.completed_jobs_count ?? 0)
@@ -787,7 +1298,7 @@ export default function DashboardPage() {
   }, [freelancerProfile?.id, supabase])
 
   const reloadHirerListingInquiries = useCallback(async () => {
-    if (!supabase || !hirerProfile?.id) return
+    if (!supabase || !hirerProfile?.id || !profile?.id) return
     try {
       const [{ count: hCjCount }, { count: hListingDone }, { data: hInqRows, error: hInqErr }] = await Promise.all([
         supabase.from("completed_jobs").select("id", { count: "exact", head: true }).eq("hirer_profile_id", hirerProfile.id),
@@ -808,6 +1319,7 @@ export default function DashboardPage() {
             completed_at,
             services ( title ),
             freelancer_profiles (
+              user_id,
               slug,
               profiles:profiles!freelancer_profiles_user_id_fkey ( full_name )
             )
@@ -818,7 +1330,26 @@ export default function DashboardPage() {
           .limit(40),
       ])
       if (!hInqErr) {
-        setHirerListingInquiries(mapServiceInquiryRowsForHirer(hInqRows as unknown[]))
+        const mappedHirerInquiries = mapServiceInquiryRowsForHirer(hInqRows as unknown[])
+        setHirerListingInquiries(mappedHirerInquiries)
+        if (mappedHirerInquiries.length > 0) {
+          const inquiryIds = mappedHirerInquiries.map((item) => item.id)
+          const { data: myReviewsRows, error: myReviewsErr } = await supabase
+            .from("reviews")
+            .select("service_inquiry_id")
+            .eq("reviewer_id", profile.id)
+            .in("service_inquiry_id", inquiryIds)
+          if (!myReviewsErr) {
+            const reviewedMap = (myReviewsRows ?? []).reduce<Record<string, true>>((acc, row) => {
+              const inquiryId = String(row.service_inquiry_id ?? "")
+              if (inquiryId) acc[inquiryId] = true
+              return acc
+            }, {})
+            setHirerReviewedListingInquiryIds(reviewedMap)
+          }
+        } else {
+          setHirerReviewedListingInquiryIds({})
+        }
       }
       const hJobDone = typeof hCjCount === "number" ? hCjCount : Number(hirerProfile.completed_jobs_count ?? 0)
       const hListDone = typeof hListingDone === "number" ? hListingDone : 0
@@ -826,18 +1357,18 @@ export default function DashboardPage() {
     } catch {
       /* ignore */
     }
-  }, [hirerProfile?.id, supabase])
+  }, [hirerProfile?.id, profile?.id, supabase])
 
-  const patchFreelancerListingInquiry = async (inquiryId: string, nextStatus: "accepted" | "declined" | "in_progress" | "completed") => {
+  const patchFreelancerListingInquiry = async (inquiryId: string, nextStatus: "accepted" | "declined" | "in_progress") => {
     if (!supabase) return
+    if (nextStatus === "declined" && !window.confirm("ნამდვილად გსურს შეთავაზების უარყოფა?")) return
     setListingInquiryBusyId(inquiryId)
     try {
       const nowIso = new Date().toISOString()
-      const patch: Record<string, unknown> = { status: nextStatus, updated_at: nowIso }
-      if (nextStatus === "completed") {
-        patch.completed_at = nowIso
-      }
-      const { error } = await supabase.from("service_inquiries").update(patch).eq("id", inquiryId)
+      const { error } = await supabase
+        .from("service_inquiries")
+        .update({ status: nextStatus, updated_at: nowIso })
+        .eq("id", inquiryId)
       if (error) throw error
       await reloadFreelancerListingInquiries()
     } catch {
@@ -845,6 +1376,96 @@ export default function DashboardPage() {
     } finally {
       setListingInquiryBusyId(null)
     }
+  }
+
+  const openFreelancerListingCompleteModal = (item: DashboardFreelancerInquiry) => {
+    setFreelancerListingReviewError("")
+    setFreelancerListingReviewStars(5)
+    setFreelancerListingReviewComment("")
+    setFreelancerListingCompleteModal(item)
+  }
+
+  const submitFreelancerListingCompletion = async (withReview: boolean) => {
+    if (!supabase || !profile || !freelancerListingCompleteModal) return
+    const modal = freelancerListingCompleteModal
+    const nowIso = new Date().toISOString()
+    setFreelancerListingReviewSubmitting(true)
+    setFreelancerListingReviewError("")
+    setListingInquiryBusyId(modal.id)
+    try {
+      if (withReview) {
+        if (!modal.hirerUserId) throw new Error("დამქირავებლის პროფილი ვერ მოიძებნა.")
+        const comment = freelancerListingReviewComment.trim()
+        if (comment.length < 10) throw new Error("კომენტარი მინიმუმ 10 სიმბოლო უნდა იყოს.")
+        if (freelancerListingReviewStars < 1 || freelancerListingReviewStars > 5) {
+          throw new Error("აირჩიე შეფასება 1-დან 5 ვარსკვლაური.")
+        }
+        const { data: existingRev } = await supabase
+          .from("reviews")
+          .select("id")
+          .eq("service_inquiry_id", modal.id)
+          .eq("reviewer_id", profile.id)
+          .maybeSingle()
+        if (existingRev) throw new Error("ამ შეთავაზებაზე შეფასება უკვე გაქვს გაგზავნილი.")
+
+        const { error: reviewErr } = await supabase.from("reviews").insert({
+          service_inquiry_id: modal.id,
+          reviewer_id: profile.id,
+          reviewee_id: modal.hirerUserId,
+          rating_overall: freelancerListingReviewStars,
+          rating_quality: freelancerListingReviewStars,
+          rating_timeliness: freelancerListingReviewStars,
+          rating_communication: freelancerListingReviewStars,
+          review_text: comment,
+          created_at: nowIso,
+          updated_at: nowIso,
+        })
+        if (reviewErr) throw reviewErr
+      }
+
+      const nextStatus = "completed"
+      const { error } = await supabase
+        .from("service_inquiries")
+        .update({
+          status: nextStatus,
+          completed_at: nextStatus === "completed" ? nowIso : null,
+          updated_at: nowIso,
+        })
+        .eq("id", modal.id)
+      if (error) throw error
+
+      setFreelancerListingCompleteModal(null)
+      await notifyUser(
+        modal.hirerUserId,
+        nextStatus === "completed" ? "სამუშაო დასრულდა" : "ფრილანსერმა დაადასტურა დასრულება",
+        nextStatus === "completed"
+          ? `ლისტინგის „${modal.listingTitle}“ სამუშაო დასრულდა ორივე მხარის დადასტურებით.`
+          : `ფრილანსერმა მიუთითა, რომ ლისტინგის „${modal.listingTitle}“ სამუშაო დასრულებულია.`,
+        "/dashboard",
+        "listing_inquiry_status",
+      )
+      setSuccessMessage(
+        withReview
+          ? nextStatus === "completed"
+            ? "შეთავაზება დასრულდა და შეფასება გაიგზავნა."
+            : "შეფასება გაიგზავნა, დასრულება დაელოდება დამქირავებლის დადასტურებას."
+          : nextStatus === "completed"
+            ? "შეთავაზება დასრულდა."
+            : "დასრულება მონიშნულია — ელოდება დამქირავებლის დადასტურებას.",
+      )
+      await reloadFreelancerListingInquiries()
+    } catch (e) {
+      setFreelancerListingReviewError(formatSupabaseErr(e))
+    } finally {
+      setFreelancerListingReviewSubmitting(false)
+      setListingInquiryBusyId(null)
+    }
+  }
+
+  const closeFreelancerListingCompleteWithSkip = async () => {
+    if (!freelancerListingCompleteModal) return
+    if (!window.confirm("ნამდვილად გსურს დასრულება შეფასების გარეშე?")) return
+    await submitFreelancerListingCompletion(false)
   }
 
   const cancelHirerListingInquiry = async (inquiryId: string) => {
@@ -865,6 +1486,102 @@ export default function DashboardPage() {
     }
   }
 
+  const markHirerListingInquiryDone = async (item: DashboardHirerInquiry) => {
+    if (!supabase) return
+    setListingInquiryBusyId(item.id)
+    try {
+      const nowIso = new Date().toISOString()
+      const nextStatus = "completed"
+      const { error } = await supabase
+        .from("service_inquiries")
+        .update({
+          status: nextStatus,
+          completed_at: nextStatus === "completed" ? nowIso : null,
+          updated_at: nowIso,
+        })
+        .eq("id", item.id)
+      if (error) throw error
+      await notifyUser(
+        item.freelancerUserId,
+        nextStatus === "completed" ? "სამუშაო დასრულდა" : "დამქირავებელმა დაადასტურა დასრულება",
+        nextStatus === "completed"
+          ? `ლისტინგის „${item.listingTitle}“ სამუშაო დასრულდა ორივე მხარის დადასტურებით.`
+          : `დამქირავებელმა მიუთითა, რომ ლისტინგის „${item.listingTitle}“ სამუშაო დასრულებულია.`,
+        "/dashboard",
+        "listing_inquiry_status",
+      )
+      setSuccessMessage(
+        nextStatus === "completed"
+          ? "შეთავაზება დასრულდა."
+          : "დასრულება მონიშნულია — ელოდება ფრილანსერის დადასტურებას.",
+      )
+      await reloadHirerListingInquiries()
+    } catch {
+      /* ignore */
+    } finally {
+      setListingInquiryBusyId(null)
+    }
+  }
+
+  const openHirerListingReviewModal = (item: DashboardHirerInquiry) => {
+    setHirerListingReviewError("")
+    setHirerListingReviewStars(5)
+    setHirerListingReviewComment("")
+    setHirerListingReviewModal(item)
+  }
+
+  const submitHirerListingReview = async () => {
+    const modal = hirerListingReviewModal
+    if (!supabase || !profile || !modal) return
+    if (!modal.freelancerUserId) {
+      setHirerListingReviewError("ფრილანსერის პროფილი ვერ მოიძებნა.")
+      return
+    }
+    const comment = hirerListingReviewComment.trim()
+    if (comment.length < 10) {
+      setHirerListingReviewError("კომენტარი მინიმუმ 10 სიმბოლო უნდა იყოს.")
+      return
+    }
+    if (hirerListingReviewStars < 1 || hirerListingReviewStars > 5) {
+      setHirerListingReviewError("აირჩიე შეფასება 1-დან 5 ვარსკვლაური.")
+      return
+    }
+    setHirerListingReviewSubmitting(true)
+    setHirerListingReviewError("")
+    try {
+      const { data: existingRev } = await supabase
+        .from("reviews")
+        .select("id")
+        .eq("service_inquiry_id", modal.id)
+        .eq("reviewer_id", profile.id)
+        .maybeSingle()
+      if (existingRev) throw new Error("ამ შეთავაზებაზე შეფასება უკვე გაქვს გაგზავნილი.")
+
+      const nowIso = new Date().toISOString()
+      const { error: revErr } = await supabase.from("reviews").insert({
+        service_inquiry_id: modal.id,
+        reviewer_id: profile.id,
+        reviewee_id: modal.freelancerUserId,
+        rating_overall: hirerListingReviewStars,
+        rating_quality: hirerListingReviewStars,
+        rating_timeliness: hirerListingReviewStars,
+        rating_communication: hirerListingReviewStars,
+        review_text: comment,
+        created_at: nowIso,
+        updated_at: nowIso,
+      })
+      if (revErr) throw revErr
+
+      setHirerListingReviewModal(null)
+      setHirerReviewedListingInquiryIds((prev) => ({ ...prev, [modal.id]: true }))
+      setSuccessMessage("შეფასება გაიგზავნა.")
+    } catch (e) {
+      setHirerListingReviewError(formatSupabaseErr(e))
+    } finally {
+      setHirerListingReviewSubmitting(false)
+    }
+  }
+
   const acceptApplication = async (item: HirerApplicationRow) => {
     if (!supabase || !hirerProfile?.id) return
     setHirerActionError("")
@@ -872,19 +1589,62 @@ export default function DashboardPage() {
     try {
       const { error: e1 } = await supabase.from("job_applications").update({ status: "accepted" }).eq("id", item.applicationId)
       if (e1) throw e1
-      const { error: e2 } = await supabase
-        .from("job_applications")
-        .update({ status: "rejected" })
-        .eq("job_id", item.jobId)
-        .neq("id", item.applicationId)
-        .eq("status", "pending")
-      if (e2) throw e2
-      const { error: e3 } = await supabase
-        .from("jobs")
-        .update({ status: "in_progress" })
-        .eq("id", item.jobId)
-        .eq("hirer_profile_id", hirerProfile.id)
-      if (e3) throw e3
+
+      let incremented = false
+      let vacancyNowFull = false
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const { data: snapshot, error: selErr } = await supabase
+          .from("jobs")
+          .select("accepted_count,vacancies")
+          .eq("id", item.jobId)
+          .eq("hirer_profile_id", hirerProfile.id)
+          .maybeSingle()
+        if (selErr) throw selErr
+        if (!snapshot) throw new Error("სამუშაო ვერ მოიძებნა.")
+
+        const prev = Number(snapshot.accepted_count ?? 0)
+        const vac = Math.max(1, Number(snapshot.vacancies ?? 1))
+        const next = prev + 1
+        vacancyNowFull = next >= vac
+
+        const updatePayload: { accepted_count: number; status?: string } = { accepted_count: next }
+        if (vacancyNowFull) updatePayload.status = "closed"
+
+        const { data: updatedRows, error: updErr } = await supabase
+          .from("jobs")
+          .update(updatePayload)
+          .eq("id", item.jobId)
+          .eq("hirer_profile_id", hirerProfile.id)
+          .eq("accepted_count", prev)
+          .select("id")
+        if (updErr) throw updErr
+        if ((updatedRows?.length ?? 0) > 0) {
+          incremented = true
+          break
+        }
+      }
+
+      if (!incremented) {
+        throw new Error("განახლება ვერ დასრულდა — განაახლე გვერდი და სცადე თავიდან.")
+      }
+
+      if (vacancyNowFull) {
+        const { error: e2 } = await supabase
+          .from("job_applications")
+          .update({ status: "rejected" })
+          .eq("job_id", item.jobId)
+          .neq("id", item.applicationId)
+          .eq("status", "pending")
+        if (e2) throw e2
+      }
+
+      await notifyUser(
+        item.freelancerUserId,
+        "განცხადება მიღებულია",
+        `დამქირავებელმა მიიღო შენი განცხადება სამუშაოზე „${item.jobTitle}“.`,
+        "/dashboard",
+        "job_application_status",
+      )
       await reloadHirerSection()
     } catch (e) {
       setHirerActionError(e instanceof Error ? e.message : "შეცდომა მოხდა.")
@@ -901,6 +1661,13 @@ export default function DashboardPage() {
     try {
       const { error } = await supabase.from("job_applications").update({ status: "rejected" }).eq("id", item.applicationId)
       if (error) throw error
+      await notifyUser(
+        item.freelancerUserId,
+        "განცხადება უარყოფილია",
+        `დამქირავებელმა უარყო განცხადება სამუშაოზე „${item.jobTitle}“.`,
+        "/dashboard",
+        "job_application_status",
+      )
       await reloadHirerSection()
     } catch (e) {
       setHirerActionError(e instanceof Error ? e.message : "შეცდომა მოხდა.")
@@ -916,18 +1683,9 @@ export default function DashboardPage() {
     setReviewModalItem(item)
   }
 
-  const submitCompleteReview = async () => {
+  const submitCompleteReview = async (withReview: boolean) => {
     if (!supabase || !hirerProfile || !profile || !reviewModalItem) return
-    const comment = reviewComment.trim()
-    if (comment.length < 10) {
-      setReviewError("კომენტარი მინიმუმ 10 სიმბოლო უნდა იყოს.")
-      return
-    }
-    if (reviewStars < 1 || reviewStars > 5) {
-      setReviewError("აირჩიე შეფასება 1-დან 5 ვარსკვლაური.")
-      return
-    }
-    if (!reviewModalItem.freelancerUserId) {
+    if (withReview && !reviewModalItem.freelancerUserId) {
       setReviewError("ფრილანსერის პროფილი ვერ მოიძებნა.")
       return
     }
@@ -975,29 +1733,38 @@ export default function DashboardPage() {
 
       if (!completedJobId) throw new Error("დასრულების ჩანაწერი ვერ შეიქმნა.")
 
-      const { data: existingRev } = await supabase
-        .from("reviews")
-        .select("id")
-        .eq("completed_job_id", completedJobId)
-        .eq("reviewer_id", profile.id)
-        .maybeSingle()
-      if (existingRev) {
-        throw new Error("ამ სამუშაოზე შეფასება უკვე გაქვს გაგზავნილი.")
-      }
+      if (withReview) {
+        const comment = reviewComment.trim()
+        if (comment.length < 10) {
+          throw new Error("კომენტარი მინიმუმ 10 სიმბოლო უნდა იყოს.")
+        }
+        if (reviewStars < 1 || reviewStars > 5) {
+          throw new Error("აირჩიე შეფასება 1-დან 5 ვარსკვლაური.")
+        }
+        const { data: existingRev } = await supabase
+          .from("reviews")
+          .select("id")
+          .eq("completed_job_id", completedJobId)
+          .eq("reviewer_id", profile.id)
+          .maybeSingle()
+        if (existingRev) {
+          throw new Error("ამ სამუშაოზე შეფასება უკვე გაქვს გაგზავნილი.")
+        }
 
-      const { error: revErr } = await supabase.from("reviews").insert({
-        completed_job_id: completedJobId,
-        reviewer_id: profile.id,
-        reviewee_id: reviewModalItem.freelancerUserId,
-        rating_overall: reviewStars,
-        rating_quality: reviewStars,
-        rating_timeliness: reviewStars,
-        rating_communication: reviewStars,
-        review_text: comment,
-        created_at: nowIso,
-        updated_at: nowIso,
-      })
-      if (revErr) throw revErr
+        const { error: revErr } = await supabase.from("reviews").insert({
+          completed_job_id: completedJobId,
+          reviewer_id: profile.id,
+          reviewee_id: reviewModalItem.freelancerUserId,
+          rating_overall: reviewStars,
+          rating_quality: reviewStars,
+          rating_timeliness: reviewStars,
+          rating_communication: reviewStars,
+          review_text: comment,
+          created_at: nowIso,
+          updated_at: nowIso,
+        })
+        if (revErr) throw revErr
+      }
 
       const { error: jobErr } = await supabase
         .from("jobs")
@@ -1013,7 +1780,13 @@ export default function DashboardPage() {
       if (appErr) throw appErr
 
       setReviewModalItem(null)
-      setSuccessMessage("სამუშაო დასრულდა და შეფასება გაიგზავნა.")
+      setSuccessMessage(withReview ? "სამუშაო დასრულდა და შეფასება გაიგზავნა." : "სამუშაო დასრულდა.")
+      if (withReview) {
+        setHirerReviewedJobApplicationIds((prev) => ({
+          ...prev,
+          [reviewModalItem.applicationId]: true,
+        }))
+      }
       await reloadHirerSection()
       const { count: afterCount } = await supabase
         .from("completed_jobs")
@@ -1025,6 +1798,12 @@ export default function DashboardPage() {
     } finally {
       setReviewSubmitting(false)
     }
+  }
+
+  const closeHirerCompleteModalWithSkip = async () => {
+    if (!reviewModalItem) return
+    if (!window.confirm("ნამდვილად გსურს დასრულება შეფასების გარეშე?")) return
+    await submitCompleteReview(false)
   }
 
   const openFreelancerHirerReviewModal = (item: FreelancerHirerReviewRow) => {
@@ -1260,6 +2039,19 @@ export default function DashboardPage() {
               <h2 className="text-2xl font-bold text-[#1B2B4B]">
                 გამარჯობა, {profile.full_name || "ფრილანსერო"}!
               </h2>
+              <FollowStatPills
+                followerCount={dashFollowersCount}
+                followingCount={dashFollowingCount}
+                className="mt-3"
+                onOpenFollowers={() => {
+                  setFollowListsModalTab("followers")
+                  setFollowListsModalOpen(true)
+                }}
+                onOpenFollowing={() => {
+                  setFollowListsModalTab("following")
+                  setFollowListsModalOpen(true)
+                }}
+              />
             </div>
 
             {!freelancerProfile?.is_profile_complete ? (
@@ -1277,7 +2069,7 @@ export default function DashboardPage() {
               </div>
             ) : null}
 
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
               <div className="rounded-xl border border-slate-200 bg-white p-5">
                 <p className="text-sm text-slate-500">საშუალო რეიტინგი</p>
                 <p className="mt-2 text-2xl font-bold text-[#1B2B4B]">
@@ -1289,10 +2081,6 @@ export default function DashboardPage() {
                 <p className="mt-2 text-2xl font-bold text-[#1B2B4B]">
                   {freelancerProfile?.total_reviews_count ?? 0}
                 </p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-5">
-                <p className="text-sm text-slate-500">დასრულებული სამუშაოები</p>
-                <p className="mt-2 text-2xl font-bold text-[#1B2B4B]">{freelancerCompletedJobsCount}</p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-5">
                 <p className="text-sm text-slate-500">დამქირავებლები (ნახვები)</p>
@@ -1333,16 +2121,132 @@ export default function DashboardPage() {
               </div>
             ) : null}
 
-            <div className="rounded-xl border border-slate-200 bg-white p-6">
+            <div className="rounded-xl border border-slate-200 bg-white p-3 sm:p-4">
+              <div className="flex flex-nowrap gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <button
+                  type="button"
+                  onClick={() => setFreelancerDashboardTab("listing_offers")}
+                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                    freelancerDashboardTab === "listing_offers"
+                      ? "bg-[#1B2B4B] text-white"
+                      : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                  }`}
+                >
+                  შეთავაზებები ლისტინგებზე
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFreelancerDashboardTab("job_offers")}
+                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                    freelancerDashboardTab === "job_offers"
+                      ? "bg-[#1B2B4B] text-white"
+                      : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                  }`}
+                >
+                  გაგზავნილი შეთავაზებები
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFreelancerDashboardTab("my_services")}
+                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                    freelancerDashboardTab === "my_services"
+                      ? "bg-[#1B2B4B] text-white"
+                      : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                  }`}
+                >
+                  ჩემი სერვისები
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFreelancerDashboardTab("ongoing")}
+                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                    freelancerDashboardTab === "ongoing"
+                      ? "bg-[#1B2B4B] text-white"
+                      : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                  }`}
+                >
+                  მიმდინარე სამუშაოები
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFreelancerDashboardTab("completed")}
+                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                    freelancerDashboardTab === "completed"
+                      ? "bg-[#1B2B4B] text-white"
+                      : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                  }`}
+                >
+                  დასრულებული სამუშაოები
+                </button>
+              </div>
+            </div>
+
+            {freelancerDashboardTab === "listing_offers" ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-6">
               <h3 className="text-xl font-bold text-[#1B2B4B]">შეთავაზებები ლისტინგებზე</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                დამქირავებლის პირდაპირი მოთხოვნა შენს სერვისზე (ლისტინგიდან). დასრულება ფიქსირდება სტატუსით „დასრულებული“ — ცალკე განცხადება არ სჭირდება.
-              </p>
-              {freelancerListingInquiries.length === 0 ? (
-                <p className="mt-4 text-sm text-slate-500">ჯერ შეთავაზებები არ გაქვს.</p>
-              ) : (
-                <ul className="mt-4 space-y-3">
-                  {freelancerListingInquiries.map((q) => (
+              <p className="mt-1 text-sm text-slate-500">დამქირავებლის პირდაპირი მოთხოვნა შენს სერვისზე.</p>
+              {freelancerListingInquiries.length === 0 ? <p className="mt-4 text-sm text-slate-500">ჯერ შეთავაზებები არ გაქვს.</p> : null}
+
+              {freelancerListingInquiries.length > 0 ? (
+                <div className="mt-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFreelancerListingOfferTimeRange("7d")}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                        freelancerListingOfferTimeRange === "7d"
+                          ? "bg-[#1B2B4B] text-white"
+                          : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                      }`}
+                    >
+                      1 კვირა
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFreelancerListingOfferTimeRange("30d")}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                        freelancerListingOfferTimeRange === "30d"
+                          ? "bg-[#1B2B4B] text-white"
+                          : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                      }`}
+                    >
+                      30 დღე
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFreelancerListingOfferTimeRange("all")}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                        freelancerListingOfferTimeRange === "all"
+                          ? "bg-[#1B2B4B] text-white"
+                          : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                      }`}
+                    >
+                      ყველა დრო
+                    </button>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {([
+                      ["pending", "მოლოდინში", freelancerListingOfferCounts.pending],
+                      ["accepted", "დადასტურებული", freelancerListingOfferCounts.accepted],
+                      ["rejected", "უარყოფილი", freelancerListingOfferCounts.rejected],
+                    ] as const).map(([statusKey, label, count]) => (
+                      <button
+                        key={statusKey}
+                        type="button"
+                        onClick={() => setFreelancerListingOfferStatusTab(statusKey)}
+                        className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                          freelancerListingOfferStatusTab === statusKey
+                            ? "bg-[#1B2B4B] text-white"
+                            : "border border-slate-300 bg-white text-slate-700 hover:border-[#D4A843]"
+                        }`}
+                      >
+                        {label} ({count})
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">შეთავაზებები</p>
+                  <ul className="mt-2 space-y-3">
+                    {freelancerListingOffersFiltered.map((q) => (
                     <li key={q.id} className="rounded-lg border border-slate-200 p-4">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="min-w-0">
@@ -1353,6 +2257,14 @@ export default function DashboardPage() {
                           </p>
                           {q.proposedBudget != null ? (
                             <p className="mt-1 text-sm text-slate-700">შემოთავაზებული: {q.proposedBudget.toLocaleString("ka-GE")} ₾</p>
+                          ) : null}
+                          {q.hirerProfileId ? (
+                            <Link
+                              to={`/hirer/${encodeURIComponent(q.hirerProfileId)}`}
+                              className="mt-1 inline-block text-xs font-semibold text-[#D4A843] hover:underline"
+                            >
+                              დამქირავებლის პროფილი →
+                            </Link>
                           ) : null}
                         </div>
                       </div>
@@ -1392,7 +2304,7 @@ export default function DashboardPage() {
                           <button
                             type="button"
                             disabled={listingInquiryBusyId === q.id}
-                            onClick={() => void patchFreelancerListingInquiry(q.id, "completed")}
+                            onClick={() => openFreelancerListingCompleteModal(q)}
                             className="rounded-lg border border-emerald-600/40 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 disabled:opacity-50"
                           >
                             დასრულება
@@ -1401,11 +2313,219 @@ export default function DashboardPage() {
                       </div>
                     </li>
                   ))}
-                </ul>
-              )}
-            </div>
+                  </ul>
+                  {freelancerListingOffersFiltered.length === 0 ? (
+                    <p className="mt-3 text-sm text-slate-500">ამ ფილტრით შეთავაზებები არ მოიძებნა.</p>
+                  ) : null}
+                </div>
+              ) : null}
 
-            <div className="rounded-xl border border-slate-200 bg-white p-6">
+            </div>
+            ) : null}
+
+            {freelancerDashboardTab === "job_offers" ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-6">
+                <h3 className="text-xl font-bold text-[#1B2B4B]">გაგზავნილი შეთავაზებები</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  შენ მიერ გაგზავნილი ყველა შეთავაზება სტატუსებით: მოლოდინში, დადასტურებული და უარყოფილი.
+                </p>
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFreelancerJobOfferTimeRange("7d")}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                      freelancerJobOfferTimeRange === "7d"
+                        ? "bg-[#1B2B4B] text-white"
+                        : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                    }`}
+                  >
+                    1 კვირა
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFreelancerJobOfferTimeRange("30d")}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                      freelancerJobOfferTimeRange === "30d"
+                        ? "bg-[#1B2B4B] text-white"
+                        : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                    }`}
+                  >
+                    30 დღე
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFreelancerJobOfferTimeRange("all")}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                      freelancerJobOfferTimeRange === "all"
+                        ? "bg-[#1B2B4B] text-white"
+                        : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                    }`}
+                  >
+                    ყველა დრო
+                  </button>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {([
+                    ["all", "ყველა", freelancerJobOfferCounts.all],
+                    ["pending", "მოლოდინში", freelancerJobOfferCounts.pending],
+                    ["accepted", "დადასტურებული", freelancerJobOfferCounts.accepted],
+                    ["rejected", "უარყოფილი", freelancerJobOfferCounts.rejected],
+                  ] as const).map(([statusKey, label, count]) => (
+                    <button
+                      key={statusKey}
+                      type="button"
+                      onClick={() => setFreelancerJobOfferStatusTab(statusKey)}
+                      className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                        freelancerJobOfferStatusTab === statusKey
+                          ? "bg-[#1B2B4B] text-white"
+                          : "border border-slate-300 bg-white text-slate-700 hover:border-[#D4A843]"
+                      }`}
+                    >
+                      {label} ({count})
+                    </button>
+                  ))}
+                </div>
+                {freelancerJobOffersFiltered.length === 0 ? (
+                  <p className="mt-4 text-sm text-slate-500">ამ ფილტრით შეთავაზებები არ მოიძებნა.</p>
+                ) : (
+                  <ul className="mt-4 space-y-3">
+                    {freelancerJobOffersFiltered.map((offer) => (
+                      <li
+                        key={offer.applicationId}
+                        className="flex flex-col gap-1 rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-semibold text-[#1B2B4B]">{offer.jobTitle}</p>
+                          <p className="mt-0.5 text-sm text-slate-600">{offer.hirerLabel}</p>
+                          <p className="text-xs text-slate-500">{formatDate(offer.createdAt)}</p>
+                        </div>
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                            offer.status === "pending"
+                              ? "bg-amber-50 text-amber-800"
+                              : offer.status === "rejected"
+                                ? "bg-rose-50 text-rose-700"
+                                : "bg-emerald-50 text-emerald-700"
+                          }`}
+                        >
+                          {freelancerJobOfferStatusLabel(offer.status)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : null}
+
+            {freelancerDashboardTab === "ongoing" ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-6">
+                <h3 className="text-xl font-bold text-[#1B2B4B]">მიმდინარე სამუშაოები</h3>
+                {freelancerOngoingListingInquiries.length === 0 && freelancerOngoingJobOffers.length === 0 ? (
+                  <p className="mt-4 text-sm text-slate-500">მიმდინარე სამუშაოები არ არის.</p>
+                ) : (
+                  <div className="mt-4 space-y-4">
+                    {freelancerOngoingJobOffers.length > 0 ? (
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">განცხადებებზე მიღებული შეთავაზებები</p>
+                        <ul className="mt-2 space-y-3">
+                          {freelancerOngoingJobOffers.map((offer) => (
+                            <li
+                              key={`ongoing-job-${offer.applicationId}`}
+                              className="rounded-lg border border-slate-200 bg-slate-50/60 p-4"
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-[#1B2B4B]">{offer.jobTitle}</p>
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    {offer.hirerLabel} · {formatDate(offer.createdAt)}
+                                  </p>
+                                </div>
+                                <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                                  მიმდინარე
+                                </span>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {freelancerOngoingListingInquiries.length > 0 ? (
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">ლისტინგის მიმდინარე სამუშაოები</p>
+                        <ul className="mt-2 space-y-3">
+                          {freelancerOngoingListingInquiries.map((q) => (
+                            <li key={`ongoing-${q.id}`} className="rounded-lg border border-slate-200 p-4">
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-[#1B2B4B]">{q.listingTitle}</p>
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    {q.hirerLabel} · {formatDate(q.createdAt)} ·{" "}
+                                    <span className="font-semibold text-[#1B2B4B]">{listingInquiryStatusLabel(q.status)}</span>
+                                  </p>
+                                  {q.hirerProfileId ? (
+                                    <Link
+                                      to={`/hirer/${encodeURIComponent(q.hirerProfileId)}`}
+                                      className="mt-1 inline-block text-xs font-semibold text-[#D4A843] hover:underline"
+                                    >
+                                      დამქირავებლის პროფილი →
+                                    </Link>
+                                  ) : null}
+                                </div>
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {q.status === "accepted" ? (
+                                  <button
+                                    type="button"
+                                    disabled={listingInquiryBusyId === q.id}
+                                    onClick={() => void patchFreelancerListingInquiry(q.id, "in_progress")}
+                                    className="rounded-lg border border-[#D4A843] bg-amber-50 px-3 py-1.5 text-xs font-semibold text-[#1B2B4B] hover:bg-[#D4A843]/30 disabled:opacity-50"
+                                  >
+                                    მიმდინარეობაში
+                                  </button>
+                                ) : null}
+                                {["accepted", "in_progress", "hirer_done"].includes(q.status) ? (
+                                  <button
+                                    type="button"
+                                    disabled={listingInquiryBusyId === q.id}
+                                    onClick={() => openFreelancerListingCompleteModal(q)}
+                                    className="rounded-lg border border-emerald-600/40 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 disabled:opacity-50"
+                                  >
+                                    დასრულება
+                                  </button>
+                                ) : null}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {freelancerDashboardTab === "completed" ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-6">
+                <h3 className="text-xl font-bold text-[#1B2B4B]">დასრულებული სამუშაოები</h3>
+                {freelancerCompletedListingInquiries.length === 0 ? (
+                  <p className="mt-4 text-sm text-slate-500">დასრულებული სამუშაოები არ არის.</p>
+                ) : (
+                  <ul className="mt-4 space-y-2">
+                    {freelancerCompletedListingInquiries.map((q) => (
+                      <li key={`done-${q.id}`} className="rounded-lg border border-slate-200 bg-slate-50/60 px-4 py-3">
+                        <p className="font-semibold text-[#1B2B4B]">{q.listingTitle}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {q.hirerLabel} · {formatDate(q.completedAt ?? q.createdAt)}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : null}
+
+            {freelancerDashboardTab === "my_services" ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-6">
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-xl font-bold text-[#1B2B4B]">ჩემი სერვისები</h3>
                 <button
@@ -1436,6 +2556,19 @@ export default function DashboardPage() {
                               რედაქტირება
                             </button>
                           ) : null}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!service.id) return
+                              setVipListingId(service.id)
+                              setVipListingTitle(service.title?.trim() || "ჩემი სერვისი")
+                              setVipOpen(true)
+                            }}
+                            className="text-xs font-semibold text-[#D4A843]"
+                            disabled={!service.id}
+                          >
+                            VIP განახლება
+                          </button>
                           <button
                             type="button"
                             onClick={() => removeServiceDraft(originalIndex)}
@@ -1480,27 +2613,102 @@ export default function DashboardPage() {
               {servicesError ? <p className="mt-3 text-sm text-red-600">{servicesError}</p> : null}
               {servicesSuccess ? <p className="mt-3 text-sm text-emerald-600">{servicesSuccess}</p> : null}
             </div>
+            ) : null}
 
-            <div className="rounded-xl border border-slate-200 bg-white p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-xl font-bold text-[#1B2B4B]">ღია განცხადებები</h3>
-                <Link to="/jobs" className="text-sm font-semibold text-[#D4A843] hover:underline">
-                  იხილე ყველა
-                </Link>
-              </div>
+            {vipListingId ? (
+              <VIPUpgrade
+                open={vipOpen}
+                jobId={vipListingId}
+                jobTitle={vipListingTitle}
+                listingType="freelancer"
+                onClose={() => {
+                  setVipOpen(false)
+                  setVipListingId(null)
+                }}
+                onSuccess={() => {
+                  setServicesSuccess("VIP წარმატებით ჩაირთო.")
+                }}
+              />
+            ) : null}
 
-              <div className="space-y-3">
-                {openJobs.map((job) => (
-                  <div key={job.id} className="rounded-lg border border-slate-200 p-4">
-                    <p className="font-semibold text-[#1B2B4B]">{job.title}</p>
-                    <p className="mt-1 text-sm text-slate-600">
-                      {formatBudget(job.budget_min, job.budget_max)} •{" "}
-                      {categoriesById[job.category_id] ?? "კატეგორია"} • {formatDate(job.created_at)}
-                    </p>
+            {freelancerListingCompleteModal ? (
+              <div
+                role="dialog"
+                aria-modal="true"
+                className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-4"
+                onPointerDown={(event) => {
+                  if (event.target === event.currentTarget) void closeFreelancerListingCompleteWithSkip()
+                }}
+              >
+                <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-bold text-[#1B2B4B]">შეთავაზების დასრულება</h3>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {freelancerListingCompleteModal.listingTitle} — {freelancerListingCompleteModal.hirerLabel}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void closeFreelancerListingCompleteWithSkip()}
+                      className="rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-600 hover:bg-slate-50"
+                      aria-label="დახურვა"
+                    >
+                      ×
+                    </button>
                   </div>
-                ))}
+                  <p className="mt-3 text-xs text-slate-500">
+                    სურვილის შემთხვევაში შეაფასე დამქირავებელი. შეფასება სურვილისამებრია — შეგიძლია გამოტოვო.
+                  </p>
+
+                  <div className="mt-4">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">შეფასება</p>
+                    <div className="flex flex-wrap gap-2">
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <button
+                          key={`listing-review-${n}`}
+                          type="button"
+                          onClick={() => setFreelancerListingReviewStars(n)}
+                          className={`h-10 w-10 rounded-lg border text-sm font-bold transition ${
+                            freelancerListingReviewStars === n
+                              ? "border-[#D4A843] bg-[#D4A843] text-[#1B2B4B]"
+                              : "border-slate-200 bg-white text-slate-600 hover:border-[#D4A843]"
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <label className="mt-4 block">
+                    <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">კომენტარი</span>
+                    <textarea
+                      value={freelancerListingReviewComment}
+                      onChange={(e) => setFreelancerListingReviewComment(e.target.value)}
+                      rows={4}
+                      className="w-full min-w-0 max-w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-[#D4A843] focus:ring-2"
+                      placeholder="როგორი იყო კომუნიკაცია და პირობები?"
+                    />
+                  </label>
+
+                  {freelancerListingReviewError ? (
+                    <p className="mt-2 text-sm text-red-600">{freelancerListingReviewError}</p>
+                  ) : null}
+
+                  <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+                    <button
+                      type="button"
+                      disabled={freelancerListingReviewSubmitting}
+                      onClick={() => void submitFreelancerListingCompletion(true)}
+                      className="w-full rounded-lg bg-[#1B2B4B] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:opacity-60"
+                    >
+                      {freelancerListingReviewSubmitting ? "ინახება…" : "შეფასების გაგზავნა"}
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : null}
 
             {freelancerHirerReviewModal ? (
               <div
@@ -1512,10 +2720,22 @@ export default function DashboardPage() {
                 }}
               >
                 <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
-                  <h3 className="text-lg font-bold text-[#1B2B4B]">დამქირავებლის შეფასება</h3>
-                  <p className="mt-1 text-sm text-slate-600">
-                    {freelancerHirerReviewModal.jobTitle} — {freelancerHirerReviewModal.hirerDisplayName}
-                  </p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-bold text-[#1B2B4B]">დამქირავებლის შეფასება</h3>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {freelancerHirerReviewModal.jobTitle} — {freelancerHirerReviewModal.hirerDisplayName}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFreelancerHirerReviewModal(null)}
+                      className="rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-600 hover:bg-slate-50"
+                      aria-label="დახურვა"
+                    >
+                      ×
+                    </button>
+                  </div>
                   <p className="mt-3 text-xs text-slate-500">
                     შეაფასე თანამშრომლობა 1-დან 5 ვარსკვლაურამდე და დაწერე მოკლე კომენტარი (მინ. 10 სიმბოლო).
                   </p>
@@ -1583,9 +2803,22 @@ export default function DashboardPage() {
               <h2 className="text-2xl font-bold text-[#1B2B4B]">
                 გამარჯობა, {profile.full_name || "დამქირავებელო"}!
               </h2>
+              <FollowStatPills
+                followerCount={dashFollowersCount}
+                followingCount={dashFollowingCount}
+                className="mt-3"
+                onOpenFollowers={() => {
+                  setFollowListsModalTab("followers")
+                  setFollowListsModalOpen(true)
+                }}
+                onOpenFollowing={() => {
+                  setFollowListsModalTab("following")
+                  setFollowListsModalOpen(true)
+                }}
+              />
             </div>
 
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="rounded-xl border border-slate-200 bg-white p-5">
                 <p className="text-sm text-slate-500">განთავსებული განცხადებები</p>
                 <p className="mt-2 text-2xl font-bold text-[#1B2B4B]">{hirerProfile?.jobs_posted_count ?? 0}</p>
@@ -1594,61 +2827,200 @@ export default function DashboardPage() {
                 <p className="text-sm text-slate-500">აქტიური განცხადებები</p>
                 <p className="mt-2 text-2xl font-bold text-[#1B2B4B]">{activeJobsCount}</p>
               </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-5">
-                <p className="text-sm text-slate-500">დასრულებული სამუშაოები</p>
-                <p className="mt-2 text-2xl font-bold text-[#1B2B4B]">{hirerCompletedJobsCount}</p>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-3 sm:p-4">
+              <div className="flex flex-nowrap gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <button
+                  type="button"
+                  onClick={() => setHirerDashboardTab("applicants")}
+                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                    hirerDashboardTab === "applicants"
+                      ? "bg-[#1B2B4B] text-white"
+                      : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                  }`}
+                >
+                  განმცხადებლები
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHirerDashboardTab("my_jobs")}
+                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                    hirerDashboardTab === "my_jobs"
+                      ? "bg-[#1B2B4B] text-white"
+                      : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                  }`}
+                >
+                  ჩემი განცხადებები
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHirerDashboardTab("listing_offers")}
+                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                    hirerDashboardTab === "listing_offers"
+                      ? "bg-[#1B2B4B] text-white"
+                      : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                  }`}
+                >
+                  ლისტინგებზე გაგზავნილი შეთავაზებები
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHirerDashboardTab("ongoing")}
+                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                    hirerDashboardTab === "ongoing"
+                      ? "bg-[#1B2B4B] text-white"
+                      : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                  }`}
+                >
+                  მიმდინარე სამუშაოები
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHirerDashboardTab("completed")}
+                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                    hirerDashboardTab === "completed"
+                      ? "bg-[#1B2B4B] text-white"
+                      : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                  }`}
+                >
+                  დასრულებული სამუშაოები
+                </button>
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-white p-6">
+            {hirerDashboardTab === "listing_offers" ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-6">
               <h3 className="text-xl font-bold text-[#1B2B4B]">ლისტინგებზე გაგზავნილი შეთავაზებები</h3>
               <p className="mt-1 text-sm text-slate-500">
                 ფრილანსერი ხედავს ამას თავის დაშბორდზე. სამუშაოს დასრულება იქ ფიქსირდება სტატუსით — განცხადების გამოქვეყნება არ გჭირდება.
               </p>
-              {hirerListingInquiries.length === 0 ? (
-                <p className="mt-4 text-sm text-slate-500">ჯერ არაფერი გაგიგზავნია. იხილე ლისტინგები და დააჭირე „შეთავაზება“.</p>
-              ) : (
-                <ul className="mt-4 space-y-3">
-                  {hirerListingInquiries.map((q) => (
-                    <li key={q.id} className="rounded-lg border border-slate-200 p-4">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="font-semibold text-[#1B2B4B]">{q.listingTitle}</p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            {q.freelancerName} · {formatDate(q.createdAt)} ·{" "}
-                            <span className="font-semibold text-[#1B2B4B]">{listingInquiryStatusLabel(q.status)}</span>
-                          </p>
-                          {q.freelancerSlug ? (
-                            <Link
-                              to={`/freelancer/${encodeURIComponent(q.freelancerSlug)}`}
-                              className="mt-1 inline-block text-xs font-semibold text-[#D4A843] hover:underline"
+              {hirerListingInquiries.length === 0 ? <p className="mt-4 text-sm text-slate-500">ჯერ არაფერი გაგიგზავნია. იხილე ლისტინგები და დააჭირე „შეთავაზება“.</p> : null}
+              {hirerListingInquiries.length > 0 ? (
+                <div className="mt-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setHirerListingOfferTimeRange("7d")}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                        hirerListingOfferTimeRange === "7d"
+                          ? "bg-[#1B2B4B] text-white"
+                          : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                      }`}
+                    >
+                      1 კვირა
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHirerListingOfferTimeRange("30d")}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                        hirerListingOfferTimeRange === "30d"
+                          ? "bg-[#1B2B4B] text-white"
+                          : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                      }`}
+                    >
+                      30 დღე
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHirerListingOfferTimeRange("all")}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                        hirerListingOfferTimeRange === "all"
+                          ? "bg-[#1B2B4B] text-white"
+                          : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                      }`}
+                    >
+                      ყველა დრო
+                    </button>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {([
+                      ["all", "ყველა", hirerListingOfferCounts.all],
+                      ["pending", "მოლოდინში", hirerListingOfferCounts.pending],
+                      ["accepted", "დადასტურებული", hirerListingOfferCounts.accepted],
+                      ["rejected", "უარყოფილი", hirerListingOfferCounts.rejected],
+                    ] as const).map(([statusKey, label, count]) => (
+                      <button
+                        key={statusKey}
+                        type="button"
+                        onClick={() => setHirerListingOfferStatusTab(statusKey)}
+                        className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                          hirerListingOfferStatusTab === statusKey
+                            ? "bg-[#1B2B4B] text-white"
+                            : "border border-slate-300 bg-white text-slate-700 hover:border-[#D4A843]"
+                        }`}
+                      >
+                        {label} ({count})
+                      </button>
+                    ))}
+                  </div>
+                  <ul className="mt-3 space-y-3">
+                    {hirerListingOffersFiltered.map((q) => (
+                      <li key={q.id} className="rounded-lg border border-slate-200 p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-semibold text-[#1B2B4B]">{q.listingTitle}</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {q.freelancerName} · {formatDate(q.createdAt)} ·{" "}
+                              <span className="font-semibold text-[#1B2B4B]">{listingInquiryStatusLabel(q.status)}</span>
+                            </p>
+                            {q.freelancerSlug ? (
+                              <Link
+                                to={`/freelancer/${encodeURIComponent(q.freelancerSlug)}`}
+                                className="mt-1 inline-block text-xs font-semibold text-[#D4A843] hover:underline"
+                              >
+                                პროფილი →
+                              </Link>
+                            ) : null}
+                            {q.proposedBudget != null ? (
+                              <p className="mt-1 text-sm text-slate-700">შეთავაზებული თანხა: {q.proposedBudget.toLocaleString("ka-GE")} ₾</p>
+                            ) : null}
+                          </div>
+                          {q.status === "pending" ? (
+                            <button
+                              type="button"
+                              disabled={listingInquiryBusyId === q.id}
+                              onClick={() => void cancelHirerListingInquiry(q.id)}
+                              className="shrink-0 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
                             >
-                              პროფილი →
-                            </Link>
+                              გაუქმება
+                            </button>
                           ) : null}
-                          {q.proposedBudget != null ? (
-                            <p className="mt-1 text-sm text-slate-700">შეთავაზებული თანხა: {q.proposedBudget.toLocaleString("ka-GE")} ₾</p>
+                          {["accepted", "in_progress", "freelancer_done"].includes(q.status) ? (
+                            <button
+                              type="button"
+                              disabled={listingInquiryBusyId === q.id}
+                              onClick={() => void markHirerListingInquiryDone(q)}
+                              className="shrink-0 rounded-lg border border-emerald-600/40 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 disabled:opacity-50"
+                            >
+                              დასრულება
+                            </button>
+                          ) : null}
+                          {q.status === "completed" ? (
+                            <button
+                              type="button"
+                              disabled={Boolean(hirerReviewedListingInquiryIds[q.id])}
+                              onClick={() => openHirerListingReviewModal(q)}
+                              className="shrink-0 rounded-lg border border-[#D4A843] bg-amber-50 px-3 py-1.5 text-xs font-semibold text-[#1B2B4B] hover:bg-[#D4A843]/30 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {hirerReviewedListingInquiryIds[q.id] ? "შეფასებულია" : "შეფასება"}
+                            </button>
                           ) : null}
                         </div>
-                        {q.status === "pending" ? (
-                          <button
-                            type="button"
-                            disabled={listingInquiryBusyId === q.id}
-                            onClick={() => void cancelHirerListingInquiry(q.id)}
-                            className="shrink-0 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
-                          >
-                            გაუქმება
-                          </button>
-                        ) : null}
-                      </div>
-                      <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-700 [overflow-wrap:anywhere]">{q.message}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
+                        <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-700 [overflow-wrap:anywhere]">{q.message}</p>
+                      </li>
+                    ))}
+                  </ul>
+                  {hirerListingOffersFiltered.length === 0 ? (
+                    <p className="mt-3 text-sm text-slate-500">ამ ფილტრით შეთავაზებები არ მოიძებნა.</p>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
+            ) : null}
 
-            <div className="rounded-xl border border-slate-200 bg-white p-6">
+            {hirerDashboardTab === "my_jobs" ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-6">
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-xl font-bold text-[#1B2B4B]">ჩემი განცხადებები</h3>
                 <Link
@@ -1679,7 +3051,12 @@ export default function DashboardPage() {
                           <p className="font-semibold text-[#1B2B4B]">{job.title}</p>
                           <p className="mt-1 text-sm text-slate-600">
                             {formatBudget(job.budget_min, job.budget_max)} • {jobApplicationsByJobId[job.id] ?? 0}{" "}
-                            განმცხადებელი • {formatDate(job.created_at)}
+                            განმცხადებელი •{" "}
+                            {(() => {
+                              const vs = jobVacancyStats(job.vacancies, job.accepted_count)
+                              return `${vs.acceptedCount}/${vs.vacancies} ვაკანსია`
+                            })()}{" "}
+                            • {formatDate(job.created_at)}
                           </p>
                         </div>
                         <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -1707,8 +3084,178 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
+            ) : null}
 
-            <div className="rounded-xl border border-slate-200 bg-white p-6">
+            {hirerDashboardTab === "ongoing" ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-6">
+                <h3 className="text-xl font-bold text-[#1B2B4B]">მიმდინარე სამუშაოები</h3>
+                {hirerOngoingApplications.length === 0 && hirerOngoingListingInquiries.length === 0 ? (
+                  <p className="mt-4 text-sm text-slate-500">მიმდინარე სამუშაოები არ არის.</p>
+                ) : (
+                  <div className="mt-4 space-y-5">
+                    {hirerOngoingApplications.length > 0 ? (
+                      <div>
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">განმცხადებლები</p>
+                        <div className="space-y-3">
+                          {hirerOngoingApplications.map((item) => (
+                            <div
+                              key={`ongoing-app-${item.applicationId}`}
+                              className="flex flex-col gap-3 rounded-lg border border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="font-semibold text-[#1B2B4B]">{item.freelancerName}</p>
+                                <p className="mt-1 text-sm text-slate-600">
+                                  {item.jobTitle} • {formatDate(item.createdAt)} • {statusLabel(item.status)}
+                                </p>
+                              </div>
+                              <div className="flex shrink-0 flex-wrap gap-2">
+                                {item.status === "pending" ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      disabled={applicationBusyId === item.applicationId}
+                                      onClick={() => void acceptApplication(item)}
+                                      className="rounded-lg bg-[#1B2B4B] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:opacity-50"
+                                    >
+                                      მიღება
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={applicationBusyId === item.applicationId}
+                                      onClick={() => void rejectApplication(item)}
+                                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                                    >
+                                      უარყოფა
+                                    </button>
+                                  </>
+                                ) : null}
+                                {item.status === "accepted" && hirerAcceptedApplicantShowsJobActions(item.jobStatus) ? (
+                                  <button
+                                    type="button"
+                                    disabled={!item.freelancerUserId}
+                                    onClick={() => openCompleteReviewModal(item)}
+                                    className="rounded-lg border border-[#D4A843] bg-amber-50 px-3 py-1.5 text-xs font-semibold text-[#1B2B4B] transition hover:bg-[#D4A843]/30 disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    დასრულება
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    {hirerOngoingListingInquiries.length > 0 ? (
+                      <div>
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">ლისტინგები</p>
+                        <div className="space-y-3">
+                          {hirerOngoingListingInquiries.map((q) => (
+                            <div
+                              key={`ongoing-listing-${q.id}`}
+                              className="flex flex-col gap-3 rounded-lg border border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="font-semibold text-[#1B2B4B]">{q.listingTitle}</p>
+                                <p className="mt-1 text-sm text-slate-600">
+                                  {q.freelancerName} • {formatDate(q.createdAt)} • {listingInquiryStatusLabel(q.status)}
+                                </p>
+                              </div>
+                              <div className="flex shrink-0 flex-wrap gap-2">
+                                {q.status === "pending" ? (
+                                  <button
+                                    type="button"
+                                    disabled={listingInquiryBusyId === q.id}
+                                    onClick={() => void cancelHirerListingInquiry(q.id)}
+                                    className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                                  >
+                                    გაუქმება
+                                  </button>
+                                ) : null}
+                                {["accepted", "in_progress", "freelancer_done"].includes(q.status) ? (
+                                  <button
+                                    type="button"
+                                    disabled={listingInquiryBusyId === q.id}
+                                    onClick={() => void markHirerListingInquiryDone(q)}
+                                    className="rounded-lg border border-emerald-600/40 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 disabled:opacity-50"
+                                  >
+                                    დასრულება
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {hirerDashboardTab === "completed" ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-6">
+                <h3 className="text-xl font-bold text-[#1B2B4B]">დასრულებული სამუშაოები</h3>
+                {hirerCompletedApplications.length === 0 && hirerCompletedListingInquiries.length === 0 ? (
+                  <p className="mt-4 text-sm text-slate-500">დასრულებული სამუშაოები არ არის.</p>
+                ) : (
+                  <div className="mt-4 space-y-5">
+                    {hirerCompletedApplications.length > 0 ? (
+                      <div>
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">განმცხადებლები</p>
+                        <div className="space-y-3">
+                          {hirerCompletedApplications.map((item) => (
+                            <div key={`done-app-${item.applicationId}`} className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-slate-200 p-4">
+                              <div>
+                                <p className="font-semibold text-[#1B2B4B]">{item.freelancerName}</p>
+                                <p className="mt-1 text-sm text-slate-600">
+                                  {item.jobTitle} • {formatDate(item.createdAt)}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={!item.freelancerUserId || Boolean(hirerReviewedJobApplicationIds[item.applicationId])}
+                                onClick={() => openCompleteReviewModal(item)}
+                                className="rounded-lg border border-[#D4A843] bg-amber-50 px-3 py-1.5 text-xs font-semibold text-[#1B2B4B] transition hover:bg-[#D4A843]/30 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {hirerReviewedJobApplicationIds[item.applicationId] ? "შეფასებულია" : "შეფასება"}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    {hirerCompletedListingInquiries.length > 0 ? (
+                      <div>
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">ლისტინგები</p>
+                        <div className="space-y-3">
+                          {hirerCompletedListingInquiries.map((q) => (
+                            <div key={`done-listing-${q.id}`} className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-slate-200 p-4">
+                              <div>
+                                <p className="font-semibold text-[#1B2B4B]">{q.listingTitle}</p>
+                                <p className="mt-1 text-sm text-slate-600">
+                                  {q.freelancerName} • {formatDate(q.completedAt ?? q.createdAt)}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={Boolean(hirerReviewedListingInquiryIds[q.id])}
+                                onClick={() => openHirerListingReviewModal(q)}
+                                className="rounded-lg border border-[#D4A843] bg-amber-50 px-3 py-1.5 text-xs font-semibold text-[#1B2B4B] hover:bg-[#D4A843]/30 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {hirerReviewedListingInquiryIds[q.id] ? "შეფასებულია" : "შეფასება"}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {hirerDashboardTab === "applicants" ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-6">
               <h3 className="mb-2 text-xl font-bold text-[#1B2B4B]">განმცხადებლები</h3>
               <p className="mb-4 text-sm text-slate-500">მიიღე განმცხადება, შეასრულე სამუშაო და დატოვე შეფასება.</p>
               {hirerActionError ? (
@@ -1717,8 +3264,64 @@ export default function DashboardPage() {
               {hirerApplications.length === 0 ? (
                 <p className="text-sm text-slate-500">ჯერჯერობით განმცხადებლები არ არიან.</p>
               ) : (
-                <div className="space-y-3">
-                  {hirerApplications.map((item) => (
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setHirerApplicantTimeRange("7d")}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                        hirerApplicantTimeRange === "7d"
+                          ? "bg-[#1B2B4B] text-white"
+                          : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                      }`}
+                    >
+                      1 კვირა
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHirerApplicantTimeRange("30d")}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                        hirerApplicantTimeRange === "30d"
+                          ? "bg-[#1B2B4B] text-white"
+                          : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                      }`}
+                    >
+                      30 დღე
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHirerApplicantTimeRange("all")}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                        hirerApplicantTimeRange === "all"
+                          ? "bg-[#1B2B4B] text-white"
+                          : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                      }`}
+                    >
+                      ყველა დრო
+                    </button>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {([
+                      ["pending", "მოლოდინში", hirerApplicantCounts.pending],
+                      ["accepted", "დადასტურებული", hirerApplicantCounts.accepted],
+                      ["rejected", "უარყოფილი", hirerApplicantCounts.rejected],
+                    ] as const).map(([statusKey, label, count]) => (
+                      <button
+                        key={statusKey}
+                        type="button"
+                        onClick={() => setHirerApplicantStatusTab(statusKey)}
+                        className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                          hirerApplicantStatusTab === statusKey
+                            ? "bg-[#1B2B4B] text-white"
+                            : "border border-slate-300 bg-white text-slate-700 hover:border-[#D4A843]"
+                        }`}
+                      >
+                        {label} ({count})
+                      </button>
+                    ))}
+                  </div>
+                <div className="mt-3 space-y-3">
+                  {hirerApplicantsFiltered.map((item) => (
                     <div
                       key={item.applicationId}
                       className="flex flex-col gap-3 rounded-lg border border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between"
@@ -1758,49 +3361,66 @@ export default function DashboardPage() {
                             </button>
                           </>
                         ) : null}
-                        {item.status === "accepted" && item.jobStatus === "in_progress" ? (
+                        {item.status === "accepted" && hirerAcceptedApplicantShowsJobActions(item.jobStatus) ? (
                           <button
                             type="button"
                             disabled={!item.freelancerUserId}
                             onClick={() => openCompleteReviewModal(item)}
                             className="rounded-lg border border-[#D4A843] bg-amber-50 px-3 py-1.5 text-xs font-semibold text-[#1B2B4B] transition hover:bg-[#D4A843]/30 disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            დასრულება და შეფასება
+                            დასრულება
+                          </button>
+                        ) : null}
+                        {(item.status === "completed" || item.jobStatus === "completed") ? (
+                          <button
+                            type="button"
+                            disabled={!item.freelancerUserId || Boolean(hirerReviewedJobApplicationIds[item.applicationId])}
+                            onClick={() => openCompleteReviewModal(item)}
+                            className="rounded-lg border border-[#D4A843] bg-amber-50 px-3 py-1.5 text-xs font-semibold text-[#1B2B4B] transition hover:bg-[#D4A843]/30 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {hirerReviewedJobApplicationIds[item.applicationId] ? "შეფასებულია" : "შეფასება"}
                           </button>
                         ) : null}
                       </div>
                     </div>
                   ))}
                 </div>
+                {hirerApplicantsFiltered.length === 0 ? (
+                  <p className="mt-3 text-sm text-slate-500">ამ ფილტრით განმცხადებლები არ მოიძებნა.</p>
+                ) : null}
+                </div>
               )}
             </div>
+            ) : null}
 
-            {reviewModalItem ? (
+            {hirerListingReviewModal ? (
               <div
                 role="dialog"
                 aria-modal="true"
                 className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-4"
                 onPointerDown={(event) => {
-                  if (event.target === event.currentTarget) setReviewModalItem(null)
+                  if (event.target === event.currentTarget) setHirerListingReviewModal(null)
                 }}
               >
                 <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
-                  <h3 className="text-lg font-bold text-[#1B2B4B]">სამუშაოს დასრულება</h3>
+                  <h3 className="text-lg font-bold text-[#1B2B4B]">ფრილანსერის შეფასება</h3>
                   <p className="mt-1 text-sm text-slate-600">
-                    {reviewModalItem.jobTitle} — {reviewModalItem.freelancerName}
+                    {hirerListingReviewModal.listingTitle} — {hirerListingReviewModal.freelancerName}
                   </p>
-                  <p className="mt-3 text-xs text-slate-500">შეაფასე ფრილანსერი 1-დან 5 ვარსკვლაურამდე და დაწერე მოკლე კომენტარი (მინ. 10 სიმბოლო).</p>
+                  <p className="mt-3 text-xs text-slate-500">
+                    შეაფასე შესრულებული სამუშაო 1-დან 5 ვარსკვლაურამდე და დაწერე მოკლე კომენტარი (მინ. 10 სიმბოლო).
+                  </p>
 
                   <div className="mt-4">
                     <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">შეფასება</p>
                     <div className="flex flex-wrap gap-2">
                       {[1, 2, 3, 4, 5].map((n) => (
                         <button
-                          key={n}
+                          key={`hirer-listing-review-${n}`}
                           type="button"
-                          onClick={() => setReviewStars(n)}
+                          onClick={() => setHirerListingReviewStars(n)}
                           className={`h-10 w-10 rounded-lg border text-sm font-bold transition ${
-                            reviewStars === n
+                            hirerListingReviewStars === n
                               ? "border-[#D4A843] bg-[#D4A843] text-[#1B2B4B]"
                               : "border-slate-200 bg-white text-slate-600 hover:border-[#D4A843]"
                           }`}
@@ -1814,13 +3434,104 @@ export default function DashboardPage() {
                   <label className="mt-4 block">
                     <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">კომენტარი</span>
                     <textarea
-                      value={reviewComment}
-                      onChange={(e) => setReviewComment(e.target.value)}
+                      value={hirerListingReviewComment}
+                      onChange={(e) => setHirerListingReviewComment(e.target.value)}
                       rows={4}
                       className="w-full min-w-0 max-w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-[#D4A843] focus:ring-2"
-                      placeholder="როგორ მოგეწონა თანამშრომლობა?"
+                      placeholder="როგორი იყო თანამშრომლობა?"
                     />
                   </label>
+
+                  {hirerListingReviewError ? <p className="mt-2 text-sm text-red-600">{hirerListingReviewError}</p> : null}
+
+                  <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+                    <button
+                      type="button"
+                      disabled={hirerListingReviewSubmitting}
+                      onClick={() => void submitHirerListingReview()}
+                      className="flex-1 rounded-lg bg-[#1B2B4B] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:opacity-60"
+                    >
+                      {hirerListingReviewSubmitting ? "ინახება…" : "შეფასების გაგზავნა"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={hirerListingReviewSubmitting}
+                      onClick={() => setHirerListingReviewModal(null)}
+                      className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      გაუქმება
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {reviewModalItem ? (
+              <div
+                role="dialog"
+                aria-modal="true"
+                className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-4"
+                onPointerDown={(event) => {
+                  if (event.target === event.currentTarget) void closeHirerCompleteModalWithSkip()
+                }}
+              >
+                <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-bold text-[#1B2B4B]">სამუშაოს დასრულება</h3>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {reviewModalItem.jobTitle} — {reviewModalItem.freelancerName}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void closeHirerCompleteModalWithSkip()}
+                      className="rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-600 hover:bg-slate-50"
+                      aria-label="დახურვა"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <p className="mt-3 text-xs text-slate-500">
+                    {reviewModalAlreadyReviewed
+                      ? "ამ სამუშაოზე შეფასება უკვე გაგზავნილი გაქვს. შეგიძლია მხოლოდ დასრულება."
+                      : "სურვილის შემთხვევაში შეაფასე ფრილანსერი. შეფასება სურვილისამებრია — შეგიძლია გამოტოვო."}
+                  </p>
+
+                  {reviewModalAlreadyReviewed ? null : (
+                    <>
+                      <div className="mt-4">
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">შეფასება</p>
+                        <div className="flex flex-wrap gap-2">
+                          {[1, 2, 3, 4, 5].map((n) => (
+                            <button
+                              key={n}
+                              type="button"
+                              onClick={() => setReviewStars(n)}
+                              className={`h-10 w-10 rounded-lg border text-sm font-bold transition ${
+                                reviewStars === n
+                                  ? "border-[#D4A843] bg-[#D4A843] text-[#1B2B4B]"
+                                  : "border-slate-200 bg-white text-slate-600 hover:border-[#D4A843]"
+                              }`}
+                            >
+                              {n}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <label className="mt-4 block">
+                        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">კომენტარი</span>
+                        <textarea
+                          value={reviewComment}
+                          onChange={(e) => setReviewComment(e.target.value)}
+                          rows={4}
+                          className="w-full min-w-0 max-w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-[#D4A843] focus:ring-2"
+                          placeholder="როგორ მოგეწონა თანამშრომლობა?"
+                        />
+                      </label>
+                    </>
+                  )}
 
                   {reviewError ? <p className="mt-2 text-sm text-red-600">{reviewError}</p> : null}
 
@@ -1828,18 +3539,10 @@ export default function DashboardPage() {
                     <button
                       type="button"
                       disabled={reviewSubmitting}
-                      onClick={() => void submitCompleteReview()}
-                      className="flex-1 rounded-lg bg-[#1B2B4B] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:opacity-60"
+                      onClick={() => void submitCompleteReview(!reviewModalAlreadyReviewed)}
+                      className="w-full rounded-lg bg-[#1B2B4B] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:opacity-60"
                     >
-                      {reviewSubmitting ? "ინახება…" : "დასრულება და გაგზავნა"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={reviewSubmitting}
-                      onClick={() => setReviewModalItem(null)}
-                      className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                    >
-                      გაუქმება
+                      {reviewSubmitting ? "ინახება…" : reviewModalAlreadyReviewed ? "დასრულება" : "შეფასება და დასრულება"}
                     </button>
                   </div>
                 </div>
@@ -1851,6 +3554,14 @@ export default function DashboardPage() {
             მომხმარებლის ტიპი ვერ მოიძებნა.
           </div>
         )}
+        {!loading && !error && profile ? (
+          <FollowListsModal
+            open={followListsModalOpen}
+            onClose={() => setFollowListsModalOpen(false)}
+            profileId={profile.id}
+            initialTab={followListsModalTab}
+          />
+        ) : null}
       </main>
     </div>
   )

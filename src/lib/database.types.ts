@@ -144,6 +144,77 @@ export interface Database {
           }
         ]
       }
+      follows: {
+        Row: {
+          created_at?: string | null
+          follower_id: string
+          following_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          follower_id: string
+          following_id: string
+        }
+        Update: {
+          created_at?: string | null
+          follower_id?: string
+          following_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "follows_follower_id_fkey"
+            columns: ["follower_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "follows_following_id_fkey"
+            columns: ["following_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      freelancer_education: {
+        Row: {
+          created_at: string
+          degree_level: string
+          end_date: string | null
+          field_of_study: string | null
+          freelancer_profile_id: string
+          id: string
+          institution: string
+        }
+        Insert: {
+          created_at?: string
+          degree_level: string
+          end_date?: string | null
+          field_of_study?: string | null
+          freelancer_profile_id: string
+          id?: string
+          institution: string
+        }
+        Update: {
+          created_at?: string
+          degree_level?: string
+          end_date?: string | null
+          field_of_study?: string | null
+          freelancer_profile_id?: string
+          id?: string
+          institution?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "freelancer_education_freelancer_profile_id_fkey"
+            columns: ["freelancer_profile_id"]
+            isOneToOne: false
+            referencedRelation: "freelancer_profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       freelancer_profiles: {
         Row: {
           availability: string | null
@@ -155,6 +226,7 @@ export interface Database {
           id: string
           is_profile_complete: boolean
           is_public: boolean
+          show_completed_work_on_public_profile: boolean
           languages: string[]
           linkedin_url: string | null
           portfolio_url: string | null
@@ -174,6 +246,7 @@ export interface Database {
           id?: string
           is_profile_complete?: boolean
           is_public?: boolean
+          show_completed_work_on_public_profile?: boolean
           languages?: string[]
           linkedin_url?: string | null
           portfolio_url?: string | null
@@ -193,6 +266,7 @@ export interface Database {
           id?: string
           is_profile_complete?: boolean
           is_public?: boolean
+          show_completed_work_on_public_profile?: boolean
           languages?: string[]
           linkedin_url?: string | null
           portfolio_url?: string | null
@@ -381,6 +455,7 @@ export interface Database {
       }
       jobs: {
         Row: {
+          accepted_count: number
           application_deadline: string | null
           budget_max: number | null
           budget_min: number | null
@@ -393,16 +468,22 @@ export interface Database {
           expires_at: string | null
           hirer_profile_id: string
           id: string
+          image_urls: string[]
           is_featured: boolean
           is_urgent: boolean
+          is_vip: boolean
           location_type: string
           status: string
           subcategory_id: string | null
           title: string
           updated_at: string
+          vacancies: number
+          vip_expires_at: string | null
+          vip_tier: string | null
           views_count: number
         }
         Insert: {
+          accepted_count?: number
           application_deadline?: string | null
           budget_max?: number | null
           budget_min?: number | null
@@ -415,16 +496,22 @@ export interface Database {
           expires_at?: string | null
           hirer_profile_id: string
           id?: string
+          image_urls?: string[]
           is_featured?: boolean
           is_urgent?: boolean
+          is_vip?: boolean
           location_type: string
           status?: string
           subcategory_id?: string | null
           title: string
           updated_at?: string
+          vacancies?: number
+          vip_expires_at?: string | null
+          vip_tier?: string | null
           views_count?: number
         }
         Update: {
+          accepted_count?: number
           application_deadline?: string | null
           budget_max?: number | null
           budget_min?: number | null
@@ -437,13 +524,18 @@ export interface Database {
           expires_at?: string | null
           hirer_profile_id?: string
           id?: string
+          image_urls?: string[]
           is_featured?: boolean
           is_urgent?: boolean
+          is_vip?: boolean
           location_type?: string
           status?: string
           subcategory_id?: string | null
           title?: string
           updated_at?: string
+          vacancies?: number
+          vip_expires_at?: string | null
+          vip_tier?: string | null
           views_count?: number
         }
         Relationships: [
@@ -466,6 +558,63 @@ export interface Database {
             columns: ["subcategory_id"]
             isOneToOne: false
             referencedRelation: "subcategories"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      vip_payments: {
+        Row: {
+          amount: number
+          completed_at: string | null
+          created_at: string
+          currency: string
+          id: string
+          listing_id: string
+          paypal_order_id: string
+          status: string
+          tier: string
+          user_id: string
+          vip_days: number | null
+        }
+        Insert: {
+          amount: number
+          completed_at?: string | null
+          created_at?: string
+          currency?: string
+          id?: string
+          listing_id: string
+          paypal_order_id: string
+          status?: string
+          tier: string
+          user_id: string
+          vip_days?: number | null
+        }
+        Update: {
+          amount?: number
+          completed_at?: string | null
+          created_at?: string
+          currency?: string
+          id?: string
+          listing_id?: string
+          paypal_order_id?: string
+          status?: string
+          tier?: string
+          user_id?: string
+          vip_days?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vip_payments_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vip_payments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           }
         ]
@@ -560,6 +709,7 @@ export interface Database {
           avatar_url: string | null
           city: string | null
           created_at: string
+          cv_url: string | null
           email: string
           full_name: string
           id: string
@@ -575,6 +725,7 @@ export interface Database {
           avatar_url?: string | null
           city?: string | null
           created_at?: string
+          cv_url?: string | null
           email: string
           full_name: string
           id: string
@@ -590,6 +741,7 @@ export interface Database {
           avatar_url?: string | null
           city?: string | null
           created_at?: string
+          cv_url?: string | null
           email?: string
           full_name?: string
           id?: string
@@ -728,10 +880,14 @@ export interface Database {
           description: string | null
           freelancer_profile_id: string
           id: string
+          image_urls: string[]
           is_active: boolean
+          is_vip: boolean
           price: number
           title: string
           updated_at: string
+          views_count: number
+          vip_expires_at: string | null
         }
         Insert: {
           created_at?: string
@@ -739,10 +895,14 @@ export interface Database {
           description?: string | null
           freelancer_profile_id: string
           id?: string
+          image_urls?: string[]
           is_active?: boolean
+          is_vip?: boolean
           price: number
           title: string
           updated_at?: string
+          views_count?: number
+          vip_expires_at?: string | null
         }
         Update: {
           created_at?: string
@@ -750,10 +910,14 @@ export interface Database {
           description?: string | null
           freelancer_profile_id?: string
           id?: string
+          image_urls?: string[]
           is_active?: boolean
+          is_vip?: boolean
           price?: number
           title?: string
           updated_at?: string
+          views_count?: number
+          vip_expires_at?: string | null
         }
         Relationships: [
           {
@@ -905,6 +1069,14 @@ export interface Database {
         Args: { target_freelancer_profile_id: string }
         Returns: number
       }
+      public_freelancer_completed_service_titles: {
+        Args: { p_freelancer_profile_id: string }
+        Returns: { service_title: string; completed_at: string }[]
+      }
+      public_job_application_counts: {
+        Args: { p_job_ids: string[] }
+        Returns: { job_id: string; applicants_count: number }[]
+      }
       handle_job_completion: {
         Args: Record<PropertyKey, never>
         Returns: unknown
@@ -917,6 +1089,14 @@ export interface Database {
         Args: Record<PropertyKey, never>
         Returns: unknown
       }
+      increment_job_views: {
+        Args: { p_job_id: string }
+        Returns: number
+      }
+      increment_service_views: {
+        Args: { p_service_id: string }
+        Returns: number
+      }
       set_updated_at: {
         Args: Record<PropertyKey, never>
         Returns: unknown
@@ -924,6 +1104,31 @@ export interface Database {
       update_freelancer_rating: {
         Args: Record<PropertyKey, never>
         Returns: unknown
+      }
+      delete_user: {
+        Args: Record<PropertyKey, never>
+        Returns: unknown
+      }
+      get_home_feed: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      get_jobs_page: {
+        Args: {
+          p_search?: string | null
+          p_limit?: number
+          p_offset?: number
+          p_category_id?: string | null
+        }
+        Returns: Json
+      }
+      get_listings_page: {
+        Args: {
+          p_search?: string | null
+          p_limit?: number
+          p_offset?: number
+        }
+        Returns: Json
       }
     }
     Enums: {

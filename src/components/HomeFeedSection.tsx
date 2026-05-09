@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { useEffect, useRef, useState } from "react"
+import { Link } from "react-router-dom"
 import { loadHomeFeed, type HomeFeedItem, type HomeFreelancerServiceItem, type HomeJobListingItem } from "../lib/homeFeed.ts"
+import { isSupabaseConfigured, supabase } from "../lib/supabase"
+import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 
 function getInitials(fullName: string) {
   const parts = fullName.trim().split(" ").filter(Boolean)
@@ -35,21 +37,27 @@ const LOCATION_LABELS: Record<string, string> = {
   tbilisi: "თბილისი",
   hybrid: "შერეული",
   anywhere: "ნებისმიერი",
+  on_site: "ადგილზე",
 }
 
-const DURATION_LABELS: Record<string, string> = {
-  one_time: "ერთჯერადი",
-  ongoing: "მიმდინარე",
+function ratingStars(value: number) {
+  const rounded = Math.round(value)
+  return `${"★".repeat(Math.max(0, rounded))}${"☆".repeat(Math.max(0, 5 - rounded))}`
 }
 
-function deadlineShort(dateString: string) {
-  return new Date(dateString).toLocaleDateString("ka-GE", { day: "2-digit", month: "short" })
+function showHirerRatingValue(value: number) {
+  return Number.isFinite(value) && value > 0
 }
 
-function isDeadlineSoon(dateString: string) {
-  const diff = new Date(dateString).getTime() - Date.now()
-  return diff > 0 && diff <= 3 * 24 * 60 * 60 * 1000
-}
+/** Category / skill chips — text may wrap for long tokens */
+const tagChipClass =
+  "inline-flex max-w-full items-center rounded-full border border-[#D1D5DB] bg-white px-2.5 py-0.5 text-xs font-medium text-[#374151] [overflow-wrap:anywhere]"
+/** Hirer job meta row — hug content, single line per pill, natural wrap across rows */
+const metaPillJobClass =
+  "inline-flex w-fit max-w-full min-w-0 shrink-0 items-center whitespace-nowrap rounded-full border border-[#D1D5DB] bg-white px-2.5 py-0.5 text-xs font-medium text-[#374151]"
+/** Freelancer listing meta — content-sized pills with 4px×12px padding */
+const metaPillFreelancerClass =
+  "inline-flex w-fit max-w-full min-w-0 shrink-0 items-center whitespace-nowrap rounded-full border border-[#D1D5DB] bg-white px-3 py-1 text-xs font-medium text-[#374151]"
 
 /** Long tokens (no spaces / URLs) must stay inside marketplace cards — grid/flex defaults allow overflow otherwise. */
 const wrapText = "min-w-0 break-words [overflow-wrap:anywhere]"
@@ -59,161 +67,150 @@ const PAGE_SIZE = 20
 function FreelancerFeedCard({ item }: { item: HomeFreelancerServiceItem }) {
   const negotiable = item.priceNegotiable
   return (
-    <li className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-[#D4A843]/70">
-      <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-3">
-        <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-900">
-          ფრილანსერი · სერვისი
+    <li className="relative flex h-full min-h-0 max-w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-4 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#2563EB] hover:shadow-[-4px_0_12px_rgba(37,99,235,0.25)]">
+      {item.vipFeatured ? (
+        <span className="absolute right-4 top-4 z-10 rounded-full bg-[#F59E0B] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
+          VIP
         </span>
-        <span className="text-xs font-semibold text-[#D4A843]" title="საშუალო შეფასება">
-          ★ {item.averageRating.toFixed(1)}
-        </span>
-      </div>
-      <Link to={`/freelancer/${encodeURIComponent(item.freelancerSlug)}`} className="group mt-3 flex shrink-0 items-center gap-3">
-        <span className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-xs font-bold text-[#1B2B4B]">
-          {item.avatarUrl ? (
-            <img src={item.avatarUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
-          ) : (
-            getInitials(item.fullName)
-          )}
-        </span>
-        <div className="min-w-0 text-left">
-          <p className="truncate text-sm font-bold text-[#1B2B4B] group-hover:text-[#D4A843]">{item.fullName}</p>
-          <p className="truncate text-xs text-slate-600">{item.professionalTitle || "ფრილანსერი"}</p>
-        </div>
-      </Link>
-      <h2 className={`mt-3 line-clamp-2 text-base font-extrabold text-[#1B2B4B] ${wrapText}`}>{item.title}</h2>
-      <p className={`mt-2 flex-1 text-sm leading-relaxed text-slate-700 ${wrapText}`}>{item.descriptionPreview}</p>
-      {item.tags.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {item.tags.slice(0, 4).map((tag) => (
-            <span
-              key={tag}
-              className={`max-w-full rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 ${wrapText}`}
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
       ) : null}
-      <div className="mt-4 flex flex-wrap items-end justify-between gap-2 border-t border-slate-100 pt-3">
-        <div>
-          <p className="text-xs font-semibold uppercase text-slate-500">{negotiable ? "ფასი" : "ფასი / ვადა"}</p>
-          <p className="text-lg font-extrabold text-[#1B2B4B]">
-            {negotiable ? "შეთანხმებით" : `${item.price.toLocaleString("ka-GE")} ₾`}
-          </p>
-          {!negotiable ? <p className="text-xs text-slate-600">{item.deliveryDays} სამუშაო დღე</p> : null}
+
+      <div className={`flex min-h-0 flex-1 flex-col ${item.vipFeatured ? "pr-14" : ""}`}>
+        <p className="text-xs font-medium text-slate-500">ფრილანსერი · სერვისი</p>
+        <div className="mt-1 flex items-center gap-2 text-sm font-semibold text-amber-500">
+          <span className="tracking-tight">{ratingStars(item.averageRating)}</span>
+          <span className="text-gray-900">{item.averageRating.toFixed(1)}</span>
         </div>
-        <div className="flex flex-wrap justify-end gap-2">
-          <Link
-            to={`/listings?open=${encodeURIComponent(item.id)}`}
-            className="inline-flex h-10 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-[#1B2B4B] transition hover:border-[#D4A843]"
-          >
-            ლისტინგი
-          </Link>
-          <Link
-            to={`/freelancer/${encodeURIComponent(item.freelancerSlug)}`}
-            className="inline-flex h-10 items-center rounded-lg bg-[#1B2B4B] px-4 text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B]"
-          >
-            პროფილი
-          </Link>
+
+        <Link
+          to={`/freelancer/${encodeURIComponent(item.freelancerSlug)}`}
+          className="group mt-3 flex shrink-0 items-center gap-3"
+        >
+          <span className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-sm font-bold text-[#1B2B4B]">
+            {item.avatarUrl ? (
+              <img
+                src={avatarImageUrl(supabase, item.avatarUrl) ?? item.avatarUrl}
+                alt=""
+                loading="lazy"
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              getInitials(item.fullName)
+            )}
+          </span>
+          <div className="min-w-0 text-left">
+            <p className="truncate font-bold text-gray-900 group-hover:text-[#2563EB]">{item.fullName}</p>
+            <p className="truncate text-xs text-slate-500">{item.professionalTitle || "ფრილანსერი"}</p>
+          </div>
+        </Link>
+
+        <h2 className={`mt-3 line-clamp-2 text-lg font-bold text-gray-900 ${wrapText}`}>{item.title}</h2>
+        <p className={`mt-3 line-clamp-2 text-sm leading-relaxed text-slate-600 ${wrapText}`}>{item.descriptionPreview}</p>
+        {item.tags.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {item.tags.slice(0, 4).map((tag) => (
+              <span key={tag} className={tagChipClass}>
+                {tag}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <div className="mt-4 flex flex-wrap content-start gap-2 border-t border-slate-100 pt-4">
+          <span className={metaPillFreelancerClass}>{negotiable ? "შეთანხმებით" : `${item.price.toLocaleString("ka-GE")} ₾`}</span>
+          {!negotiable ? <span className={metaPillFreelancerClass}>{item.deliveryDays} სამუშაო დღე</span> : null}
+          <span className={metaPillFreelancerClass}>👁 {item.viewsCount} ნახვა</span>
         </div>
+      </div>
+      <div className="mt-auto flex w-full shrink-0 flex-col gap-2 pt-3 sm:flex-row">
+        <Link
+          to={`/listing/${encodeURIComponent(item.id)}`}
+          className="inline-flex h-10 min-h-10 w-full min-w-0 flex-1 items-center justify-center whitespace-nowrap rounded-lg bg-[#2563EB] px-3 text-sm font-bold text-white transition hover:bg-[#1D4ED8]"
+        >
+          დეტალების ნახვა
+        </Link>
+        <Link
+          to={`/freelancer/${encodeURIComponent(item.freelancerSlug)}`}
+          className="inline-flex h-10 min-h-10 flex-1 items-center justify-center whitespace-nowrap rounded-lg border border-[#D1D5DB] bg-white px-4 text-sm font-semibold text-gray-900 transition hover:border-slate-400"
+        >
+          პროფილი
+        </Link>
       </div>
     </li>
   )
 }
 
 function JobListingFeedCard({ item }: { item: HomeJobListingItem }) {
+  const showRating = showHirerRatingValue(item.hirerAverageRating)
   return (
-    <li className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-[#D4A843]/70">
-      <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-3">
-        <span className="min-w-0 rounded-full bg-violet-100 px-2.5 py-0.5 text-[10px] font-bold uppercase leading-tight tracking-wide text-violet-900">
-          დამქირავებლის განცხადება
+    <li className="relative flex h-full min-h-0 max-w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-4 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#2563EB] hover:shadow-[-4px_0_12px_rgba(37,99,235,0.25)]">
+      {item.vipFeatured ? (
+        <span className="absolute right-4 top-4 z-10 rounded-full bg-[#F59E0B] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
+          VIP
         </span>
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          {item.isUrgent ? (
-            <span className="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">გადაუდებელი</span>
-          ) : null}
-          <span className="text-xs font-semibold text-[#D4A843]" title="დამქირავებლის საშუალო შეფასება">
-            ★ {item.hirerAverageRating.toFixed(1)}
-          </span>
-        </div>
-      </div>
-
-      <div className="mt-3 flex items-start gap-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-xs font-bold text-[#1B2B4B]">
-          {item.companyAvatar ? (
-            <img src={item.companyAvatar} alt="" loading="lazy" className="h-full w-full object-cover" />
-          ) : (
-            getInitials(item.companyName)
-          )}
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold text-[#1B2B4B]">{item.companyName}</p>
-          <p className={`text-xs text-slate-500 ${wrapText}`}>
-            {item.city ?? "ლოკაცია უცნობია"} · {formatRelativeTime(item.createdAt)}
-          </p>
-        </div>
-      </div>
-
-      <Link
-        to={`/job/${encodeURIComponent(item.id)}`}
-        className={`mt-3 block line-clamp-2 text-base font-extrabold text-[#1B2B4B] hover:text-[#D4A843] ${wrapText}`}
-      >
-        {item.title}
-      </Link>
-
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        <span
-          className={`max-w-full rounded-full border border-[#D4A843]/70 px-2 py-0.5 text-[11px] font-semibold text-[#1B2B4B] ${wrapText}`}
-        >
-          {item.categoryName}
-        </span>
-        {item.subcategoryName ? (
-          <span className={`max-w-full rounded-full border border-slate-200 px-2 py-0.5 text-[11px] text-slate-600 ${wrapText}`}>
-            {item.subcategoryName}
-          </span>
-        ) : null}
-      </div>
-
-      <p className={`mt-2 flex-1 text-sm leading-relaxed text-slate-700 ${wrapText}`}>{item.descriptionPreview}</p>
-
-      {item.skillNames.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {item.skillNames.slice(0, 4).map((name) => (
-            <span key={name} className={`max-w-full rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700 ${wrapText}`}>
-              {name}
-            </span>
-          ))}
-          {item.skillNames.length > 4 ? (
-            <span className="text-[11px] font-medium text-slate-500">+{item.skillNames.length - 4}</span>
-          ) : null}
-        </div>
       ) : null}
 
-      <div className="mt-4 flex min-w-0 flex-wrap gap-1.5 border-t border-slate-100 pt-3 text-[11px]">
-        <span className={`max-w-full rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-[#1B2B4B] ${wrapText}`}>
-          {jobBudgetLabel(item)}
-        </span>
-        <span className={`max-w-full rounded-full bg-slate-100 px-2 py-0.5 ${wrapText}`}>{DURATION_LABELS[item.durationType] ?? item.durationType}</span>
-        <span className={`max-w-full rounded-full bg-slate-100 px-2 py-0.5 ${wrapText}`}>
-          {locationGlyph(item.locationType)} {LOCATION_LABELS[item.locationType] ?? item.locationType}
-        </span>
-        <span className={`max-w-full rounded-full bg-slate-100 px-2 py-0.5 ${wrapText}`}>{item.applicantsCount} განმცხადებელი</span>
-        {item.applicationDeadline ? (
-          <span
-            className={`rounded-full px-2 py-0.5 ${isDeadlineSoon(item.applicationDeadline) ? "bg-red-100 font-semibold text-red-700" : "bg-slate-100 text-slate-700"}`}
-          >
-            ვადა: {deadlineShort(item.applicationDeadline)}
-          </span>
+      <div className={`flex min-h-0 flex-1 flex-col ${item.vipFeatured ? "pr-14" : ""}`}>
+        <p className="text-xs font-medium text-slate-500">დამქირავებლის განცხადება</p>
+        {showRating ? (
+          <div className="mt-1 flex items-center gap-2 text-sm font-semibold text-amber-500">
+            <span className="tracking-tight">{ratingStars(item.hirerAverageRating)}</span>
+            <span className="text-gray-900">{item.hirerAverageRating.toFixed(1)}</span>
+          </div>
         ) : null}
+
+        <div className="mt-3 flex items-start gap-3">
+          {item.companyAvatar ? (
+            <img
+              src={avatarImageUrl(supabase, item.companyAvatar) ?? item.companyAvatar}
+              alt=""
+              loading="lazy"
+              className="h-14 w-14 shrink-0 rounded-full object-cover"
+            />
+          ) : (
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#1B2B4B] text-sm font-bold text-white">
+              {getInitials(item.companyName)}
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="font-bold text-gray-900">{item.companyName}</p>
+                <p className={`mt-0.5 text-xs text-slate-500 ${wrapText}`}>
+                  {item.city ?? "ლოკაცია უცნობია"} · {formatRelativeTime(item.createdAt)}
+                </p>
+              </div>
+              {item.isUrgent ? (
+                <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">გადაუდებელი</span>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <Link to={`/job/${encodeURIComponent(item.id)}`} className="group mt-3 block">
+          <h2 className={`text-lg font-bold text-gray-900 group-hover:text-[#2563EB] md:text-xl ${wrapText}`}>{item.title}</h2>
+        </Link>
+
+        <div className="mt-2 flex flex-wrap gap-2">
+          <span className={tagChipClass}>{item.categoryName}</span>
+          {item.subcategoryName ? <span className={tagChipClass}>{item.subcategoryName}</span> : null}
+        </div>
+
+        <p className={`mt-3 line-clamp-2 text-sm leading-relaxed text-slate-600 ${wrapText}`}>{item.descriptionPreview}</p>
+
+        <div className="mt-4 flex flex-wrap content-start gap-2 border-t border-slate-100 pt-4">
+          <span className={metaPillJobClass}>{jobBudgetLabel(item)}</span>
+          <span className={metaPillJobClass}>
+            {locationGlyph(item.locationType)} {LOCATION_LABELS[item.locationType] ?? item.locationType}
+          </span>
+          <span className={metaPillJobClass}>💼 {item.applicantsCount} განმცხადებელი</span>
+        </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-auto w-full shrink-0 pt-3">
         <Link
           to={`/job/${encodeURIComponent(item.id)}`}
-          className="inline-flex h-10 flex-1 items-center justify-center rounded-lg bg-[#1B2B4B] px-4 text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] sm:flex-none"
+          className="inline-flex h-10 min-h-10 w-full items-center justify-center whitespace-nowrap rounded-lg bg-[#2563EB] px-4 text-sm font-bold text-white transition hover:bg-[#1D4ED8]"
         >
-          განცხადება
+          დეტალების ნახვა
         </Link>
       </div>
     </li>
@@ -221,10 +218,42 @@ function JobListingFeedCard({ item }: { item: HomeJobListingItem }) {
 }
 
 export default function HomeFeedSection() {
-  const navigate = useNavigate()
   const [items, setItems] = useState<HomeFeedItem[]>([])
   const [loading, setLoading] = useState(true)
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  /** Guests default to talent (freelancer listings); logged-in users default to the opposite role’s content. */
+  const [feedFilter, setFeedFilter] = useState<"all" | "freelancer" | "hirer">("freelancer")
+  const appliedRoleDefaultTab = useRef(false)
+
+  useEffect(() => {
+    let cancelled = false
+    const syncDefaultTabWithRole = async () => {
+      if (!isSupabaseConfigured || !supabase) {
+        appliedRoleDefaultTab.current = true
+        return
+      }
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (cancelled || appliedRoleDefaultTab.current) return
+      if (!user) {
+        setFeedFilter("freelancer")
+        appliedRoleDefaultTab.current = true
+        return
+      }
+      const { data: profile } = await supabase.from("profiles").select("user_type").eq("id", user.id).maybeSingle()
+      if (cancelled || appliedRoleDefaultTab.current) return
+      const ut = profile?.user_type
+      if (ut === "freelancer") setFeedFilter("hirer")
+      else if (ut === "hirer") setFeedFilter("freelancer")
+      else setFeedFilter("freelancer")
+      appliedRoleDefaultTab.current = true
+    }
+    void syncDefaultTabWithRole()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -246,38 +275,59 @@ export default function HomeFeedSection() {
     }
   }, [])
 
-  const visible = items.slice(0, visibleCount)
-  const hasMore = visible.length < items.length
+  const filteredItems =
+    feedFilter === "all"
+      ? items
+      : items.filter((item) => (feedFilter === "freelancer" ? item.kind === "freelancer_service" : item.kind === "hirer_job"))
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE)
+  }, [feedFilter])
+
+  const visible = filteredItems.slice(0, visibleCount)
+  const hasMore = visible.length < filteredItems.length
 
   return (
-    <section className="border-y border-slate-200 bg-[#F8F9FC]">
+    <section className="border-y border-slate-200 bg-white">
       <div className="mx-auto w-full max-w-[1200px] px-4 py-10 md:px-6 md:py-14">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold uppercase tracking-widest text-[#D4A843]">მარკეტპლეისი</p>
-            <h2 className="mt-2 text-2xl font-extrabold text-[#1B2B4B] md:text-[28px]">სერვისები და სამუშაოები</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
-              ფრილანსერების შემოთავაზებული სერვისები და დამქირავებლების განცხადებები — სრულად იხილეთ შესაბამის კატალოგებში.
-            </p>
+            <h2 className="mt-2 text-2xl font-bold text-[#2563EB] md:text-[28px]">სერვისები და სამუშაოები</h2>
           </div>
           <div className="w-full shrink-0 lg:w-auto lg:max-w-none">
-            <div className="-mx-1 flex flex-nowrap items-center gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] sm:justify-end [&::-webkit-scrollbar]:hidden">
-              <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-lg bg-[#1B2B4B] px-3 py-2 text-xs font-semibold text-white shadow-sm sm:px-4 sm:text-sm">
-                ყველა
-              </span>
+            <div className="flex max-w-full flex-nowrap items-center justify-end gap-2 overflow-x-auto pl-1 pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <button
                 type="button"
-                onClick={() => navigate("/listings")}
-                className="shrink-0 whitespace-nowrap rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-[#1B2B4B] transition hover:border-[#D4A843] sm:px-4 sm:text-sm"
+                onClick={() => setFeedFilter("all")}
+                className={`inline-flex h-10 min-h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full border px-4 text-sm font-medium transition ${
+                  feedFilter === "all"
+                    ? "border-transparent bg-[#2563EB] text-white"
+                    : "border-[#D1D5DB] bg-white text-slate-600 hover:border-slate-400 hover:text-slate-700"
+                }`}
               >
-                სერვისების კატალოგი
+                ყველა
               </button>
               <button
                 type="button"
-                onClick={() => navigate("/jobs")}
-                className="shrink-0 whitespace-nowrap rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-[#1B2B4B] transition hover:border-[#D4A843] sm:px-4 sm:text-sm"
+                onClick={() => setFeedFilter("freelancer")}
+                className={`inline-flex h-10 min-h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full border px-4 text-sm font-medium transition ${
+                  feedFilter === "freelancer"
+                    ? "border-transparent bg-[#2563EB] text-white"
+                    : "border-[#D1D5DB] bg-white text-slate-600 hover:border-slate-400 hover:text-slate-700"
+                }`}
               >
-                სამუშაოები
+                ფრილანსერები
+              </button>
+              <button
+                type="button"
+                onClick={() => setFeedFilter("hirer")}
+                className={`inline-flex h-10 min-h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full border px-4 text-sm font-medium transition ${
+                  feedFilter === "hirer"
+                    ? "border-transparent bg-[#2563EB] text-white"
+                    : "border-[#D1D5DB] bg-white text-slate-600 hover:border-slate-400 hover:text-slate-700"
+                }`}
+              >
+                დამქირავებლები
               </button>
             </div>
           </div>
@@ -292,18 +342,18 @@ export default function HomeFeedSection() {
         ) : visible.length === 0 ? (
           <p className="mt-8 rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-600">
             ჯერ არ არის შეთავაზება. იხილეთ{" "}
-            <Link className="font-semibold text-[#D4A843] underline" to="/listings">
+            <Link className="font-semibold text-[#2563EB] underline" to="/listings">
               სერვისების კატალოგი
             </Link>{" "}
             ან{" "}
-            <Link className="font-semibold text-[#D4A843] underline" to="/jobs">
+            <Link className="font-semibold text-[#2563EB] underline" to="/jobs">
               სამუშაოები
             </Link>
             .
           </p>
         ) : (
           <>
-            <ul className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <ul className="mt-8 grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {visible.map((item) =>
                 item.kind === "freelancer_service" ? (
                   <FreelancerFeedCard key={`f-${item.id}`} item={item} />
@@ -317,7 +367,7 @@ export default function HomeFeedSection() {
                 <button
                   type="button"
                   onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
-                  className="rounded-lg border border-[#D4A843] px-6 py-3 text-sm font-semibold text-[#1B2B4B] transition hover:bg-amber-50"
+                  className="h-11 rounded-lg border border-[#2563EB] px-6 text-sm font-semibold text-[#2563EB] transition hover:bg-blue-50"
                 >
                   მეტის ჩატვირთვა
                 </button>
