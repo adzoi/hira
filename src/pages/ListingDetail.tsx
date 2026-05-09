@@ -173,12 +173,14 @@ export default function ListingDetailPage() {
   }, [])
 
   const imagePublicUrls = useMemo(() => {
-    if (!item || !supabase) return []
+    if (!item) return []
+    const client = supabase
+    if (!client) return []
     return item.imageUrls.map((path) => ({
-      thumb: serviceImageThumbnailUrl(supabase, path),
-      detail: serviceImageDetailUrl(supabase, path),
+      thumb: serviceImageThumbnailUrl(client, path),
+      detail: serviceImageDetailUrl(client, path),
     }))
-  }, [item])
+  }, [item, supabase])
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase || !id || !item?.id || item.id !== id) return

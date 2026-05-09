@@ -30,11 +30,9 @@ export async function recordProfileVisit(args: RecordProfileVisitArgs): Promise<
       ? {
           visitor_user_id,
           freelancer_profile_id: args.freelancerProfileId,
-          hirer_profile_id: null as null,
         }
       : {
           visitor_user_id,
-          freelancer_profile_id: null as null,
           hirer_profile_id: args.hirerProfileId,
         }
 
