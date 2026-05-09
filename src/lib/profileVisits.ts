@@ -25,20 +25,22 @@ export async function recordProfileVisit(args: RecordProfileVisitArgs): Promise<
 
   if (visitor_user_id && visitor_user_id === args.profileOwnerUserId) return
 
-  const payload =
-    args.kind === "freelancer"
-      ? {
-          visitor_user_id,
-          freelancer_profile_id: args.freelancerProfileId,
-        }
-      : {
-          visitor_user_id,
-          hirer_profile_id: args.hirerProfileId,
-        }
-
-  const { error } = await supabase.from("profile_visits").insert(payload)
-  if (error && import.meta.env.DEV) {
-    console.warn("[profileVisits]", error.message)
+  if (args.kind === "freelancer") {
+    const { error } = await supabase.from("profile_visits").insert({
+      visitor_user_id,
+      freelancer_profile_id: args.freelancerProfileId,
+    })
+    if (error && import.meta.env.DEV) {
+      console.warn("[profileVisits]", error.message)
+    }
+  } else {
+    const { error } = await supabase.from("profile_visits").insert({
+      visitor_user_id,
+      hirer_profile_id: args.hirerProfileId,
+    })
+    if (error && import.meta.env.DEV) {
+      console.warn("[profileVisits]", error.message)
+    }
   }
 }
 
