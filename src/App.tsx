@@ -567,8 +567,7 @@ function LoginPage() {
       <Navbar />
       <div className="mx-auto w-full max-w-xl px-4 py-10 md:px-6 md:py-16">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-8">
-          <h1 className="text-[28px] font-bold text-[#1B2B4B] md:text-4xl">ანგარიშში შესვლა</h1>
-          <p className="mt-2 text-sm text-slate-500">შეიყვანე მონაცემები და გააგრძელე გიგორზე.</p>
+          <h1 className="text-[28px] font-bold text-[#2563EB] md:text-4xl">ანგარიშში შესვლა</h1>
 
           {reason === "post-job" ? (
             <div className="mt-5 flex items-center gap-3 rounded-lg border border-[#D4A843] bg-[#FFF8E7] px-4 py-3">
@@ -618,8 +617,8 @@ function LoginPage() {
             <label className="block">
               <div className="mb-1 flex items-center justify-between">
                 <span className="text-sm font-semibold text-[#1B2B4B]">პაროლი</span>
-                <Link to="/forgot-password" className="text-xs font-semibold text-[#D4A843] hover:underline">
-                  დაავიწყდა პაროლი?
+                <Link to="/forgot-password" className="text-xs font-semibold text-[#2563EB] hover:underline">
+                  დაგავიწყდა პაროლი?
                 </Link>
               </div>
               <div className="relative">
@@ -649,7 +648,7 @@ function LoginPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="h-11 w-full rounded-lg bg-[#1B2B4B] text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:cursor-not-allowed disabled:opacity-70"
+              className="h-11 w-full rounded-lg bg-[#2563EB] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isSubmitting ? "მიმდინარეობს..." : "შესვლა"}
             </button>
@@ -657,7 +656,7 @@ function LoginPage() {
 
           <p className="mt-5 text-center text-sm text-slate-600">
             ჯერ არ გაქვს ანგარიში?{" "}
-            <Link to="/register" className="font-semibold text-[#D4A843] hover:underline">
+            <Link to="/register" className="font-semibold text-[#2563EB] hover:underline">
               რეგისტრაცია
             </Link>
           </p>

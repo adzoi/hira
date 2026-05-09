@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import Navbar from "../components/Navbar"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
@@ -96,8 +96,11 @@ export default function ProfilePage() {
   const [freelancerProfileId, setFreelancerProfileId] = useState<string | null>(null)
   const [serviceListings, setServiceListings] = useState<ServiceListingForm[]>([])
   const [initialServiceIds, setInitialServiceIds] = useState<string[]>([])
-  const [availableSkillNames, setAvailableSkillNames] = useState<string[]>([])
-  const [profileTags, setProfileTags] = useState<string[]>([])
+  const [skillsCatalog, setSkillsCatalog] = useState<Array<{ id: string; name: string; category_id: string | null }>>([])
+  const [categoriesMap, setCategoriesMap] = useState<Record<string, string>>({})
+  const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
+  /** Georgian category label key in groupedSkills (matches onboarding). */
+  const [skillFocusCategory, setSkillFocusCategory] = useState("")
   const [experiences, setExperiences] = useState<ExperienceForm[]>([])
   const [educations, setEducations] = useState<EducationForm[]>([])
 
@@ -116,6 +119,25 @@ export default function ProfilePage() {
   const [passwordBusy, setPasswordBusy] = useState(false)
   const [accountMessage, setAccountMessage] = useState("")
   const [accountErr, setAccountErr] = useState("")
+  const [emailAccordionOpen, setEmailAccordionOpen] = useState(false)
+  const [passwordAccordionOpen, setPasswordAccordionOpen] = useState(false)
+
+  const groupedSkills = useMemo(
+    () =>
+      skillsCatalog.reduce<Record<string, Array<{ id: string; name: string }>>>((acc, skill) => {
+        const key = skill.category_id ? categoriesMap[skill.category_id] ?? "სხვა" : "სხვა"
+        if (!acc[key]) acc[key] = []
+        acc[key].push({ id: skill.id, name: skill.name })
+        return acc
+      }, {}),
+    [skillsCatalog, categoriesMap],
+  )
+
+  const skillNameById = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const s of skillsCatalog) m.set(s.id, s.name)
+    return m
+  }, [skillsCatalog])
 
   useEffect(() => {
     document.title = "პროფილი — გიგორი"
@@ -232,36 +254,26 @@ export default function ProfilePage() {
               })),
             )
 
-            const { data: skillRows, error: skillRowsError } = await supabase
-              .from("freelancer_skills")
-              .select("skills(name)")
-              .eq("freelancer_profile_id", fp.id)
+            const [{ data: skillRows, error: skillRowsError }, { data: allSkillsRows, error: allSkillsError }, { data: categoriesData }] =
+              await Promise.all([
+                supabase.from("freelancer_skills").select("skill_id").eq("freelancer_profile_id", fp.id),
+                supabase.from("skills").select("id,name,category_id").eq("is_approved", true).order("name"),
+                supabase.from("categories").select("id,name_ka"),
+              ])
             if (skillRowsError) throw skillRowsError
-
-            const tags =
-              (skillRows ?? [])
-                .map((row: any) => row.skills?.name)
-                .filter(Boolean)
-                .map((name: string) => name.trim())
-                .filter(Boolean) ?? []
-            setProfileTags(Array.from(new Set(tags)))
-
-            const { data: allSkillsRows, error: allSkillsError } = await supabase
-              .from("skills")
-              .select("name")
-              .eq("is_approved", true)
-              .order("name")
             if (allSkillsError) throw allSkillsError
-            setAvailableSkillNames(
-              Array.from(
-                new Set((allSkillsRows ?? []).map((row: any) => String(row.name ?? "").trim()).filter(Boolean)),
-              ),
-            )
+
+            setSelectedSkillIds((skillRows ?? []).map((row) => row.skill_id).filter(Boolean))
+            setSkillsCatalog((allSkillsRows ?? []) as Array<{ id: string; name: string; category_id: string | null }>)
+            const map: Record<string, string> = {}
+            for (const c of categoriesData ?? []) map[c.id] = c.name_ka
+            setCategoriesMap(map)
           } else {
             setServiceListings([])
             setInitialServiceIds([])
-            setProfileTags([])
-            setAvailableSkillNames([])
+            setSelectedSkillIds([])
+            setSkillsCatalog([])
+            setCategoriesMap({})
             setExperiences([])
             setEducations([])
           }
@@ -394,26 +406,18 @@ export default function ProfilePage() {
         }
         setFreelancerProfileId(targetFreelancerId)
 
-        const normalizedTagNames = Array.from(new Set(profileTags.map((tag) => tag.trim()).filter(Boolean)))
+        const uniqueSkillIds = Array.from(new Set(selectedSkillIds.filter(Boolean)))
 
         await supabase.from("freelancer_skills").delete().eq("freelancer_profile_id", targetFreelancerId)
 
-        if (normalizedTagNames.length > 0) {
-          const { data: finalSkills, error: finalSkillsError } = await supabase
-            .from("skills")
-            .select("id,name")
-            .in("name", normalizedTagNames)
-          if (finalSkillsError) throw finalSkillsError
-
-          if ((finalSkills ?? []).length > 0) {
-            const { error: insertFreelancerSkillsError } = await supabase.from("freelancer_skills").insert(
-              (finalSkills ?? []).map((skill) => ({
-                freelancer_profile_id: targetFreelancerId,
-                skill_id: skill.id,
-              })),
-            )
-            if (insertFreelancerSkillsError) throw insertFreelancerSkillsError
-          }
+        if (uniqueSkillIds.length > 0) {
+          const { error: insertFreelancerSkillsError } = await supabase.from("freelancer_skills").insert(
+            uniqueSkillIds.map((skill_id) => ({
+              freelancer_profile_id: targetFreelancerId,
+              skill_id,
+            })),
+          )
+          if (insertFreelancerSkillsError) throw insertFreelancerSkillsError
         }
 
         const nonEmptyListings = serviceListings
@@ -622,9 +626,8 @@ export default function ProfilePage() {
     setServiceListings((prev) => prev.map((item, i) => (i === index ? { ...item, ...patch } : item)))
   }
 
-  const toggleProfileTag = (tag: string) => {
-    setProfileTags((prev) => (prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag]))
-  }
+  const toggleSkill = (id: string) =>
+    setSelectedSkillIds((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]))
 
   const updateExperience = (index: number, patch: Partial<ExperienceForm>) => {
     setExperiences((prev) =>
@@ -780,16 +783,13 @@ export default function ProfilePage() {
 
   if (loading) return <div className="p-6">იტვირთება...</div>
 
-  console.log("avatarUrl raw value:", avatarUrl)
-  console.log("avatarImageUrl result:", avatarImageUrl(supabase, avatarUrl))
-
   return (
     <div className="min-h-screen bg-slate-50">
       <Navbar />
       <main className="mx-auto max-w-3xl px-6 py-10">
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
           <div className="mb-6 flex items-start justify-between gap-4">
-            <h1 className="text-3xl font-bold text-[#1B2B4B]">ჩემი პროფილი</h1>
+            <h1 className="text-3xl font-bold text-[#2563EB]">ჩემი პროფილი</h1>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -838,7 +838,7 @@ export default function ProfilePage() {
                   const element = document.getElementById("avatar-input") as HTMLInputElement | null
                   element?.click()
                 }}
-                className="rounded-lg bg-[#1B2B4B] px-4 py-2 text-sm text-white"
+                className="rounded-lg bg-[#2563EB] px-4 py-2 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#1D4ED8]"
               >
                 {avatarUrl ? "📷 სურათის შეცვლა" : "📷 პროფილის სურათის ატვირთვა"}
               </button>
@@ -857,13 +857,13 @@ export default function ProfilePage() {
 
           <div className="space-y-5">
             <div>
-              <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">
+              <label className="mb-1 block text-base font-semibold text-gray-900">
                 სახელი და გვარი <span className="text-[#EF4444]">*</span>
               </label>
               <input className="h-11 w-full rounded-lg border border-slate-300 px-3" value={fullName} onChange={(e)=>setFullName(e.target.value)} />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">ქალაქი / ლოკაცია</label>
+              <label className="mb-1 block text-base font-semibold text-gray-900">ქალაქი / ლოკაცია</label>
               <LocationFilterSelect
                 value={city}
                 onChange={setCity}
@@ -873,13 +873,13 @@ export default function ProfilePage() {
               <p className="mt-1 text-xs text-slate-500">დისტანციური ან შერეული ფორმატიც შეგიძლიათ აირჩიოთ.</p>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">ტელეფონის ნომერი</label>
+              <label className="mb-1 block text-base font-semibold text-gray-900">ტელეფონის ნომერი</label>
               <input className="h-11 w-full rounded-lg border border-slate-300 px-3" value={phone} onChange={(e)=>setPhone(e.target.value)} />
             </div>
           </div>
 
           <section className="mt-8 rounded-xl border border-slate-200 bg-slate-50 p-6">
-            <h2 className="text-lg font-semibold text-[#1B2B4B]">ელფოსტა და პაროლი</h2>
+            <h2 className="text-lg font-semibold text-[#2563EB]">ელფოსტა და პაროლი</h2>
             <p className="mt-1 text-sm text-slate-600">
               ანგარიშის შესვლის ელფოსტასა და პაროლს ცვლი აქ. პროფილის დასამახსოვრებლად ქვემოთ ისევ დააჭირე „შენახვა“, თუ სხვა ველებიც შეცვლილი გაქვს.
             </p>
@@ -896,41 +896,64 @@ export default function ProfilePage() {
               </p>
             ) : null}
 
-            <div className="mt-4 space-y-3">
-              <label className="block">
-                <span className="mb-1 block text-sm font-medium text-[#1B2B4B]">ახალი ელფოსტა</span>
-                <input
-                  type="email"
-                  autoComplete="email"
-                  className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
-                  placeholder="ახალი მისამართი"
-                  value={newEmail}
-                  onChange={(e) => {
-                    setNewEmail(e.target.value)
-                    setAccountErr("")
-                    setAccountMessage("")
-                  }}
-                />
-              </label>
-              <button
-                type="button"
-                disabled={emailBusy}
-                onClick={() => void handleUpdateEmail()}
-                className="h-11 w-full rounded-lg bg-[#1B2B4B] text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:px-6"
-              >
-                {emailBusy ? "მიმდინარეობს..." : "ელფოსტის შეცვლა"}
-              </button>
-            </div>
-
-            <div className="mt-8 border-t border-slate-200 pt-6">
-              <h3 className="text-sm font-semibold text-[#1B2B4B]">პაროლის შეცვლა</h3>
-              <div className="mt-3 space-y-3">
+            <button
+              type="button"
+              aria-expanded={emailAccordionOpen}
+              onClick={() => setEmailAccordionOpen((v) => !v)}
+              className="mt-4 flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:bg-slate-50"
+            >
+              <span className="text-base font-semibold text-gray-900">ელფოსტის შეცვლა</span>
+              <span className="text-slate-500" aria-hidden>
+                {emailAccordionOpen ? "▴" : "▾"}
+              </span>
+            </button>
+            {emailAccordionOpen ? (
+              <div className="mt-3 space-y-3 rounded-lg border border-slate-100 bg-white p-4">
                 <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-[#1B2B4B]">ახლანდელი პაროლი</span>
+                  <span className="mb-1 block text-base font-semibold text-gray-900">ახალი ელფოსტა</span>
+                  <input
+                    type="email"
+                    autoComplete="email"
+                    className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-[#2563EB]/30 focus:border-[#2563EB] focus:ring-2"
+                    placeholder="ახალი მისამართი"
+                    value={newEmail}
+                    onChange={(e) => {
+                      setNewEmail(e.target.value)
+                      setAccountErr("")
+                      setAccountMessage("")
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={emailBusy}
+                  onClick={() => void handleUpdateEmail()}
+                  className="h-11 w-full rounded-lg bg-[#2563EB] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:px-6"
+                >
+                  {emailBusy ? "მიმდინარეობს..." : "ელფოსტის შეცვლა"}
+                </button>
+              </div>
+            ) : null}
+
+            <button
+              type="button"
+              aria-expanded={passwordAccordionOpen}
+              onClick={() => setPasswordAccordionOpen((v) => !v)}
+              className="mt-3 flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:bg-slate-50"
+            >
+              <span className="text-base font-semibold text-gray-900">პაროლის შეცვლა</span>
+              <span className="text-slate-500" aria-hidden>
+                {passwordAccordionOpen ? "▴" : "▾"}
+              </span>
+            </button>
+            {passwordAccordionOpen ? (
+              <div className="mt-3 space-y-3 rounded-lg border border-slate-100 bg-white p-4">
+                <label className="block">
+                  <span className="mb-1 block text-base font-semibold text-gray-900">ახლანდელი პაროლი</span>
                   <input
                     type="password"
                     autoComplete="current-password"
-                    className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3"
+                    className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 outline-none ring-[#2563EB]/30 focus:border-[#2563EB] focus:ring-2"
                     value={currentPasswordPw}
                     onChange={(e) => {
                       setCurrentPasswordPw(e.target.value)
@@ -940,11 +963,11 @@ export default function ProfilePage() {
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-[#1B2B4B]">ახალი პაროლი</span>
+                  <span className="mb-1 block text-base font-semibold text-gray-900">ახალი პაროლი</span>
                   <input
                     type="password"
                     autoComplete="new-password"
-                    className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3"
+                    className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 outline-none ring-[#2563EB]/30 focus:border-[#2563EB] focus:ring-2"
                     value={newPassword}
                     onChange={(e) => {
                       setNewPassword(e.target.value)
@@ -954,11 +977,11 @@ export default function ProfilePage() {
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-[#1B2B4B]">ახალი პაროლის გამეორება</span>
+                  <span className="mb-1 block text-base font-semibold text-gray-900">ახალი პაროლის გამეორება</span>
                   <input
                     type="password"
                     autoComplete="new-password"
-                    className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3"
+                    className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 outline-none ring-[#2563EB]/30 focus:border-[#2563EB] focus:ring-2"
                     value={confirmNewPassword}
                     onChange={(e) => {
                       setConfirmNewPassword(e.target.value)
@@ -971,27 +994,27 @@ export default function ProfilePage() {
                   type="button"
                   disabled={passwordBusy}
                   onClick={() => void handleUpdatePassword()}
-                  className="h-11 w-full rounded-lg border border-[#1B2B4B] bg-white text-sm font-semibold text-[#1B2B4B] transition hover:bg-[#1B2B4B] hover:text-white disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:px-6"
+                  className="h-11 w-full rounded-lg bg-[#2563EB] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:px-6"
                 >
                   {passwordBusy ? "მიმდინარეობს..." : "პაროლის განახლება"}
                 </button>
               </div>
-            </div>
+            ) : null}
           </section>
 
           {userType === "freelancer" ? (
             <div className="mt-5 space-y-5">
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">პროფესიული სათაური</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">პროფესიული სათაური</label>
                 <input className="h-11 w-full rounded-lg border border-slate-300 px-3" placeholder="React Developer, Graphic Designer" value={professionalTitle} onChange={(e)=>setProfessionalTitle(e.target.value)} />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">ბიოგრაფია</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">ბიოგრაფია</label>
                 <textarea className="w-full rounded-lg border border-slate-300 px-3 py-2" rows={4} value={bio} onChange={(e)=>setBio(e.target.value)} />
                 <p className="mt-1 text-right text-xs text-slate-500">{bio.length}/2000</p>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">დასაქმების ტიპი</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">დასაქმების ტიპი</label>
                 <select className="h-11 w-full rounded-lg border border-slate-300 px-3" value={availability} onChange={(e)=>setAvailability(e.target.value)}>
                   <option value="">აირჩიე...</option>
                   <option value="full_time">სრული განაკვეთი</option>
@@ -1000,7 +1023,7 @@ export default function ProfilePage() {
                 </select>
               </div>
               <div ref={langBoxRef} className="relative">
-                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">ენები</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">ენები</label>
                 <div className="min-h-[2.75rem] rounded-lg border border-slate-300 bg-white px-2 py-1.5">
                   <div className="flex flex-wrap items-center gap-1.5">
                     {languages.map((lang) => (
@@ -1049,7 +1072,7 @@ export default function ProfilePage() {
                 <p className="mt-1 text-xs text-slate-500">დააჭირე „+ ენა“ და აირჩიე სიიდან — სია იშლება ქვემოთ.</p>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">LinkedIn პროფილი</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">LinkedIn პროფილი</label>
                 <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm text-slate-700">
                   <input
                     type="checkbox"
@@ -1076,7 +1099,7 @@ export default function ProfilePage() {
                 </p>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">GitHub პროფილი</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">GitHub პროფილი</label>
                 <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm text-slate-700">
                   <input
                     type="checkbox"
@@ -1103,7 +1126,7 @@ export default function ProfilePage() {
                 </p>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">პორტფოლიო ვებსაიტი</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">პორტფოლიო ვებსაიტი</label>
                 <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm text-slate-700">
                   <input
                     type="checkbox"
@@ -1129,32 +1152,115 @@ export default function ProfilePage() {
                   {noPortfolioWebsite ? "ბმული არ შეინახება." : "ნებისმიერი სწორი https ბმული."}
                 </p>
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">უნარები (მინ. 3)</label>
-                <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                  <div className="flex max-h-40 flex-wrap gap-2 overflow-auto">
-                    {availableSkillNames.map((tag) => (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() => toggleProfileTag(tag)}
-                        className={`rounded-full border px-2 py-1 text-xs ${
-                          profileTags.includes(tag)
-                            ? "border-[#D4A843] bg-[#D4A843] text-[#1B2B4B]"
-                            : "border-slate-300 bg-white text-slate-700"
-                        }`}
-                      >
-                        {tag}
-                      </button>
+              <div className="space-y-3">
+                <label className="mb-1 block text-base font-semibold text-gray-900">უნარები (მინ. 3)</label>
+                <p className="text-xs text-slate-500">
+                  არჩეულია <span className="font-semibold tabular-nums text-slate-700">{selectedSkillIds.length}</span> უნარი · საჭიროა მინიმუმ{" "}
+                  <span className="font-semibold">3</span>
+                </p>
+
+                <div>
+                  <label htmlFor="profile-skill-category" className="mb-1 block text-base font-semibold text-gray-900">
+                    კატეგორია
+                  </label>
+                  <select
+                    id="profile-skill-category"
+                    className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/25"
+                    value={skillFocusCategory}
+                    onChange={(e) => setSkillFocusCategory(e.target.value)}
+                  >
+                    <option value="">აირჩიე კატეგორია…</option>
+                    {Object.keys(groupedSkills).map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
                     ))}
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    აირჩიე მხოლოდ არსებული ტეგები. არჩეული: {profileTags.length}
-                  </p>
+                  </select>
                 </div>
+
+                {skillFocusCategory && groupedSkills[skillFocusCategory] ? (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
+                    <p className="mb-2 text-sm font-semibold text-[#2563EB]">{skillFocusCategory}</p>
+                    {(() => {
+                      const list = groupedSkills[skillFocusCategory]!
+                      const selectedInCategory = list.filter((s) => selectedSkillIds.includes(s.id))
+                      return (
+                        <>
+                          {selectedInCategory.length > 0 ? (
+                            <div className="mb-2 flex flex-wrap gap-1.5">
+                              {selectedInCategory.map((s) => (
+                                <button
+                                  key={s.id}
+                                  type="button"
+                                  onClick={() => toggleSkill(s.id)}
+                                  className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#D1D5DB] bg-white px-2.5 py-0.5 text-xs font-medium text-[#374151] hover:bg-slate-50"
+                                >
+                                  <span className="truncate">{s.name}</span>
+                                  <span className="shrink-0 text-slate-400" aria-hidden>
+                                    ×
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="mb-2 text-xs text-slate-500">ამ კატეგორიიდან ჯერ არაფერი არ არის არჩეული.</p>
+                          )}
+                          <label className="sr-only" htmlFor="profile-skill-add-active">
+                            უნარის დამატება — {skillFocusCategory}
+                          </label>
+                          <select
+                            id="profile-skill-add-active"
+                            key={`profile-skill-dd-${skillFocusCategory}-${selectedInCategory.map((s) => s.id).join("-")}`}
+                            className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/25"
+                            defaultValue=""
+                            onChange={(e) => {
+                              const id = e.target.value
+                              if (id) {
+                                toggleSkill(id)
+                                e.target.value = ""
+                              }
+                            }}
+                          >
+                            <option value="">ტეგის / უნარის დამატება…</option>
+                            {list.map((s) => (
+                              <option key={s.id} value={s.id} disabled={selectedSkillIds.includes(s.id)}>
+                                {s.name}
+                              </option>
+                            ))}
+                          </select>
+                        </>
+                      )
+                    })()}
+                  </div>
+                ) : (
+                  <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-3 py-3 text-xs text-slate-500">
+                    კატეგორიის ასარჩევად გამოიყენე ზემოთ სია — აქ გამოჩნდება შესაბამისი ტეგები.
+                  </p>
+                )}
+
+                {selectedSkillIds.length > 0 ? (
+                  <div className="rounded-lg border border-slate-100 bg-white p-3">
+                    <p className="mb-2 text-xs font-semibold text-slate-600">ყველა არჩეული უნარი</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedSkillIds.map((id) => (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => toggleSkill(id)}
+                          className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#D1D5DB] bg-white px-2.5 py-0.5 text-xs font-medium text-[#374151] hover:bg-red-50"
+                        >
+                          <span className="truncate">{skillNameById.get(id) ?? id}</span>
+                          <span className="shrink-0 text-slate-400" aria-hidden>
+                            ×
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">სერვისები</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">სერვისები</label>
                 <div className="space-y-3">
                   {serviceListings.length === 0 ? (
                     <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
@@ -1177,7 +1283,7 @@ export default function ProfilePage() {
 
                       <div className="space-y-3">
                         <div>
-                          <label className="mb-1 block text-xs font-medium text-slate-600">სათაური *</label>
+                          <label className="mb-1 block text-base font-semibold text-gray-900">სათაური *</label>
                           <input
                             className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
                             value={listing.title}
@@ -1187,7 +1293,7 @@ export default function ProfilePage() {
                         </div>
 
                         <div>
-                          <label className="mb-1 block text-xs font-medium text-slate-600">აღწერა</label>
+                          <label className="mb-1 block text-base font-semibold text-gray-900">აღწერა</label>
                           <textarea
                             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                             rows={3}
@@ -1199,7 +1305,7 @@ export default function ProfilePage() {
 
                         <div className="grid gap-3 sm:grid-cols-2">
                           <div>
-                            <label className="mb-1 block text-xs font-medium text-slate-600">ფასი (₾)</label>
+                            <label className="mb-1 block text-base font-semibold text-gray-900">ფასი (₾)</label>
                             <input
                               type="number"
                               min="0"
@@ -1211,7 +1317,7 @@ export default function ProfilePage() {
                             />
                           </div>
                           <div>
-                            <label className="mb-1 block text-xs font-medium text-slate-600">ვადა (დღე) *</label>
+                            <label className="mb-1 block text-base font-semibold text-gray-900">ვადა (დღე) *</label>
                             <input
                               type="number"
                               min="1"
@@ -1249,18 +1355,12 @@ export default function ProfilePage() {
                       <span className="text-slate-500">ლიმიტი: 3 ლისტინგი</span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-500">
-                    ახალი ლისტინგისთვის გამოიყენე ბმული ზემოთ — იქ ხელმისაწვდომია ყველა ტეგი და კატეგორია. სწრაფი რედაქტირება:{" "}
-                    <a href="/dashboard" className="font-semibold text-[#1B2B4B] hover:underline">
-                      დაშბორდი
-                    </a>
-                    .
-                  </p>
+
                 </div>
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">გამოცდილება (მაქს. 10)</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">გამოცდილება (მაქს. 10)</label>
                 <div className="space-y-3">
                   {experiences.length === 0 ? (
                     <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
@@ -1344,7 +1444,7 @@ export default function ProfilePage() {
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">განათლება (არასავალდებულო, მაქს. 10)</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">განათლება (არასავალდებულო, მაქს. 10)</label>
                 <div className="space-y-3">
                   {educations.length === 0 ? (
                     <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
@@ -1385,7 +1485,7 @@ export default function ProfilePage() {
                           value={edu.fieldOfStudy}
                           onChange={(e) => updateEducation(index, { fieldOfStudy: e.target.value })}
                         />
-                        <label className="block text-xs text-slate-600">დასრულების თარიღი</label>
+                        <label className="mb-1 block text-base font-semibold text-gray-900">დასრულების თარიღი</label>
                         <input
                           type="date"
                           className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
@@ -1415,19 +1515,19 @@ export default function ProfilePage() {
           ) : (
             <div className="mt-5 space-y-5">
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">კომპანიის სახელი</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">კომპანიის სახელი</label>
                 <input className="h-11 w-full rounded-lg border border-slate-300 px-3" value={companyName} onChange={(e)=>setCompanyName(e.target.value)} />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">კომპანიის აღწერა</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">კომპანიის აღწერა</label>
                 <textarea className="w-full rounded-lg border border-slate-300 px-3 py-2" rows={4} value={companyDescription} onChange={(e)=>setCompanyDescription(e.target.value)} />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">ინდუსტრია</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">ინდუსტრია</label>
                 <input className="h-11 w-full rounded-lg border border-slate-300 px-3" value={industry} onChange={(e)=>setIndustry(e.target.value)} />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#1B2B4B]">კომპანიის ვებსაიტი</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">კომპანიის ვებსაიტი</label>
                 <input className="h-11 w-full rounded-lg border border-slate-300 px-3" value={companyWebsite} onChange={(e)=>setCompanyWebsite(e.target.value)} />
               </div>
             </div>
@@ -1436,7 +1536,11 @@ export default function ProfilePage() {
           {error ? <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
           {success ? <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{success}</p> : null}
 
-          <button disabled={saving} onClick={onSave} className="mt-6 h-11 w-full rounded-lg bg-[#1B2B4B] text-white hover:bg-[#D4A843] hover:text-[#1B2B4B]">
+          <button
+            disabled={saving}
+            onClick={onSave}
+            className="mt-6 h-11 w-full rounded-lg bg-[#2563EB] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-70"
+          >
             {saving ? "ინახება..." : "ცვლილებების შენახვა"}
           </button>
         </div>

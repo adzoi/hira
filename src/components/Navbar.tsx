@@ -505,7 +505,7 @@ export default function Navbar() {
                 event.preventDefault()
                 handlePostJob()
               }}
-              className="inline-flex h-11 items-center rounded-md bg-[#1B2B4B] px-4 text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B]"
+              className="inline-flex h-11 items-center rounded-md bg-[#2563EB] px-4 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#1D4ED8]"
             >
               სამუშაოს განთავსება
             </Link>
@@ -588,7 +588,7 @@ export default function Navbar() {
                   setMobileMenuOpen(false)
                   handlePostJob()
                 }}
-                className="inline-flex h-11 items-center justify-center rounded-md border border-[#1B2B4B] text-sm font-semibold text-[#1B2B4B]"
+                className="inline-flex h-11 items-center justify-center rounded-md bg-[#2563EB] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#1D4ED8]"
               >
                 სამუშაოს განთავსება
               </button>
