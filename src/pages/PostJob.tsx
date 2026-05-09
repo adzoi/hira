@@ -81,6 +81,30 @@ type FieldErrors = {
   vacancies?: string
 }
 
+const PUBLISH_ERROR_SCROLL_ORDER = [
+  "title",
+  "categoryId",
+  "description",
+  "budgetType",
+  "budgetMin",
+  "budgetMax",
+  "vacancies",
+  "applicationDeadline",
+] as const satisfies readonly (keyof FieldErrors)[]
+
+function scrollToFirstPublishError(errors: FieldErrors) {
+  for (const key of PUBLISH_ERROR_SCROLL_ORDER) {
+    if (!errors[key]) continue
+    const node = document.getElementById(`post-job-field-${key}`)
+    if (!node) continue
+    node.scrollIntoView({ behavior: "smooth", block: "center" })
+    const focusable =
+      node.matches("input,select,textarea") ? node : node.querySelector("input,select,textarea")
+    ;(focusable as HTMLElement | undefined)?.focus?.({ preventScroll: true })
+    break
+  }
+}
+
 export default function PostJobPage() {
   const navigate = useNavigate()
   const { jobId } = useParams<{ jobId: string }>()
@@ -118,6 +142,7 @@ export default function PostJobPage() {
   const [newImageFiles, setNewImageFiles] = useState<File[]>([])
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+  const [skillFocusCategoryId, setSkillFocusCategoryId] = useState("")
 
   useEffect(() => {
     document.title = isEdit ? "განცხადების რედაქტირება — გიგორი" : "სამუშაოები — გიგორი"
@@ -273,6 +298,21 @@ export default function PostJobPage() {
     setSelectedSkillIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }
 
+  const skillsByCategoryId = useMemo(() => {
+    const m = new Map<string, SkillRow[]>()
+    for (const s of allSkills) {
+      const key = s.category_id ?? ""
+      if (!key) continue
+      const list = m.get(key) ?? []
+      list.push(s)
+      m.set(key, list)
+    }
+    for (const [, list] of m) list.sort((a, b) => a.name.localeCompare(b.name))
+    return m
+  }, [allSkills])
+
+  const skillNameById = useMemo(() => new Map(allSkills.map((s) => [s.id, s.name])), [allSkills])
+
   const removeExistingImage = (url: string) => {
     setExistingImageUrls((prev) => prev.filter((item) => item !== url))
   }
@@ -315,7 +355,7 @@ export default function PostJobPage() {
     }
   }, [newImagePreviews])
 
-  const validateForPublish = (): boolean => {
+  const getPublishErrors = (): FieldErrors => {
     const e: FieldErrors = {}
 
     if (!title.trim()) {
@@ -360,14 +400,16 @@ export default function PostJobPage() {
       e.vacancies = `ვაკანსიები არ უნდა იყოს ნაკლები უკვე მიღებული ფრილანსერების (${acceptedCountSnapshot}) რაოდენობაზე.`
     }
 
-    setFieldErrors(e)
-    return Object.keys(e).length === 0
+    return e
   }
 
   const handlePublishFromPreview = async () => {
     if (!supabase || !hirerProfileId) return
-    if (!validateForPublish()) {
+    const pubErrors = getPublishErrors()
+    setFieldErrors(pubErrors)
+    if (Object.keys(pubErrors).length > 0) {
       setShowPreview(false)
+      window.requestAnimationFrame(() => scrollToFirstPublishError(pubErrors))
       return
     }
 
@@ -505,7 +547,7 @@ export default function PostJobPage() {
       <div className="min-h-screen bg-slate-50">
         <Navbar />
         <div className="mx-auto flex max-w-[720px] items-center justify-center px-6 py-20">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-300 border-t-[#D4A843]" />
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-300 border-t-[#2563EB]" />
         </div>
       </div>
     )
@@ -515,7 +557,9 @@ export default function PostJobPage() {
     <div className="page-enter min-h-screen bg-[#F8F9FC]">
       <Navbar />
       <main className="mx-auto max-w-[720px] px-4 py-8 md:px-6 md:py-10">
-        <h1 className="text-[28px] font-bold text-[#1B2B4B] md:text-5xl">{isEdit ? "განცხადების რედაქტირება" : "სამუშაოს განთავსება"}</h1>
+        <h1 className={`text-[28px] font-bold md:text-5xl ${isEdit ? "text-[#1B2B4B]" : "text-[#2563EB]"}`}>
+          {isEdit ? "განცხადების რედაქტირება" : "სამუშაოს განთავსება"}
+        </h1>
         <p className="mt-2 text-sm text-slate-500">
           {isEdit ? "განაახლე დეტალები და შეინახე ცვლილებები." : "შექმენი ახალი განცხადება და იპოვე საუკეთესო ფრილანსერი."}
         </p>
@@ -526,7 +570,7 @@ export default function PostJobPage() {
 
         {showPreview ? (
           <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="border-l-4 border-[#D4A843] pl-3 text-xl font-bold text-[#1B2B4B]">განცხადების პრევიუ</h2>
+            <h2 className="border-l-4 border-[#2563EB] pl-3 text-xl font-bold text-[#1B2B4B]">განცხადების პრევიუ</h2>
 
             <div className="mt-5 min-w-0 space-y-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-4">
               <p className="break-words text-2xl font-bold text-[#1B2B4B] [overflow-wrap:anywhere]">{title.trim()}</p>
@@ -577,7 +621,7 @@ export default function PostJobPage() {
                 type="button"
                 onClick={() => void handlePublishFromPreview()}
                 disabled={submitting}
-                className="inline-flex h-11 items-center justify-center rounded-lg bg-[#1B2B4B] text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:cursor-not-allowed disabled:opacity-70"
+                className="inline-flex h-11 items-center justify-center rounded-lg bg-[#2563EB] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {submitting ? (
                   <span className="inline-flex items-center gap-2">
@@ -595,18 +639,19 @@ export default function PostJobPage() {
         ) : (
           <div className="mt-6 space-y-6">
             <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="border-l-4 border-[#D4A843] pl-3 text-xl font-bold text-[#1B2B4B]">1. სამუშაოს დეტალები</h2>
+              <h2 className="border-l-4 border-[#2563EB] pl-3 text-xl font-bold text-[#1B2B4B]">1. სამუშაოს დეტალები</h2>
               <div className="mt-4 space-y-4">
                 <label className="block">
                   <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">
                     სამუშაოს სათაური <span className="text-red-500">*</span>
                   </span>
                   <input
+                    id="post-job-field-title"
                     type="text"
                     maxLength={100}
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#D4A843] focus:ring-2"
+                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#2563EB] ring-[#2563EB]/35 focus:ring-2"
                     placeholder="მაგ: React დეველოპერი eCommerce პროექტისთვის"
                   />
                   {fieldErrors.title ? <p className="mt-1 text-sm text-red-600">{fieldErrors.title}</p> : null}
@@ -617,12 +662,13 @@ export default function PostJobPage() {
                     კატეგორია <span className="text-red-500">*</span>
                   </span>
                   <select
+                    id="post-job-field-categoryId"
                     value={categoryId}
                     onChange={(e) => {
                       setCategoryId(e.target.value)
                       setSubcategoryId("")
                     }}
-                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#D4A843] focus:ring-2"
+                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#2563EB] ring-[#2563EB]/35 focus:ring-2"
                   >
                     <option value="">აირჩიე კატეგორია</option>
                     {categories.map((c) => (
@@ -640,7 +686,7 @@ export default function PostJobPage() {
                     value={subcategoryId}
                     onChange={(e) => setSubcategoryId(e.target.value)}
                     disabled={!categoryId}
-                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#D4A843] focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100"
+                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#2563EB] ring-[#2563EB]/35 focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100"
                   >
                     <option value="">აირჩიე ქვეკატეგორია</option>
                     {subcategories.map((s) => (
@@ -656,10 +702,11 @@ export default function PostJobPage() {
                     აღწერა <span className="text-red-500">*</span>
                   </span>
                   <textarea
+                    id="post-job-field-description"
                     rows={6}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-[#D4A843] focus:ring-2"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#2563EB] ring-[#2563EB]/35 focus:ring-2"
                     placeholder="აღწერე პროექტის მოთხოვნები, მიზანი და მოლოდინები..."
                   />
                   <div className="mt-1 flex items-center justify-between text-xs text-slate-500">
@@ -677,10 +724,10 @@ export default function PostJobPage() {
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="border-l-4 border-[#D4A843] pl-3 text-xl font-bold text-[#1B2B4B]">2. ბიუჯეტი</h2>
+              <h2 className="border-l-4 border-[#2563EB] pl-3 text-xl font-bold text-[#1B2B4B]">2. ბიუჯეტი</h2>
               <p className="mt-2 text-sm text-slate-500">მაგ: 500 - 1500 ₾</p>
               <div className="mt-4 space-y-4">
-                <div>
+                <div id="post-job-field-budgetType">
                   <p className="mb-2 text-sm font-semibold text-[#1B2B4B]">
                     ბიუჯეტის ტიპი <span className="text-red-500">*</span>
                   </p>
@@ -701,11 +748,12 @@ export default function PostJobPage() {
                       მინ. ბიუჯეტი (₾) <span className="text-red-500">*</span>
                     </span>
                     <input
+                      id="post-job-field-budgetMin"
                       type="number"
                       min={0}
                       value={budgetMin}
                       onChange={(e) => setBudgetMin(e.target.value)}
-                      className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#D4A843] focus:ring-2"
+                      className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#2563EB] ring-[#2563EB]/35 focus:ring-2"
                     />
                     {fieldErrors.budgetMin ? <p className="mt-1 text-sm text-red-600">{fieldErrors.budgetMin}</p> : null}
                   </label>
@@ -714,11 +762,12 @@ export default function PostJobPage() {
                       მაქს. ბიუჯეტი (₾) <span className="text-red-500">*</span>
                     </span>
                     <input
+                      id="post-job-field-budgetMax"
                       type="number"
                       min={0}
                       value={budgetMax}
                       onChange={(e) => setBudgetMax(e.target.value)}
-                      className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#D4A843] focus:ring-2"
+                      className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#2563EB] ring-[#2563EB]/35 focus:ring-2"
                     />
                     {fieldErrors.budgetMax ? <p className="mt-1 text-sm text-red-600">{fieldErrors.budgetMax}</p> : null}
                   </label>
@@ -727,7 +776,7 @@ export default function PostJobPage() {
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="border-l-4 border-[#D4A843] pl-3 text-xl font-bold text-[#1B2B4B]">3. სამუშაოს ტიპი და ლოკაცია</h2>
+              <h2 className="border-l-4 border-[#2563EB] pl-3 text-xl font-bold text-[#1B2B4B]">3. სამუშაოს ტიპი და ლოკაცია</h2>
               <div className="mt-4 space-y-4">
                 <div>
                   <p className="mb-2 text-sm font-semibold text-[#1B2B4B]">ხანგრძლივობა</p>
@@ -755,34 +804,130 @@ export default function PostJobPage() {
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="border-l-4 border-[#D4A843] pl-3 text-xl font-bold text-[#1B2B4B]">4. საჭირო უნარები</h2>
-              <p className="mt-2 text-sm text-slate-500">სურვილისამებრ (რეკომენდებულია)</p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {allSkills.map((sk) => (
-                  <button
-                    key={sk.id}
-                    type="button"
-                    onClick={() => toggleSkill(sk.id)}
-                    className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                      selectedSkillIds.includes(sk.id)
-                        ? "bg-[#D4A843] text-[#1B2B4B]"
-                        : "border border-slate-300 bg-white text-slate-700 hover:border-[#D4A843]"
-                    }`}
-                  >
-                    {sk.name}
-                  </button>
-                ))}
+              <h2 className="border-l-4 border-[#2563EB] pl-3 text-xl font-bold text-[#1B2B4B]">4. საჭირო უნარები</h2>
+              <p className="mt-2 text-sm text-slate-500">
+                ჯერ აირჩიე კატეგორია, შემდეგ დაამატე უნარები dropdown-იდან (სურვილისამებრ, რეკომენდებულია).
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                არჩეულია <span className="font-semibold tabular-nums text-slate-700">{selectedSkillIds.length}</span> უნარი
+              </p>
+
+              <div className="mt-4">
+                <label htmlFor="post-job-skill-category" className="mb-1 block text-sm font-semibold text-[#1B2B4B]">
+                  კატეგორია (უნარების სიისთვის)
+                </label>
+                <select
+                  id="post-job-skill-category"
+                  value={skillFocusCategoryId}
+                  onChange={(e) => setSkillFocusCategoryId(e.target.value)}
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#2563EB] ring-[#2563EB]/35 focus:ring-2"
+                >
+                  <option value="">აირჩიე კატეგორია…</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name_ka}
+                    </option>
+                  ))}
+                </select>
               </div>
+
+              {skillFocusCategoryId && (skillsByCategoryId.get(skillFocusCategoryId) ?? []).length > 0 ? (
+                <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/40 p-3">
+                  <p className="mb-2 text-sm font-semibold text-[#2563EB]">
+                    {categories.find((c) => c.id === skillFocusCategoryId)?.name_ka ?? "კატეგორია"}
+                  </p>
+                  {(() => {
+                    const list = skillsByCategoryId.get(skillFocusCategoryId) ?? []
+                    const selectedHere = list.filter((s) => selectedSkillIds.includes(s.id))
+                    return (
+                      <>
+                        {selectedHere.length > 0 ? (
+                          <div className="mb-2 flex flex-wrap gap-1.5">
+                            {selectedHere.map((s) => (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => toggleSkill(s.id)}
+                                className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#D1D5DB] bg-white px-2.5 py-0.5 text-xs font-medium text-[#374151] hover:bg-slate-50"
+                              >
+                                <span className="truncate">{s.name}</span>
+                                <span className="shrink-0 text-slate-400" aria-hidden>
+                                  ×
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mb-2 text-xs text-slate-500">ამ კატეგორიიდან ჯერ არაფერი არ არის არჩეული.</p>
+                        )}
+                        <label className="sr-only" htmlFor="post-job-skill-add">
+                          უნარის დამატება
+                        </label>
+                        <select
+                          id="post-job-skill-add"
+                          key={`post-job-skill-dd-${skillFocusCategoryId}-${selectedHere.map((s) => s.id).join("-")}`}
+                          className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/25"
+                          defaultValue=""
+                          onChange={(e) => {
+                            const sid = e.target.value
+                            if (sid) {
+                              toggleSkill(sid)
+                              e.target.value = ""
+                            }
+                          }}
+                        >
+                          <option value="">უნარის დამატება…</option>
+                          {list.map((s) => (
+                            <option key={s.id} value={s.id} disabled={selectedSkillIds.includes(s.id)}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      </>
+                    )
+                  })()}
+                </div>
+              ) : skillFocusCategoryId ? (
+                <p className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-3 py-3 text-xs text-slate-500">
+                  ამ კატეგორიაში დამტკიცებული უნარები ჯერ არ არის.
+                </p>
+              ) : (
+                <p className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-3 py-3 text-xs text-slate-500">
+                  კატეგორიის ასარჩევად გამოიყენე ზემოთ სია.
+                </p>
+              )}
+
+              {selectedSkillIds.length > 0 ? (
+                <div className="mt-4 rounded-lg border border-slate-100 bg-white p-3">
+                  <p className="mb-2 text-xs font-semibold text-slate-600">ყველა არჩეული უნარი</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedSkillIds.map((id) => (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => toggleSkill(id)}
+                        className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#D1D5DB] bg-white px-2.5 py-0.5 text-xs font-medium text-[#374151] hover:bg-red-50"
+                      >
+                        <span className="truncate">{skillNameById.get(id) ?? id}</span>
+                        <span className="shrink-0 text-slate-400" aria-hidden>
+                          ×
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="border-l-4 border-[#D4A843] pl-3 text-xl font-bold text-[#1B2B4B]">5. კონტაქტი და ვადა</h2>
+              <h2 className="border-l-4 border-[#2563EB] pl-3 text-xl font-bold text-[#1B2B4B]">5. კონტაქტი და ვადა</h2>
               <div className="mt-4 space-y-4">
                 <label className="block">
                   <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">
                     ვაკანსიების რაოდენობა / Vacancies <span className="text-red-500">*</span>
                   </span>
                   <input
+                    id="post-job-field-vacancies"
                     type="number"
                     min={Math.max(1, isEdit ? acceptedCountSnapshot : 1)}
                     step={1}
@@ -793,7 +938,7 @@ export default function PostJobPage() {
                       if (!Number.isFinite(n)) setVacancies(minSlots)
                       else setVacancies(Math.max(minSlots, Math.floor(n)))
                     }}
-                    className="h-11 w-full max-w-[200px] rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#D4A843] focus:ring-2"
+                    className="h-11 w-full max-w-[200px] rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#2563EB] ring-[#2563EB]/35 focus:ring-2"
                   />
                   <p className="mt-1 text-xs text-slate-500">რამდენ ფრილანსერს შეუძლია ერთად მუშაობა ამ განცხადებაზე (მინ. 1).</p>
                   {fieldErrors.vacancies ? <p className="mt-1 text-sm text-red-600">{fieldErrors.vacancies}</p> : null}
@@ -812,11 +957,12 @@ export default function PostJobPage() {
                 <label className="block">
                   <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">განაცხადის ბოლო ვადა</span>
                   <input
+                    id="post-job-field-applicationDeadline"
                     type="date"
                     value={applicationDeadline}
                     min={todayIso}
                     onChange={(e) => setApplicationDeadline(e.target.value)}
-                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#D4A843] focus:ring-2"
+                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#2563EB] ring-[#2563EB]/35 focus:ring-2"
                   />
                   {fieldErrors.applicationDeadline ? (
                     <p className="mt-1 text-sm text-red-600">{fieldErrors.applicationDeadline}</p>
@@ -826,22 +972,7 @@ export default function PostJobPage() {
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="border-l-4 border-[#D4A843] pl-3 text-xl font-bold text-[#1B2B4B]">6. პრევიუ გამოქვეყნებამდე</h2>
-              <p className="mt-2 text-sm text-slate-500">გადაამოწმე ინფორმაცია და გააგრძელე განცხადების პრევიუზე.</p>
-              <button
-                type="button"
-                onClick={() => {
-                  setPageError("")
-                  if (validateForPublish()) setShowPreview(true)
-                }}
-                className="mt-4 inline-flex h-11 items-center justify-center rounded-lg bg-[#1B2B4B] px-6 text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B]"
-              >
-                პრევიუს ნახვა
-              </button>
-            </section>
-
-            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="border-l-4 border-[#D4A843] pl-3 text-xl font-bold text-[#1B2B4B]">7. სურათები</h2>
+              <h2 className="border-l-4 border-[#2563EB] pl-3 text-xl font-bold text-[#1B2B4B]">6. სურათები</h2>
               <p className="mt-2 text-sm text-slate-500">მაქსიმუმ 3 სურათი. ფაილები ავტომატურად მცირდება ზომაში ატვირთვამდე.</p>
               <div className="mt-4 rounded-lg border border-slate-300 bg-slate-50 p-3">
                 <input
@@ -853,7 +984,7 @@ export default function PostJobPage() {
                     event.currentTarget.value = ""
                   }}
                   disabled={existingImageUrls.length + newImageFiles.length >= MAX_JOB_IMAGES}
-                  className="block w-full text-xs text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-[#1B2B4B] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white"
+                  className="block w-full text-xs text-slate-700 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-[#2563EB] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white file:transition-colors file:duration-150 file:hover:bg-[#1D4ED8]"
                 />
                 {existingImageUrls.length + newImageFiles.length > 0 ? (
                   <div className="mt-3 grid grid-cols-3 gap-2">
@@ -888,6 +1019,27 @@ export default function PostJobPage() {
                   </div>
                 ) : null}
               </div>
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 className="border-l-4 border-[#2563EB] pl-3 text-xl font-bold text-[#1B2B4B]">7. პრევიუ გამოქვეყნებამდე</h2>
+              <p className="mt-2 text-sm text-slate-500">გადაამოწმე ინფორმაცია და გააგრძელე განცხადების პრევიუზე.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setPageError("")
+                  const err = getPublishErrors()
+                  setFieldErrors(err)
+                  if (Object.keys(err).length > 0) {
+                    window.requestAnimationFrame(() => scrollToFirstPublishError(err))
+                    return
+                  }
+                  setShowPreview(true)
+                }}
+                className="mt-4 inline-flex h-11 items-center justify-center rounded-lg bg-[#2563EB] px-6 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#1D4ED8]"
+              >
+                პრევიუს ნახვა
+              </button>
             </section>
           </div>
         )}
