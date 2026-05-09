@@ -8,8 +8,11 @@ import { serviceImageThumbnailUrl } from "../lib/storageImageUrl.ts"
 
 type ListingMeta = {
   categoryId: string | null
+  subcategoryId: string | null
   tags: string[]
 }
+
+type SubcategoryRow = { id: string; name_ka: string; category_id: string; is_active: boolean | null }
 
 type TagOption = {
   name: string
@@ -60,7 +63,7 @@ async function compressImage(file: File): Promise<Blob> {
 }
 
 function parseListingDescription(raw: string | null): { description: string; meta: ListingMeta } {
-  const fallback: ListingMeta = { categoryId: null, tags: [] }
+  const fallback: ListingMeta = { categoryId: null, subcategoryId: null, tags: [] }
   if (!raw) return { description: "", meta: fallback }
 
   if (!raw.startsWith(META_PREFIX)) return { description: stripLegacyPricePrefix(raw), meta: fallback }
@@ -77,6 +80,7 @@ function parseListingDescription(raw: string | null): { description: string; met
       description: body,
       meta: {
         categoryId: parsed.categoryId ?? null,
+        subcategoryId: parsed.subcategoryId ?? null,
         tags: Array.isArray(parsed.tags)
           ? parsed.tags.map((tag) => String(tag).trim()).filter(Boolean).slice(0, 20)
           : [],
@@ -90,6 +94,7 @@ function parseListingDescription(raw: string | null): { description: string; met
 function buildListingDescription(description: string, meta: ListingMeta) {
   const cleanedMeta: ListingMeta = {
     categoryId: meta.categoryId ?? null,
+    subcategoryId: meta.subcategoryId ?? null,
     tags: meta.tags.map((tag) => tag.trim()).filter(Boolean).slice(0, 20),
   }
   return `${META_PREFIX}${JSON.stringify(cleanedMeta)}${META_SUFFIX}\n${description.trim()}`
@@ -114,6 +119,8 @@ export default function ListingFormPage() {
   const [deliveryDays, setDeliveryDays] = useState("3")
   const [isActive, setIsActive] = useState(true)
   const [categoryId, setCategoryId] = useState("")
+  const [subcategoryId, setSubcategoryId] = useState("")
+  const [subcategories, setSubcategories] = useState<SubcategoryRow[]>([])
   const [tags, setTags] = useState<string[]>([])
   const [existingImageUrls, setExistingImageUrls] = useState<string[]>([])
   const [newImageFiles, setNewImageFiles] = useState<File[]>([])
@@ -183,6 +190,7 @@ export default function ListingFormPage() {
           setDeliveryDays(String(listing.delivery_days ?? 3))
           setIsActive(listing.is_active ?? true)
           setCategoryId(parsed.meta.categoryId ?? "")
+          setSubcategoryId(parsed.meta.subcategoryId ?? "")
           setTags(parsed.meta.tags)
           setExistingImageUrls(Array.isArray((listing as { image_urls?: unknown }).image_urls) ? ((listing as { image_urls: unknown[] }).image_urls.map((v) => String(v)).filter(Boolean).slice(0, MAX_LISTING_IMAGES)) : [])
         }
@@ -200,6 +208,24 @@ export default function ListingFormPage() {
     () => availableTags.filter((tag) => tag.categoryId === categoryId),
     [availableTags, categoryId],
   )
+
+  useEffect(() => {
+    const loadSubs = async () => {
+      if (!isSupabaseConfigured || !supabase || !categoryId) {
+        setSubcategories([])
+        return
+      }
+      const { data, error: subErr } = await supabase
+        .from("subcategories")
+        .select("id,name_ka,category_id,is_active")
+        .eq("category_id", categoryId)
+        .eq("is_active", true)
+        .order("name_ka")
+      if (subErr) return
+      setSubcategories((data ?? []) as SubcategoryRow[])
+    }
+    void loadSubs()
+  }, [categoryId])
 
   useEffect(() => {
     if (!categoryId) {
@@ -277,6 +303,10 @@ export default function ListingFormPage() {
       setError("ვადა უნდა იყოს დადებითი მთელი რიცხვი.")
       return
     }
+    if (subcategoryId.trim() && !subcategories.some((s) => s.id === subcategoryId.trim())) {
+      setError("აირჩიე ქვეკატეგორია სიიდან ან გასუფთავე.")
+      return
+    }
 
     setSaving(true)
     try {
@@ -290,7 +320,11 @@ export default function ListingFormPage() {
       } = {
         freelancer_profile_id: freelancerProfileId,
         title: title.trim(),
-        description: buildListingDescription(description, { categoryId: categoryId || null, tags }),
+        description: buildListingDescription(description, {
+          categoryId: categoryId || null,
+          subcategoryId: subcategoryId.trim() || null,
+          tags,
+        }),
         price: parsedPrice,
         delivery_days: parsedDelivery,
         is_active: isActive,
@@ -397,13 +431,33 @@ export default function ListingFormPage() {
               <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">კატეგორია</span>
               <select
                 value={categoryId}
-                onChange={(event) => setCategoryId(event.target.value)}
+                onChange={(event) => {
+                  setCategoryId(event.target.value)
+                  setSubcategoryId("")
+                }}
                 className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm"
               >
                 <option value="">აირჩიე კატეგორია</option>
                 {categories.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name_ka}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">ქვეკატეგორია</span>
+              <select
+                value={subcategoryId}
+                disabled={!categoryId}
+                onChange={(event) => setSubcategoryId(event.target.value)}
+                className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm disabled:cursor-not-allowed disabled:bg-slate-100"
+              >
+                <option value="">{categoryId ? "აირჩიე ქვეკატეგორია (არასავალდებულო)" : "ჯერ აირჩიე კატეგორია"}</option>
+                {subcategories.map((sub) => (
+                  <option key={sub.id} value={sub.id}>
+                    {sub.name_ka}
                   </option>
                 ))}
               </select>

@@ -7,6 +7,7 @@ import { avatarImageUrl, serviceImageDetailUrl, serviceImageThumbnailUrl } from 
 
 type ListingMeta = {
   categoryId: string | null
+  subcategoryId: string | null
   tags: string[]
 }
 
@@ -14,7 +15,7 @@ const META_PREFIX = "<!--gigori-meta:"
 const META_SUFFIX = "-->"
 
 function parseListingDescription(raw: string | null): { description: string; meta: ListingMeta } {
-  const fallback: ListingMeta = { categoryId: null, tags: [] }
+  const fallback: ListingMeta = { categoryId: null, subcategoryId: null, tags: [] }
   if (!raw) return { description: "", meta: fallback }
   if (!raw.startsWith(META_PREFIX)) return { description: stripLegacyPricePrefix(raw), meta: fallback }
   const endIndex = raw.indexOf(META_SUFFIX)
@@ -27,6 +28,7 @@ function parseListingDescription(raw: string | null): { description: string; met
       description: body,
       meta: {
         categoryId: parsed.categoryId ?? null,
+        subcategoryId: parsed.subcategoryId ?? null,
         tags: Array.isArray(parsed.tags) ? parsed.tags.map((t) => String(t).trim()).filter(Boolean).slice(0, 20) : [],
       },
     }
@@ -65,6 +67,7 @@ export default function ListingDetailPage() {
   const [offerBudget, setOfferBudget] = useState("")
   const [offerError, setOfferError] = useState("")
   const [offerSubmitting, setOfferSubmitting] = useState(false)
+  const [subcategoryLabel, setSubcategoryLabel] = useState<string | null>(null)
   const trackedListingViewRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -204,6 +207,22 @@ export default function ListingDetailPage() {
   }, [id, item?.id])
 
   const parsed = useMemo(() => parseListingDescription(item?.descriptionRaw ?? ""), [item?.descriptionRaw])
+
+  useEffect(() => {
+    const sid = parsed.meta.subcategoryId?.trim()
+    if (!sid || !isSupabaseConfigured || !supabase) {
+      setSubcategoryLabel(null)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      const { data } = await supabase.from("subcategories").select("name_ka").eq("id", sid).maybeSingle()
+      if (!cancelled) setSubcategoryLabel(data?.name_ka?.trim() ? String(data.name_ka) : null)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [parsed.meta.subcategoryId, supabase])
 
   useEffect(() => {
     if (!item) return
@@ -358,6 +377,12 @@ export default function ListingDetailPage() {
                   {new Date(item.createdAt).toLocaleDateString("ka-GE")}
                 </p>
               </div>
+
+              {subcategoryLabel ? (
+                <p className="mt-4 text-sm text-slate-700">
+                  <span className="font-semibold text-[#1B2B4B]">ქვეკატეგორია:</span> {subcategoryLabel}
+                </p>
+              ) : null}
 
               {parsed.meta.tags.length > 0 ? (
                 <div className="mt-4 flex flex-wrap gap-1.5">

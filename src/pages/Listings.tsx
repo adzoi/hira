@@ -11,7 +11,7 @@ import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { mergeFreelancerCompletedWorkCounts } from "../lib/freelancerCompletedWorkCounts.ts"
 import { formatCityForDisplay, matchesLocationFilter } from "../lib/marketplaceFilters.ts"
-type ListingMeta = { categoryId: string | null; tags: string[] }
+type ListingMeta = { categoryId: string | null; subcategoryId: string | null; tags: string[] }
 type Availability = "full_time" | "part_time" | "weekends"
 type SkillItem = { id: string; name: string; category_id: string | null }
 
@@ -19,7 +19,7 @@ const META_PREFIX = "<!--gigori-meta:"
 const META_SUFFIX = "-->"
 
 function parseListingDescription(raw: string | null): { description: string; meta: ListingMeta } {
-  const fallback: ListingMeta = { categoryId: null, tags: [] }
+  const fallback: ListingMeta = { categoryId: null, subcategoryId: null, tags: [] }
   if (!raw) return { description: "", meta: fallback }
   if (!raw.startsWith(META_PREFIX)) return { description: stripLegacyPricePrefix(raw), meta: fallback }
   const endIndex = raw.indexOf(META_SUFFIX)
@@ -32,6 +32,7 @@ function parseListingDescription(raw: string | null): { description: string; met
       description: body,
       meta: {
         categoryId: parsed.categoryId ?? null,
+        subcategoryId: parsed.subcategoryId ?? null,
         tags: Array.isArray(parsed.tags)
           ? parsed.tags.map((tag) => String(tag).trim()).filter(Boolean).slice(0, 20)
           : [],
@@ -64,6 +65,7 @@ type ListingRow = {
   viewsCount: number
   skillIds: string[]
   categoryId: string | null
+  subcategoryId: string | null
   tags: string[]
   vipActive: boolean
 }
@@ -104,7 +106,8 @@ const mockListings: ListingRow[] = [
     id: "mock-1",
     freelancerProfileId: "00000000-0000-4000-8000-000000000001",
     title: "React პაკეტი — პატარა ფიჩერების შექმნა",
-    descriptionRaw: "<!--gigori-meta:{\"categoryId\":null,\"tags\":[\"React\",\"TypeScript\"]}-->ლეიაუტის აწყობა, ფორმების დაკავშირება API-თან.",
+    descriptionRaw:
+      '<!--gigori-meta:{"categoryId":null,"subcategoryId":null,"tags":["React","TypeScript"]}-->ლეიაუტის აწყობა, ფორმების დაკავშირება API-თან.',
     price: 450,
     deliveryDays: 5,
     createdAt: new Date().toISOString(),
@@ -120,6 +123,7 @@ const mockListings: ListingRow[] = [
     viewsCount: 0,
     skillIds: [],
     categoryId: null,
+    subcategoryId: null,
     tags: ["React", "TypeScript"],
     vipActive: false,
   },
@@ -143,6 +147,7 @@ const mockListings: ListingRow[] = [
     viewsCount: 0,
     skillIds: [],
     categoryId: null,
+    subcategoryId: null,
     tags: [],
     vipActive: false,
   },
@@ -156,6 +161,7 @@ export default function ListingsPage() {
   const [error, setError] = useState("")
   const [listings, setListings] = useState<ListingRow[]>([])
   const [categories, setCategories] = useState<CategoryItem[]>([])
+  const [subcategoryNamesById, setSubcategoryNamesById] = useState<Map<string, string>>(() => new Map())
   const [skills, setSkills] = useState<SkillItem[]>([])
   const [searchText, setSearchText] = useState("")
   const [categoryId, setCategoryId] = useState("")
@@ -316,6 +322,7 @@ export default function ListingsPage() {
       if (!isSupabaseConfigured || !supabase) {
         setListings(mockListings)
         setCategories([])
+        setSubcategoryNamesById(new Map())
         setSkills([])
         listingsNextOffsetRef.current = mockListings.length
         setListingsNextOffset(mockListings.length)
@@ -418,6 +425,7 @@ export default function ListingsPage() {
             viewsCount: Number(r.views_count ?? 0),
             skillIds,
             categoryId: parsed.meta.categoryId,
+            subcategoryId: parsed.meta.subcategoryId,
             tags: parsed.meta.tags,
             vipActive,
           })
@@ -465,6 +473,17 @@ export default function ListingsPage() {
             return { id: String(row.id ?? ""), name_ka: String(row.name_ka ?? "") }
           }),
         )
+        if (!append) {
+          const { data: subRows } = await supabase.from("subcategories").select("id,name_ka").eq("is_active", true)
+          setSubcategoryNamesById(
+            new Map(
+              (subRows ?? []).map((r) => {
+                const row = r as { id?: string; name_ka?: string }
+                return [String(row.id ?? ""), String(row.name_ka ?? "")] as const
+              }),
+            ),
+          )
+        }
         setSkills(
           skillsPayload.map((sk) => {
             const row = sk as { id?: string; name?: string; category_id?: string | null }
@@ -621,7 +640,12 @@ export default function ListingsPage() {
       }
 
       if (!q) return true
-      const hay = `${item.title} ${item.tags.join(" ")} ${item.professionalTitle} ${item.fullName} ${description}`.toLowerCase()
+      const subQ =
+        item.subcategoryId && subcategoryNamesById.has(item.subcategoryId)
+          ? String(subcategoryNamesById.get(item.subcategoryId) ?? "").toLowerCase()
+          : ""
+      const hay = `${item.title} ${item.tags.join(" ")} ${item.professionalTitle} ${item.fullName} ${description} ${subQ}`
+        .toLowerCase()
       return hay.includes(q)
     })
 
@@ -646,6 +670,7 @@ export default function ListingsPage() {
     minPrice,
     maxPrice,
     locationFilter,
+    subcategoryNamesById,
   ])
 
   const listingsHasMore = listingsNextOffset < listingsTotal
@@ -1022,8 +1047,13 @@ export default function ListingsPage() {
 
                         {/* Fills vertical space: tag chips or blank white area */}
                         <div className="mt-3 flex min-h-0 flex-1 flex-col">
-                          {item.tags.length > 0 ? (
+                          {item.tags.length > 0 || (item.subcategoryId && subcategoryNamesById.get(item.subcategoryId)) ? (
                             <div className="flex flex-wrap gap-2">
+                              {item.subcategoryId && subcategoryNamesById.get(item.subcategoryId) ? (
+                                <span className="rounded-full border border-[#2563EB]/35 bg-blue-50 px-2 py-1 text-xs font-semibold text-[#2563EB]">
+                                  {subcategoryNamesById.get(item.subcategoryId)}
+                                </span>
+                              ) : null}
                               {item.tags.slice(0, 4).map((tag) => (
                                 <span key={tag} className="rounded-full border border-slate-300 px-2 py-1 text-xs font-medium text-gray-900">
                                   {tag}
