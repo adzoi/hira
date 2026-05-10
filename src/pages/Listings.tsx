@@ -100,6 +100,44 @@ function listingMatchesSkillIds(item: ListingRow, skillIds: string[], skillById:
 }
 
 const LISTINGS_PAGE_SIZE = 20
+const COMPLETED_WORK_COUNT_CACHE_TTL_MS = 300_000
+const completedWorkCountCache = new Map<string, { count: number; timestamp: number }>()
+
+type ListingsSupabaseClient = NonNullable<typeof supabase>
+
+async function getCachedCompletedWorkCounts(
+  client: ListingsSupabaseClient,
+  freelancerProfileIds: string[],
+  fallbackJobsCountByFreelancerId: Record<string, number>,
+): Promise<Record<string, number>> {
+  const now = Date.now()
+  const ids = [...new Set(freelancerProfileIds.filter(Boolean))]
+  if (ids.length === 0) return {}
+
+  const result: Record<string, number> = {}
+  const missingOrExpired: string[] = []
+
+  for (const id of ids) {
+    const cached = completedWorkCountCache.get(id)
+    if (cached && now - cached.timestamp < COMPLETED_WORK_COUNT_CACHE_TTL_MS) {
+      result[id] = cached.count
+      continue
+    }
+    if (cached) completedWorkCountCache.delete(id)
+    missingOrExpired.push(id)
+  }
+
+  if (missingOrExpired.length > 0) {
+    const fetchedCounts = await mergeFreelancerCompletedWorkCounts(client, missingOrExpired, fallbackJobsCountByFreelancerId)
+    for (const id of missingOrExpired) {
+      const count = Number(fetchedCounts[id] ?? fallbackJobsCountByFreelancerId[id] ?? 0)
+      result[id] = count
+      completedWorkCountCache.set(id, { count, timestamp: now })
+    }
+  }
+
+  return result
+}
 
 const mockListings: ListingRow[] = [
   {
@@ -435,7 +473,7 @@ export default function ListingsPage() {
           const fallbackByFp = Object.fromEntries(
             mapped.map((item) => [item.freelancerProfileId, item.completedJobsCount]),
           )
-          const countMap = await mergeFreelancerCompletedWorkCounts(
+          const countMap = await getCachedCompletedWorkCounts(
             supabase,
             mapped.map((item) => item.freelancerProfileId),
             fallbackByFp,

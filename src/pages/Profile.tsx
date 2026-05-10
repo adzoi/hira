@@ -169,9 +169,13 @@ export default function ProfilePage() {
         if (!user) throw new Error("მომხმარებელი ვერ მოიძებნა.")
         setUserId(user.id)
         setAccountEmail(user.email ?? "")
+        const [{ data: profile, error: profileError }, { data: fp }, { data: hp }] = await Promise.all([
+          supabase.from("profiles").select("*").eq("id", user.id).single(),
+          supabase.from("freelancer_profiles").select("*").eq("user_id", user.id).maybeSingle(),
+          supabase.from("hirer_profiles").select("*").eq("user_id", user.id).maybeSingle(),
+        ])
 
-        const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single()
-        if (!profile) throw new Error("პროფილი ვერ ჩაიტვირთა.")
+        if (profileError || !profile) throw new Error("პროფილი ვერ ჩაიტვირთა.")
         setUserType(profile.user_type as "freelancer" | "hirer")
         setFullName(profile.full_name ?? "")
         setCity(profile.city ?? "")
@@ -179,16 +183,11 @@ export default function ProfilePage() {
         setAvatarUrl(profile.avatar_url ?? "")
 
         if (profile.user_type === "freelancer") {
-          const { data: fp } = await supabase.from("freelancer_profiles").select("*").eq("user_id", user.id).maybeSingle()
           if (fp) {
             setFreelancerProfileId(fp.id)
             setProfessionalTitle(fp.professional_title ?? "")
             const loadedBio = fp.bio ?? ""
-            setBio(
-              loadedBio.trim() === "ბიო უნდა შეიცავდეს მინიმუმ 50 სიმბოლოს"
-                ? ""
-                : loadedBio,
-            )
+            setBio(loadedBio.trim() === "ბიო უნდა შეიცავდეს მინიმუმ 50 სიმბოლოს" ? "" : loadedBio)
             setAvailability(fp.availability ?? "")
             setLanguages(Array.isArray(fp.languages) ? fp.languages : [])
             const loadedLi = (fp.linkedin_url ?? "").trim()
@@ -201,12 +200,39 @@ export default function ProfilePage() {
             setNoGithubProfile(!loadedGh)
             setNoPortfolioWebsite(!loadedPf)
 
-            const { data: serviceRows, error: servicesError } = await supabase
-              .from("services")
-              .select("id,title,description,price,delivery_days,is_active")
-              .eq("freelancer_profile_id", fp.id)
-              .order("created_at", { ascending: false })
+            const [
+              { data: serviceRows, error: servicesError },
+              { data: expRows, error: expError },
+              { data: eduRows, error: eduRowsError },
+              { data: skillRows, error: skillRowsError },
+              { data: allSkillsRows, error: allSkillsError },
+              { data: categoriesData },
+            ] = await Promise.all([
+              supabase
+                .from("services")
+                .select("id,title,description,price,delivery_days,is_active")
+                .eq("freelancer_profile_id", fp.id)
+                .order("created_at", { ascending: false }),
+              supabase
+                .from("experience")
+                .select("id,title,organization,start_date,end_date,description")
+                .eq("freelancer_profile_id", fp.id)
+                .order("start_date", { ascending: false }),
+              supabase
+                .from("freelancer_education")
+                .select("id,institution,degree_level,field_of_study,end_date")
+                .eq("freelancer_profile_id", fp.id)
+                .order("end_date", { ascending: false }),
+              supabase.from("freelancer_skills").select("skill_id").eq("freelancer_profile_id", fp.id),
+              supabase.from("skills").select("id,name,category_id").eq("is_approved", true).order("name"),
+              supabase.from("categories").select("id,name_ka"),
+            ])
+
             if (servicesError) throw servicesError
+            if (expError) throw expError
+            if (eduRowsError) throw eduRowsError
+            if (skillRowsError) throw skillRowsError
+            if (allSkillsError) throw allSkillsError
 
             const mappedServices = (serviceRows ?? []).map((item) => ({
               id: item.id,
@@ -219,13 +245,6 @@ export default function ProfilePage() {
 
             setServiceListings(mappedServices.slice(0, 3))
             setInitialServiceIds(mappedServices.map((item) => item.id).filter(Boolean))
-
-            const { data: expRows, error: expError } = await supabase
-              .from("experience")
-              .select("id,title,organization,start_date,end_date,description")
-              .eq("freelancer_profile_id", fp.id)
-              .order("start_date", { ascending: false })
-            if (expError) throw expError
             setExperiences(
               (expRows ?? []).slice(0, 10).map((item) => ({
                 id: item.id,
@@ -237,13 +256,6 @@ export default function ProfilePage() {
                 description: item.description ?? "",
               })),
             )
-
-            const { data: eduRows, error: eduRowsError } = await supabase
-              .from("freelancer_education")
-              .select("id,institution,degree_level,field_of_study,end_date")
-              .eq("freelancer_profile_id", fp.id)
-              .order("end_date", { ascending: false })
-            if (eduRowsError) throw eduRowsError
             setEducations(
               (eduRows ?? []).slice(0, 10).map((item) => ({
                 id: item.id,
@@ -253,16 +265,6 @@ export default function ProfilePage() {
                 endDate: item.end_date ?? "",
               })),
             )
-
-            const [{ data: skillRows, error: skillRowsError }, { data: allSkillsRows, error: allSkillsError }, { data: categoriesData }] =
-              await Promise.all([
-                supabase.from("freelancer_skills").select("skill_id").eq("freelancer_profile_id", fp.id),
-                supabase.from("skills").select("id,name,category_id").eq("is_approved", true).order("name"),
-                supabase.from("categories").select("id,name_ka"),
-              ])
-            if (skillRowsError) throw skillRowsError
-            if (allSkillsError) throw allSkillsError
-
             setSelectedSkillIds((skillRows ?? []).map((row) => row.skill_id).filter(Boolean))
             setSkillsCatalog((allSkillsRows ?? []) as Array<{ id: string; name: string; category_id: string | null }>)
             const map: Record<string, string> = {}
@@ -277,14 +279,11 @@ export default function ProfilePage() {
             setExperiences([])
             setEducations([])
           }
-        } else {
-          const { data: hp } = await supabase.from("hirer_profiles").select("*").eq("user_id", user.id).maybeSingle()
-          if (hp) {
-            setCompanyName(hp.company_name ?? "")
-            setCompanyDescription(hp.description ?? "")
-            setIndustry(hp.industry ?? "")
-            setCompanyWebsite(hp.website_url ?? "")
-          }
+        } else if (hp) {
+          setCompanyName(hp.company_name ?? "")
+          setCompanyDescription(hp.description ?? "")
+          setIndustry(hp.industry ?? "")
+          setCompanyWebsite(hp.website_url ?? "")
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "პროფილი ვერ ჩაიტვირთა.")

@@ -628,28 +628,6 @@ export default function DashboardPage() {
   }, [])
 
   useEffect(() => {
-    if (!isSupabaseConfigured || !supabase || !profile?.id || loading) return
-    let cancelled = false
-    void (async () => {
-      try {
-        const [n, nf] = await Promise.all([countFollowers(profile.id), countFollowing(profile.id)])
-        if (!cancelled) {
-          setDashFollowersCount(Number.isFinite(n) ? n : 0)
-          setDashFollowingCount(Number.isFinite(nf) ? nf : 0)
-        }
-      } catch {
-        if (!cancelled) {
-          setDashFollowersCount(0)
-          setDashFollowingCount(0)
-        }
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [profile?.id, loading])
-
-  useEffect(() => {
     const state = location.state as { successMessage?: string } | null
     if (!state?.successMessage) return
 
@@ -691,8 +669,11 @@ export default function DashboardPage() {
 
         setProfile(profileData)
 
+        let freelancerData: FreelancerProfileRow | null = null
+        let hirerData: HirerProfileRow | null = null
+
         if (profileData.user_type === "freelancer") {
-          const { data: freelancerData, error: freelancerError } = await supabase
+          const { data, error: freelancerError } = await supabase
             .from("freelancer_profiles")
             .select("*")
             .eq("user_id", profileData.id)
@@ -701,42 +682,10 @@ export default function DashboardPage() {
           if (freelancerError) {
             throw new Error("ფრილანსერის პროფილი ვერ ჩაიტვირთა.")
           }
+          freelancerData = data
           setFreelancerProfile(freelancerData)
 
           if (freelancerData) {
-            const [{ count: cjCount, error: cjCountErr }, { count: listingDoneCount, error: listingDoneErr }] =
-              await Promise.all([
-                supabase.from("completed_jobs").select("id", { count: "exact", head: true }).eq("freelancer_profile_id", freelancerData.id),
-                supabase
-                  .from("service_inquiries")
-                  .select("id", { count: "exact", head: true })
-                  .eq("freelancer_profile_id", freelancerData.id)
-                  .eq("status", "completed"),
-              ])
-            if (cjCountErr && import.meta.env.DEV) {
-              console.warn("[dashboard] completed_jobs count:", cjCountErr.message)
-            }
-            if (listingDoneErr && import.meta.env.DEV) {
-              console.warn("[dashboard] service_inquiries completed count:", listingDoneErr.message)
-            }
-            const jobDone = typeof cjCount === "number" ? cjCount : 0
-            const listingDone = typeof listingDoneCount === "number" ? listingDoneCount : 0
-            setFreelancerCompletedJobsCount(
-              cjCountErr
-                ? Number(freelancerData.completed_jobs_count ?? 0) + (listingDoneErr ? 0 : listingDone)
-                : jobDone + (listingDoneErr ? 0 : listingDone),
-            )
-
-            let hirerReviewQueue: FreelancerHirerReviewRow[] = []
-            try {
-              hirerReviewQueue = await loadFreelancerHirerReviewQueue(supabase, freelancerData.id, user.id)
-            } catch (queueErr) {
-              if (import.meta.env.DEV) {
-                console.warn("[dashboard] freelancer hirer review queue:", queueErr)
-              }
-            }
-            setFreelancerHirerReviewQueue(hirerReviewQueue)
-
             try {
               const { data: inqRows, error: inqLoadErr } = await supabase
                 .from("service_inquiries")
@@ -761,7 +710,144 @@ export default function DashboardPage() {
               if (import.meta.env.DEV) console.warn("[dashboard] service_inquiries load:", inqErr)
               setFreelancerListingInquiries([])
             }
+          } else {
+            setFreelancerCompletedJobsCount(0)
+            setFreelancerHirerReviewQueue([])
+            setFreelancerListingInquiries([])
+            setFreelancerCompletedPlatformJobs([])
+            setFreelancerPendingJobOffers([])
+            setHirerProfileViewerCount(0)
+            setOverallProfileVisitCount(0)
+          }
+        }
 
+        if (profileData.user_type === "hirer") {
+          const { data, error: hirerError } = await supabase
+            .from("hirer_profiles")
+            .select("*")
+            .eq("user_id", profileData.id)
+            .maybeSingle()
+
+          if (hirerError) {
+            throw new Error("დამქირავებლის პროფილი ვერ ჩაიტვირთა.")
+          }
+          hirerData = data
+          setHirerProfile(hirerData)
+
+          if (hirerData) {
+            const { data: myJobsData, error: myJobsError } = await supabase
+              .from("jobs")
+              .select("id,title,status")
+              .eq("hirer_profile_id", hirerData.id)
+              .order("created_at", { ascending: false })
+
+            if (myJobsError) throw myJobsError
+            const myJobsList = (myJobsData ?? []) as JobRow[]
+            setMyJobs(myJobsList)
+
+            const jobIds = myJobsList.map((j) => j.id)
+            const jobStatusById = myJobsList.reduce<Record<string, string>>((acc, j) => {
+              acc[j.id] = j.status
+              return acc
+            }, {})
+            const jobTitleById = myJobsList.reduce<Record<string, string>>((acc, j) => {
+              acc[j.id] = j.title
+              return acc
+            }, {})
+
+            if (jobIds.length > 0) {
+              const { data: applicationsData, error: applicationsError } = await supabase
+                .from("job_applications")
+                .select("*")
+                .in("job_id", jobIds)
+                .order("created_at", { ascending: false })
+                .limit(100)
+              if (applicationsError) throw applicationsError
+
+              const apps = (applicationsData ?? []) as JobApplicationRow[]
+              const freelancerIds = [...new Set(apps.map((a) => a.freelancer_profile_id))]
+              const { data: freelancerProfilesData, error: freelancerProfilesError } = await supabase
+                .from("freelancer_profiles")
+                .select("id,user_id,slug,profiles!freelancer_profiles_user_id_fkey(full_name)")
+                .in("id", freelancerIds)
+              if (freelancerProfilesError) throw freelancerProfilesError
+
+              const profileMap = new Map(
+                (freelancerProfilesData ?? []).map((fp: any) => [
+                  fp.id,
+                  {
+                    userId: fp.user_id as string,
+                    slug: (fp.slug as string | null) ?? null,
+                    fullName: (fp.profiles?.full_name as string | null) ?? "ფრილანსერი",
+                  },
+                ]),
+              )
+
+              const applications: HirerApplicationRow[] = apps.map((app) => {
+                const p = profileMap.get(app.freelancer_profile_id)
+                return {
+                  applicationId: app.id,
+                  jobId: app.job_id,
+                  jobTitle: jobTitleById[app.job_id] ?? "განცხადება",
+                  jobStatus: jobStatusById[app.job_id] ?? "open",
+                  freelancerProfileId: app.freelancer_profile_id,
+                  freelancerUserId: p?.userId ?? "",
+                  freelancerName: p?.fullName ?? "ფრილანსერი",
+                  freelancerSlug: p?.slug ?? null,
+                  createdAt: app.created_at,
+                  status: app.status,
+                }
+              })
+
+              const counts = apps.reduce<Record<string, number>>((acc, app) => {
+                acc[app.job_id] = (acc[app.job_id] ?? 0) + 1
+                return acc
+              }, {})
+
+              setHirerApplications(applications)
+              setJobApplicationsByJobId(counts)
+            } else {
+              setHirerApplications([])
+              setJobApplicationsByJobId({})
+            }
+          } else {
+            setHirerCompletedJobsCount(0)
+            setHirerListingInquiries([])
+            setHirerReviewedListingInquiryIds({})
+            setHirerReviewedJobApplicationIds({})
+            setMyJobs([])
+            setHirerApplications([])
+            setJobApplicationsByJobId({})
+          }
+        }
+
+        setLoading(false)
+
+        if (profileData.id) {
+          void (async () => {
+            try {
+              const [n, nf] = await Promise.all([countFollowers(profileData.id), countFollowing(profileData.id)])
+              setDashFollowersCount(Number.isFinite(n) ? n : 0)
+              setDashFollowingCount(Number.isFinite(nf) ? nf : 0)
+            } catch {
+              setDashFollowersCount(0)
+              setDashFollowingCount(0)
+            }
+          })()
+        }
+
+        if (profileData.user_type === "freelancer" && freelancerData) {
+          void (async () => {
+            try {
+              const queue = await loadFreelancerHirerReviewQueue(supabase, freelancerData.id, user.id)
+              setFreelancerHirerReviewQueue(queue)
+            } catch (queueErr) {
+              if (import.meta.env.DEV) console.warn("[dashboard] freelancer hirer review queue:", queueErr)
+              setFreelancerHirerReviewQueue([])
+            }
+          })()
+
+          void (async () => {
             try {
               const { data: pendingAppsRows, error: pendingAppsErr } = await supabase
                 .from("job_applications")
@@ -804,7 +890,9 @@ export default function DashboardPage() {
               if (import.meta.env.DEV) console.warn("[dashboard] freelancer pending job offers:", pendingAppsLoadErr)
               setFreelancerPendingJobOffers([])
             }
+          })()
 
+          void (async () => {
             try {
               const { data: cjRows, error: cjRowsErr } = await supabase
                 .from("completed_jobs")
@@ -830,98 +918,117 @@ export default function DashboardPage() {
               if (import.meta.env.DEV) console.warn("[dashboard] completed_jobs list:", cjListErr)
               setFreelancerCompletedPlatformJobs([])
             }
+          })()
 
-            const [{ data: hirerVisitorsRpc, error: hirerVisitorsRpcError }, totalVisits] = await Promise.all([
-              supabase.rpc("count_distinct_hirer_visitors_to_freelancer", {
-                target_freelancer_profile_id: freelancerData.id,
-              }),
-              countFreelancerProfileVisits(freelancerData.id),
-            ])
-            if (hirerVisitorsRpcError && import.meta.env.DEV) {
-              console.warn("[dashboard] hirer visitor count RPC:", hirerVisitorsRpcError.message)
+          void (async () => {
+            try {
+              const [{ count: cjCount, error: cjCountErr }, { count: listingDoneCount, error: listingDoneErr }] =
+                await Promise.all([
+                  supabase.from("completed_jobs").select("id", { count: "exact", head: true }).eq("freelancer_profile_id", freelancerData.id),
+                  supabase
+                    .from("service_inquiries")
+                    .select("id", { count: "exact", head: true })
+                    .eq("freelancer_profile_id", freelancerData.id)
+                    .eq("status", "completed"),
+                ])
+              if (cjCountErr && import.meta.env.DEV) {
+                console.warn("[dashboard] completed_jobs count:", cjCountErr.message)
+              }
+              if (listingDoneErr && import.meta.env.DEV) {
+                console.warn("[dashboard] service_inquiries completed count:", listingDoneErr.message)
+              }
+              const jobDone = typeof cjCount === "number" ? cjCount : 0
+              const listingDone = typeof listingDoneCount === "number" ? listingDoneCount : 0
+              setFreelancerCompletedJobsCount(
+                cjCountErr
+                  ? Number(freelancerData.completed_jobs_count ?? 0) + (listingDoneErr ? 0 : listingDone)
+                  : jobDone + (listingDoneErr ? 0 : listingDone),
+              )
+            } catch {
+              setFreelancerCompletedJobsCount(Number(freelancerData.completed_jobs_count ?? 0))
             }
-            const hv = hirerVisitorsRpc == null ? 0 : Number(hirerVisitorsRpc)
-            setHirerProfileViewerCount(Number.isFinite(hv) ? hv : 0)
-            setOverallProfileVisitCount(totalVisits ?? 0)
+          })()
 
-            const { data: servicesData, error: servicesError } = await supabase
-              .from("services")
-              .select("*")
-              .eq("freelancer_profile_id", freelancerData.id)
-              .order("created_at", { ascending: false })
+          void (async () => {
+            try {
+              const [{ data: hirerVisitorsRpc, error: hirerVisitorsRpcError }, totalVisits] = await Promise.all([
+                supabase.rpc("count_distinct_hirer_visitors_to_freelancer", {
+                  target_freelancer_profile_id: freelancerData.id,
+                }),
+                countFreelancerProfileVisits(freelancerData.id),
+              ])
+              if (hirerVisitorsRpcError && import.meta.env.DEV) {
+                console.warn("[dashboard] hirer visitor count RPC:", hirerVisitorsRpcError.message)
+              }
+              const hv = hirerVisitorsRpc == null ? 0 : Number(hirerVisitorsRpc)
+              setHirerProfileViewerCount(Number.isFinite(hv) ? hv : 0)
+              setOverallProfileVisitCount(totalVisits ?? 0)
+            } catch {
+              setHirerProfileViewerCount(0)
+              setOverallProfileVisitCount(0)
+            }
+          })()
 
-            if (servicesError) throw new Error("სერვისები ვერ ჩაიტვირთა.")
-            const serviceRows = servicesData ?? []
-            setServiceDrafts(
-              serviceRows.slice(0, 3).map((item) => ({
+          void (async () => {
+            try {
+              const { data: servicesData, error: servicesError } = await supabase
+                .from("services")
+                .select("*")
+                .eq("freelancer_profile_id", freelancerData.id)
+                .order("created_at", { ascending: false })
+
+              if (servicesError) throw servicesError
+              const serviceRows = servicesData ?? []
+              const nextDrafts = serviceRows.slice(0, 3).map((item) => ({
                 id: item.id,
                 title: item.title ?? "",
                 description: stripListingMeta(item.description ?? ""),
                 price: item.price !== null && item.price !== undefined ? String(item.price) : "",
                 deliveryDays: item.delivery_days ? String(item.delivery_days) : "3",
                 isActive: item.is_active ?? true,
-              })),
-            )
-            setInitialServicesSnapshot(
-              snapshotServices(
-                serviceRows.slice(0, 3).map((item) => ({
-                  id: item.id,
-                  title: item.title ?? "",
-                  description: stripListingMeta(item.description ?? ""),
-                  price: item.price !== null && item.price !== undefined ? String(item.price) : "",
-                  deliveryDays: item.delivery_days ? String(item.delivery_days) : "3",
-                  isActive: item.is_active ?? true,
-                })),
-              ),
-            )
-            setInitialServiceIds(serviceRows.map((item) => item.id))
-          } else {
-            setFreelancerCompletedJobsCount(0)
-            setFreelancerHirerReviewQueue([])
-            setFreelancerListingInquiries([])
-            setFreelancerCompletedPlatformJobs([])
-            setFreelancerPendingJobOffers([])
-            setHirerProfileViewerCount(0)
-            setOverallProfileVisitCount(0)
-          }
+              }))
+              setServiceDrafts(nextDrafts)
+              setInitialServicesSnapshot(snapshotServices(nextDrafts))
+              setInitialServiceIds(serviceRows.map((item) => item.id))
+            } catch {
+              setServiceDrafts([])
+              setInitialServicesSnapshot(snapshotServices([]))
+              setInitialServiceIds([])
+            }
+          })()
         }
 
-        if (profileData.user_type === "hirer") {
-          const { data: hirerData, error: hirerError } = await supabase
-            .from("hirer_profiles")
-            .select("*")
-            .eq("user_id", profileData.id)
-            .maybeSingle()
-
-          if (hirerError) {
-            throw new Error("დამქირავებლის პროფილი ვერ ჩაიტვირთა.")
-          }
-          setHirerProfile(hirerData)
-
-          if (hirerData) {
-            const [{ count: hCjCount, error: hCjErr }, { count: hListingDone, error: hListingDoneErr }] =
-              await Promise.all([
-                supabase.from("completed_jobs").select("id", { count: "exact", head: true }).eq("hirer_profile_id", hirerData.id),
-                supabase
-                  .from("service_inquiries")
-                  .select("id", { count: "exact", head: true })
-                  .eq("hirer_profile_id", hirerData.id)
-                  .eq("status", "completed"),
-              ])
-            if (hCjErr && import.meta.env.DEV) {
-              console.warn("[dashboard] hirer completed_jobs count:", hCjErr.message)
+        if (profileData.user_type === "hirer" && hirerData) {
+          void (async () => {
+            try {
+              const [{ count: hCjCount, error: hCjErr }, { count: hListingDone, error: hListingDoneErr }] =
+                await Promise.all([
+                  supabase.from("completed_jobs").select("id", { count: "exact", head: true }).eq("hirer_profile_id", hirerData.id),
+                  supabase
+                    .from("service_inquiries")
+                    .select("id", { count: "exact", head: true })
+                    .eq("hirer_profile_id", hirerData.id)
+                    .eq("status", "completed"),
+                ])
+              if (hCjErr && import.meta.env.DEV) {
+                console.warn("[dashboard] hirer completed_jobs count:", hCjErr.message)
+              }
+              if (hListingDoneErr && import.meta.env.DEV) {
+                console.warn("[dashboard] hirer service_inquiries completed count:", hListingDoneErr.message)
+              }
+              const hJobDone = typeof hCjCount === "number" ? hCjCount : 0
+              const hListDone = typeof hListingDone === "number" ? hListingDone : 0
+              setHirerCompletedJobsCount(
+                hCjErr
+                  ? Number(hirerData.completed_jobs_count ?? 0) + (hListingDoneErr ? 0 : hListDone)
+                  : hJobDone + (hListingDoneErr ? 0 : hListDone),
+              )
+            } catch {
+              setHirerCompletedJobsCount(Number(hirerData.completed_jobs_count ?? 0))
             }
-            if (hListingDoneErr && import.meta.env.DEV) {
-              console.warn("[dashboard] hirer service_inquiries completed count:", hListingDoneErr.message)
-            }
-            const hJobDone = typeof hCjCount === "number" ? hCjCount : 0
-            const hListDone = typeof hListingDone === "number" ? hListingDone : 0
-            setHirerCompletedJobsCount(
-              hCjErr
-                ? Number(hirerData.completed_jobs_count ?? 0) + (hListingDoneErr ? 0 : hListDone)
-                : hJobDone + (hListingDoneErr ? 0 : hListDone),
-            )
+          })()
 
+          void (async () => {
             try {
               const { data: hInqRows, error: hInqErr } = await supabase
                 .from("service_inquiries")
@@ -970,26 +1077,23 @@ export default function DashboardPage() {
               setHirerListingInquiries([])
               setHirerReviewedListingInquiryIds({})
             }
+          })()
 
-            const { myJobs, applications, counts } = await fetchHirerDashboardSection(supabase, hirerData.id)
-            setMyJobs(myJobs)
-            setHirerApplications(applications)
-            setJobApplicationsByJobId(counts)
-            await loadHirerApplicationReviewedFlags(applications)
-          } else {
-            setHirerCompletedJobsCount(0)
-            setHirerListingInquiries([])
-            setHirerReviewedListingInquiryIds({})
-            setHirerReviewedJobApplicationIds({})
-            setMyJobs([])
-            setHirerApplications([])
-            setJobApplicationsByJobId({})
-          }
+          void (async () => {
+            try {
+              const { myJobs, applications, counts } = await fetchHirerDashboardSection(supabase, hirerData.id)
+              setMyJobs(myJobs)
+              setHirerApplications(applications)
+              setJobApplicationsByJobId(counts)
+              await loadHirerApplicationReviewedFlags(applications)
+            } catch (hirerSectionErr) {
+              if (import.meta.env.DEV) console.warn("[dashboard] hirer dashboard section:", hirerSectionErr)
+            }
+          })()
         }
       } catch (loadError) {
         const message = loadError instanceof Error ? loadError.message : "მონაცემები ვერ ჩაიტვირთა."
         setError(message)
-      } finally {
         setLoading(false)
       }
     }
