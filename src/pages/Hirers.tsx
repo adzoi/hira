@@ -328,8 +328,8 @@ export default function HirersPage() {
       }
 
       if (!q) return true
-      const blob = `${h.companyName} ${h.industry ?? ""} ${h.city ?? ""} ${h.contactName} ${desc}`.toLowerCase()
-      return blob.includes(q)
+      const nameBlob = `${h.contactName} ${h.companyName}`.toLowerCase()
+      return nameBlob.includes(q)
     })
   }, [hirers, searchText, categoryId, locationFilter])
 

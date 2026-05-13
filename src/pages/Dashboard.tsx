@@ -2608,25 +2608,25 @@ export default function DashboardPage() {
                     {freelancerJobOffersFiltered.map((offer) => (
                       <li
                         key={offer.applicationId}
-                        className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                        className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3 sm:flex-row sm:items-center sm:gap-3"
                       >
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <p className="font-semibold text-[#1B2B4B]">{offer.jobTitle}</p>
                           <p className="mt-0.5 text-sm text-slate-600">{offer.hirerLabel}</p>
                           <p className="text-xs text-slate-500">{formatDate(offer.createdAt)}</p>
                         </div>
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                            offer.status === "pending"
-                              ? "bg-amber-50 text-amber-800"
-                              : offer.status === "rejected"
-                                ? "bg-rose-50 text-rose-700"
-                                : "bg-emerald-50 text-emerald-700"
-                          }`}
-                        >
-                          {freelancerJobOfferStatusLabel(offer.status)}
-                        </span>
-                        <div className="flex shrink-0 flex-wrap gap-2">
+                        <div className="flex w-full shrink-0 flex-row flex-wrap items-center justify-end gap-2 sm:w-auto">
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                              offer.status === "pending"
+                                ? "bg-amber-50 text-amber-800"
+                                : offer.status === "rejected"
+                                  ? "bg-rose-50 text-rose-700"
+                                  : "bg-emerald-50 text-emerald-700"
+                            }`}
+                          >
+                            {freelancerJobOfferStatusLabel(offer.status)}
+                          </span>
                           {offer.status === "pending" || offer.status === "rejected" ? (
                             <button
                               type="button"
@@ -2678,7 +2678,7 @@ export default function DashboardPage() {
                     ) : null}
                     {freelancerOngoingListingInquiries.length > 0 ? (
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">ლისტინგის მიმდინარე სამუშაოები</p>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">მიმდინარე სამუშაოები</p>
                         <ul className="mt-2 space-y-3">
                           {freelancerOngoingListingInquiries.map((q) => (
                             <li key={`ongoing-${q.id}`} className="rounded-lg border border-slate-200 p-4">
@@ -2885,7 +2885,7 @@ export default function DashboardPage() {
                     </button>
                   </div>
                   <p className="mt-3 text-xs text-slate-500">
-                    სურვილის შემთხვევაში შეაფასე დამქირავებელი. შეფასება სურვილისამებრია — შეგიძლია გამოტოვო.
+                    სურვილის შემთხვევაში შეაფასე დამქირავებელი.
                   </p>
 
                   <div className="mt-4">
@@ -2964,7 +2964,7 @@ export default function DashboardPage() {
                     </button>
                   </div>
                   <p className="mt-3 text-xs text-slate-500">
-                    შეაფასე თანამშრომლობა 1-დან 5 ვარსკვლაურამდე და დაწერე მოკლე კომენტარი (მინ. 10 სიმბოლო).
+                    შეაფასე დამქირავებელი და დაწერე მოკლე კომენტარი (მინ. 10 სიმბოლო).
                   </p>
 
                   <div className="mt-4">
@@ -3089,7 +3089,7 @@ export default function DashboardPage() {
                       : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
                   }`}
                 >
-                  ლისტინგებზე გაგზავნილი შეთავაზებები
+                  გაგზავნილი შეთავაზებები
                 </button>
                 <button
                   type="button"
@@ -3119,10 +3119,7 @@ export default function DashboardPage() {
             {hirerDashboardTab === "listing_offers" ? (
               <div className="rounded-xl border border-slate-200 bg-white p-6">
               <h3 className="text-xl font-bold text-[#1B2B4B]">ლისტინგებზე გაგზავნილი შეთავაზებები</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                ფრილანსერი ხედავს ამას თავის მართვის პანელზე. სამუშაოს დასრულება იქ ფიქსირდება სტატუსით — განცხადების გამოქვეყნება არ გჭირდება.
-              </p>
-              {hirerListingInquiries.length === 0 ? <p className="mt-4 text-sm text-slate-500">ჯერ არაფერი გაგიგზავნია. იხილე ლისტინგები და დააჭირე „შეთავაზება“.</p> : null}
+              {hirerListingInquiries.length === 0 ? <p className="mt-4 text-sm text-slate-500">ჯერ არაფერი გაგიგზავნია.</p> : null}
               {hirerListingInquiries.length > 0 ? (
                 <div className="mt-4">
                   <div className="flex flex-wrap items-center gap-2">
@@ -3157,7 +3154,7 @@ export default function DashboardPage() {
                           : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
                       }`}
                     >
-                      ყველა დრო
+                      ყველა
                     </button>
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -3383,7 +3380,7 @@ export default function DashboardPage() {
                     ) : null}
                     {hirerOngoingListingInquiries.length > 0 ? (
                       <div>
-                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">ლისტინგები</p>
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">განცხადებები</p>
                         <div className="space-y-3">
                           {hirerOngoingListingInquiries.map((q) => (
                             <div key={`ongoing-listing-${q.id}`} className="rounded-lg border border-slate-200 p-4">
@@ -3461,7 +3458,7 @@ export default function DashboardPage() {
                     ) : null}
                     {hirerCompletedListingInquiries.length > 0 ? (
                       <div>
-                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">ლისტინგები</p>
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">განცხადებები</p>
                         <div className="space-y-3">
                           {hirerCompletedListingInquiries.map((q) => (
                             <div key={`done-listing-${q.id}`} className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-slate-200 p-4">
@@ -3491,8 +3488,7 @@ export default function DashboardPage() {
 
             {hirerDashboardTab === "applicants" ? (
               <div className="rounded-xl border border-slate-200 bg-white p-6">
-              <h3 className="mb-2 text-xl font-bold text-[#1B2B4B]">განმცხადებლები</h3>
-              <p className="mb-4 text-sm text-slate-500">მიიღე განმცხადება, შეასრულე სამუშაო და დატოვე შეფასება.</p>
+              <h3 className="mb-4 text-xl font-bold text-[#1B2B4B]">განმცხადებლები</h3>
               {hirerActionError ? (
                 <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{hirerActionError}</p>
               ) : null}
@@ -3532,7 +3528,7 @@ export default function DashboardPage() {
                           : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
                       }`}
                     >
-                      ყველა დრო
+                      ყველა 
                     </button>
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -3584,7 +3580,7 @@ export default function DashboardPage() {
                               onClick={() => void acceptApplication(item)}
                               className="rounded-lg bg-[#1B2B4B] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:opacity-50"
                             >
-                              მიღება
+                              დადასტურება
                             </button>
                             <button
                               type="button"
@@ -3653,7 +3649,7 @@ export default function DashboardPage() {
                     {hirerListingReviewModal.listingTitle} — {hirerListingReviewModal.freelancerName}
                   </p>
                   <p className="mt-3 text-xs text-slate-500">
-                    შეაფასე შესრულებული სამუშაო 1-დან 5 ვარსკვლაურამდე და დაწერე მოკლე კომენტარი (მინ. 10 სიმბოლო).
+                    შეაფასე ფრილანსერი და დაწერე მოკლე კომენტარი (მინ. 10 სიმბოლო).
                   </p>
 
                   <div className="mt-4">
@@ -3739,8 +3735,8 @@ export default function DashboardPage() {
                   </div>
                   <p className="mt-3 text-xs text-slate-500">
                     {reviewModalAlreadyReviewed
-                      ? "ამ სამუშაოზე შეფასება უკვე გაგზავნილი გაქვს. შეგიძლია მხოლოდ დასრულება."
-                      : "სურვილის შემთხვევაში შეაფასე ფრილანსერი. შეფასება სურვილისამებრია — შეგიძლია გამოტოვო."}
+                      ? "ამ სამუშაოზე შეფასება უკვე გაგზავნილი გაქვს."
+                      : "სურვილის შემთხვევაში შეაფასე ფრილანსერი."}
                   </p>
 
                   {reviewModalAlreadyReviewed ? null : (

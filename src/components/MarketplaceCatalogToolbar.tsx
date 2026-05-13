@@ -11,9 +11,12 @@ type MarketplaceCatalogToolbarProps = {
   searchValue: string
   onSearchChange: (value: string) => void
   searchPlaceholder: string
-  categories: MarketplaceCategory[]
-  categoryId: string
-  onCategoryChange: (value: string) => void
+  /** Ignored when `categorySlot` is set. */
+  categories?: MarketplaceCategory[]
+  categoryId?: string
+  onCategoryChange?: (value: string) => void
+  /** Replaces the default category `<select>` (e.g. cascading filters). */
+  categorySlot?: ReactNode
   categoryLabel?: string
   sortValue: string
   onSortChange: (value: string) => void
@@ -40,9 +43,10 @@ export default function MarketplaceCatalogToolbar({
   searchValue,
   onSearchChange,
   searchPlaceholder,
-  categories,
-  categoryId,
-  onCategoryChange,
+  categories = [],
+  categoryId = "",
+  onCategoryChange = () => {},
+  categorySlot,
   categoryLabel = "კატეგორია",
   sortValue,
   onSortChange,
@@ -68,7 +72,7 @@ export default function MarketplaceCatalogToolbar({
         </>
       ) : null}
 
-      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-nowrap sm:items-center sm:gap-2 sm:overflow-x-auto sm:overscroll-x-contain sm:pb-1">
         <div className="flex min-w-[220px] max-w-full flex-1 items-center sm:min-w-[240px]">
           <div className="relative w-full">
             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">🔎</span>
@@ -81,33 +85,37 @@ export default function MarketplaceCatalogToolbar({
           </div>
         </div>
 
-        <label className="relative inline-flex h-10 items-center gap-2 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-600">
-          <span className="truncate">{categoryLabel}</span>
-          <select
-            value={categoryId}
-            onChange={(event) => onCategoryChange(event.target.value)}
-            className="absolute inset-0 cursor-pointer opacity-0"
-            aria-label={categoryLabel}
-          >
-            <option value="">{categoryLabel === "ინდუსტრია" ? "ყველა ინდუსტრია" : "ყველა კატეგორია"}</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name_ka}
-              </option>
-            ))}
-          </select>
-        </label>
+        {categorySlot ? (
+          <div className="shrink-0">{categorySlot}</div>
+        ) : (
+          <label className="relative inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-600">
+            <span className="truncate">{categoryLabel}</span>
+            <select
+              value={categoryId}
+              onChange={(event) => onCategoryChange(event.target.value)}
+              className="absolute inset-0 cursor-pointer opacity-0"
+              aria-label={categoryLabel}
+            >
+              <option value="">{categoryLabel === "ინდუსტრია" ? "ყველა ინდუსტრია" : "ყველა კატეგორია"}</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name_ka}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         {locationDisplay !== undefined ? (
           <button
             type="button"
-            className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-600"
+            className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-600"
           >
-            <span className="truncate">{locationDisplay.trim() || "ლოკაცია / ქალაქი"}</span>
+            <span className="truncate">{locationDisplay.trim() || "ლოკაცია"}</span>
           </button>
         ) : null}
 
-        <div className="relative shrink-0 sm:pb-px" ref={advancedDropdownRef}>
+        <div className="relative shrink-0" ref={advancedDropdownRef}>
           <button
             type="button"
             aria-expanded={advancedDropdownOpen}
@@ -178,7 +186,7 @@ export default function MarketplaceCatalogToolbar({
           ) : null}
         </div>
 
-        <label className="relative inline-flex h-10 items-center gap-2 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-600">
+        <label className="relative inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-600">
           <span className="whitespace-nowrap">{sortLabel}</span>
           <select
             value={sortValue}
@@ -196,7 +204,7 @@ export default function MarketplaceCatalogToolbar({
 
         <button
           type="button"
-          className="ml-auto inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-[#0088FF] px-6 text-base font-bold text-white transition hover:bg-[#006ACC]"
+          className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-[#0088FF] px-5 text-base font-bold text-white transition hover:bg-[#006ACC] sm:ml-auto"
           onClick={() => onSearchChange(searchValue)}
           aria-label={searchLabel}
         >

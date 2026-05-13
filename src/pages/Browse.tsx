@@ -9,7 +9,14 @@ import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { formatCityForDisplay, matchesLocationFilter } from "../lib/marketplaceFilters.ts"
-import { catalogToolbarCategories, type CategoryBranchRow } from "../lib/marketplaceCategoryTree.ts"
+import {
+  catalogSelectionMatchesEntity,
+  categoryChildrenOf,
+  categoryRoots,
+  effectiveCatalogFilterId,
+  rootIdContainingCategory,
+  type CategoryBranchRow,
+} from "../lib/marketplaceCategoryTree.ts"
 import FreelancerAvailabilityIndicator from "../components/FreelancerAvailabilityIndicator.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
@@ -38,6 +45,8 @@ type FreelancerCardItem = {
 
 type CategoryItem = { id: string; name_ka: string; parent_id: string | null }
 type SkillItem = { id: string; name: string; category_id: string | null }
+
+const EMPTY_SUBCATEGORY_PARENT_MAP = new Map<string, string>()
 
 const mockFreelancers: FreelancerCardItem[] = [
   {
@@ -288,12 +297,12 @@ export default function BrowsePage() {
   const [freelancersLoadingMore, setFreelancersLoadingMore] = useState(false)
   const [freelancers, setFreelancers] = useState<FreelancerCardItem[]>([])
   const [categories, setCategories] = useState<CategoryItem[]>([])
-  const catalogFilterCategories = useMemo(() => catalogToolbarCategories(categories as CategoryBranchRow[]), [categories])
   const [skills, setSkills] = useState<SkillItem[]>([])
   const [sortBy, setSortBy] = useState<SortOption>("rating")
 
   const [searchText, setSearchText] = useState("")
-  const [categoryId, setCategoryId] = useState("")
+  const [filterRootCategoryId, setFilterRootCategoryId] = useState("")
+  const [filterMidCategoryId, setFilterMidCategoryId] = useState("")
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
   const [availabilityFilters, setAvailabilityFilters] = useState<Availability[]>([])
   const [minimumRating, setMinimumRating] = useState<0 | 3 | 4 | 5>(0)
@@ -308,6 +317,17 @@ export default function BrowsePage() {
   const [draftMinPrice, setDraftMinPrice] = useState("")
   const [draftMaxPrice, setDraftMaxPrice] = useState("")
   const [draftLocationFilter, setDraftLocationFilter] = useState("")
+
+  const categoryRows = categories as CategoryBranchRow[]
+  const categoryRootsList = useMemo(() => categoryRoots(categoryRows), [categoryRows])
+  const categoryMidsList = useMemo(
+    () => (filterRootCategoryId ? categoryChildrenOf(categoryRows, filterRootCategoryId) : []),
+    [categoryRows, filterRootCategoryId],
+  )
+  const catalogFilterEffectiveId = useMemo(
+    () => effectiveCatalogFilterId(filterRootCategoryId, filterMidCategoryId, ""),
+    [filterRootCategoryId, filterMidCategoryId],
+  )
 
   useEffect(() => {
     document.title = "ფრილანსერები — გიგორი"
@@ -456,7 +476,7 @@ export default function BrowsePage() {
 
   useEffect(() => {
     void fetchFreelancersPage(false)
-  }, [searchText, categoryId, fetchFreelancersPage])
+  }, [searchText, catalogFilterEffectiveId, fetchFreelancersPage])
 
   const loadMoreFreelancers = () => {
     void fetchFreelancersPage(true)
@@ -468,8 +488,25 @@ export default function BrowsePage() {
     const query = searchParams.get("q")
     const category = searchParams.get("category")
     if (query) setSearchText(query)
-    if (category) setCategoryId(category)
-  }, [searchParams])
+    if (category && categories.length > 0) {
+      const id = category.trim()
+      const byId = new Map(categories.map((c) => [c.id, c]))
+      const row = byId.get(id)
+      if (!row) {
+        setFilterRootCategoryId(id)
+        setFilterMidCategoryId("")
+      } else if (!row.parent_id) {
+        setFilterRootCategoryId(id)
+        setFilterMidCategoryId("")
+      } else {
+        setFilterRootCategoryId(rootIdContainingCategory(categories as CategoryBranchRow[], id))
+        setFilterMidCategoryId(id)
+      }
+    } else if (!category?.trim()) {
+      setFilterRootCategoryId("")
+      setFilterMidCategoryId("")
+    }
+  }, [searchParams, categories])
 
   useEffect(() => {
     if (!advancedDropdownOpen) return
@@ -534,7 +571,8 @@ export default function BrowsePage() {
 
   const clearFilters = () => {
     setSearchText("")
-    setCategoryId("")
+    setFilterRootCategoryId("")
+    setFilterMidCategoryId("")
     setSelectedSkillIds([])
     setAvailabilityFilters([])
     setMinimumRating(0)
@@ -552,15 +590,19 @@ export default function BrowsePage() {
     const maxPriceNumber = maxPrice ? Number(maxPrice) : null
 
     return freelancers.filter((freelancer) => {
-      const skillNames = freelancer.skills.map((skill) => skill.name.toLowerCase())
-      const hasSearchMatch =
-        search.length === 0 ||
-        freelancer.fullName.toLowerCase().includes(search) ||
-        skillNames.some((name) => name.includes(search))
+      const hasSearchMatch = search.length === 0 || freelancer.fullName.toLowerCase().includes(search)
       if (!hasSearchMatch) return false
 
       const hasCategoryMatch =
-        !categoryId || freelancer.skills.some((skill) => skill.categoryId === categoryId)
+        !catalogFilterEffectiveId ||
+        freelancer.skills.some((skill) =>
+          catalogSelectionMatchesEntity(
+            categories as CategoryBranchRow[],
+            catalogFilterEffectiveId,
+            { categoryId: skill.categoryId, subcategoryId: null },
+            EMPTY_SUBCATEGORY_PARENT_MAP,
+          ),
+        )
       if (!hasCategoryMatch) return false
 
       const hasAllSkills =
@@ -588,7 +630,8 @@ export default function BrowsePage() {
   }, [
     freelancers,
     searchText,
-    categoryId,
+    catalogFilterEffectiveId,
+    categories,
     selectedSkillIds,
     availabilityFilters,
     minimumRating,
@@ -672,20 +715,47 @@ export default function BrowsePage() {
                 />
               </div>
 
-              <label className="relative inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500">
-                <span aria-hidden></span>
-                <span className="truncate">კატეგორიები</span>
-                <span className="ml-auto text-slate-400">▾</span>
+              <label className="relative inline-flex h-10 min-w-[9rem] max-w-[11rem] shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500">
+                <span className="pointer-events-none min-w-0 flex-1 truncate">კატეგორია</span>
+                <span className="shrink-0 text-slate-400">▾</span>
                 <select
-                  value={categoryId}
-                  onChange={(event) => setCategoryId(event.target.value)}
-                  className="absolute inset-0 cursor-pointer opacity-0"
+                  value={filterRootCategoryId}
+                  onChange={(event) => {
+                    setFilterRootCategoryId(event.target.value)
+                    setFilterMidCategoryId("")
+                  }}
+                  className="absolute inset-0 z-10 h-full w-full min-h-[2.5rem] min-w-0 cursor-pointer opacity-0"
                   aria-label="კატეგორია"
                 >
-                  <option value="">ყველა კატეგორია</option>
-                  {catalogFilterCategories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name_ka}
+                  <option value="">ყველა</option>
+                  {categoryRootsList.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name_ka}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="relative inline-flex h-10 min-w-[9rem] max-w-[11rem] shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500">
+                <span className="pointer-events-none min-w-0 flex-1 truncate">ქვეკატეგორია</span>
+                <span className="shrink-0 text-slate-400">▾</span>
+                <select
+                  value={filterMidCategoryId}
+                  disabled={!filterRootCategoryId || categoryMidsList.length === 0}
+                  onChange={(event) => setFilterMidCategoryId(event.target.value)}
+                  className="absolute inset-0 z-10 h-full w-full min-h-[2.5rem] min-w-0 cursor-pointer opacity-0 disabled:cursor-not-allowed"
+                  aria-label="ქვეკატეგორია"
+                >
+                  <option value="">
+                    {!filterRootCategoryId
+                      ? "ჯერ კატეგორია"
+                      : categoryMidsList.length === 0
+                        ? "არ არის"
+                        : "ყველა"}
+                  </option>
+                  {categoryMidsList.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name_ka}
                     </option>
                   ))}
                 </select>

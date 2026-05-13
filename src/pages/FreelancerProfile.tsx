@@ -10,6 +10,7 @@ import { formatCityForDisplay } from "../lib/marketplaceFilters.ts"
 import { supabaseEdgeHeaders } from "../lib/supabaseEdgeHeaders.ts"
 import FollowListsModal, { type FollowModalTab } from "../components/FollowListsModal.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
+import { ViewCountEyeIcon } from "../components/ViewCountEyeIcon.tsx"
 import { countFollowers, countFollowing, followUser, isFollowing, unfollowUser } from "../lib/follows.ts"
 import { avatarImageUrl, jobOrServiceImageDisplayUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
@@ -185,15 +186,6 @@ function ClockOutlineIcon({ className }: { className?: string }) {
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
       <circle cx="12" cy="12" r="9" />
       <path d="M12 7v5l3 2" />
-    </svg>
-  )
-}
-
-function EyeOutlineIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-      <path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12z" />
-      <circle cx="12" cy="12" r="3" />
     </svg>
   )
 }
@@ -1226,7 +1218,7 @@ export default function FreelancerProfilePage() {
                             </span>
                           ) : null}
                           <span className={metaPillClass}>
-                            <EyeOutlineIcon className="h-3.5 w-3.5 shrink-0 text-gray-500" />
+                            <ViewCountEyeIcon className="h-3.5 w-3.5 shrink-0 text-gray-500" />
                             {service.views_count} ნახვა
                           </span>
                         </div>

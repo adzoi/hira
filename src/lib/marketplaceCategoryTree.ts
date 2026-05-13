@@ -62,3 +62,57 @@ export function catalogToolbarCategories(rows: CategoryBranchRow[]): CategoryBra
 export function categoryIdsWithChildren(rows: CategoryBranchRow[]): Set<string> {
   return new Set(rows.map((r) => r.parent_id).filter((id): id is string => Boolean(id)))
 }
+
+/**
+ * When the user picks a row from the marketplace category dropdown, treat a match as:
+ * the entity’s `categoryId` is that row or a descendant in the `categories` tree, or
+ * the entity’s listing/job `subcategoryId` (from `subcategories`) belongs to a parent
+ * category that satisfies the same rule.
+ */
+export function catalogSelectionMatchesEntity(
+  rows: CategoryBranchRow[],
+  selectedId: string,
+  entity: { categoryId: string | null; subcategoryId: string | null },
+  subcategoryParentCategoryId: Map<string, string>,
+): boolean {
+  const sel = selectedId.trim()
+  if (!sel) return true
+  if (!entity.categoryId && !entity.subcategoryId) return false
+
+  if (entity.subcategoryId && entity.subcategoryId === sel) return true
+
+  const byId = new Map(rows.map((r) => [r.id, r]))
+
+  const nodeIsSelfOrUnderSelected = (nodeId: string | null): boolean => {
+    if (!nodeId) return false
+    let cur: CategoryBranchRow | undefined = byId.get(nodeId)
+    while (cur) {
+      if (cur.id === sel) return true
+      cur = cur.parent_id ? byId.get(cur.parent_id) : undefined
+    }
+    return false
+  }
+
+  if (entity.categoryId && nodeIsSelfOrUnderSelected(entity.categoryId)) return true
+
+  const subParent =
+    entity.subcategoryId != null && entity.subcategoryId !== ""
+      ? (subcategoryParentCategoryId.get(entity.subcategoryId) ?? null)
+      : null
+  if (subParent && nodeIsSelfOrUnderSelected(subParent)) return true
+
+  return false
+}
+
+/** Deepest chosen level wins: specialization (subcategory id) → mid category → root. */
+export function effectiveCatalogFilterId(
+  rootCategoryId: string,
+  midCategoryId: string,
+  specializationSubcategoryId: string,
+): string {
+  const spec = specializationSubcategoryId.trim()
+  if (spec) return spec
+  const mid = midCategoryId.trim()
+  if (mid) return mid
+  return rootCategoryId.trim()
+}

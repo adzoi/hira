@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { loadHomeFeed, type HomeFeedItem, type HomeFreelancerServiceItem, type HomeJobListingItem } from "../lib/homeFeed.ts"
+import { ViewCountEyeIcon } from "./ViewCountEyeIcon.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 
@@ -117,7 +118,10 @@ function FreelancerFeedCard({ item }: { item: HomeFreelancerServiceItem }) {
         <div className="mt-4 flex flex-wrap content-start gap-2 border-t border-slate-100 pt-4">
           <span className={metaPillFreelancerClass}>{negotiable ? "შეთანხმებით" : `${item.price.toLocaleString("ka-GE")} ₾`}</span>
           {!negotiable ? <span className={metaPillFreelancerClass}>{item.deliveryDays} სამუშაო დღე</span> : null}
-          <span className={metaPillFreelancerClass}>👁 {item.viewsCount} ნახვა</span>
+          <span className={`${metaPillFreelancerClass} gap-1`}>
+            <ViewCountEyeIcon className="h-3.5 w-3.5 shrink-0 text-[#374151]" />
+            {item.viewsCount} ნახვა
+          </span>
         </div>
       </div>
       <div className="mt-auto flex w-full shrink-0 flex-col gap-2 pt-3 sm:flex-row">
