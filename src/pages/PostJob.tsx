@@ -304,6 +304,18 @@ export default function PostJobPage() {
     void load()
   }, [navigate, jobId])
 
+  const categoryRootsList = useMemo(() => categoryRoots(categories as CategoryBranchRow[]), [categories])
+  const categoryMidsList = useMemo(
+    () => (rootCategoryId ? categoryChildrenOf(categories as CategoryBranchRow[], rootCategoryId) : []),
+    [categories, rootCategoryId],
+  )
+
+  const specializationParentCategoryId = useMemo(() => {
+    if (categoryId.trim()) return categoryId.trim()
+    if (rootCategoryId && categoryMidsList.length === 0) return rootCategoryId
+    return ""
+  }, [categoryId, rootCategoryId, categoryMidsList.length])
+
   useEffect(() => {
     const loadSubs = async () => {
       if (!supabase || !specializationParentCategoryId) {
@@ -328,18 +340,6 @@ export default function PostJobPage() {
 
     void loadSubs()
   }, [specializationParentCategoryId])
-
-  const categoryRootsList = useMemo(() => categoryRoots(categories as CategoryBranchRow[]), [categories])
-  const categoryMidsList = useMemo(
-    () => (rootCategoryId ? categoryChildrenOf(categories as CategoryBranchRow[], rootCategoryId) : []),
-    [categories, rootCategoryId],
-  )
-
-  const specializationParentCategoryId = useMemo(() => {
-    if (categoryId.trim()) return categoryId.trim()
-    if (rootCategoryId && categoryMidsList.length === 0) return rootCategoryId
-    return ""
-  }, [categoryId, rootCategoryId, categoryMidsList.length])
 
   const todayIso = useMemo(() => {
     const d = new Date()
