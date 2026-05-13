@@ -226,6 +226,7 @@ export interface Database {
           id: string
           is_profile_complete: boolean
           is_public: boolean
+          is_accepting_new_work: boolean
           show_completed_work_on_public_profile: boolean
           languages: string[]
           linkedin_url: string | null
@@ -246,6 +247,7 @@ export interface Database {
           id?: string
           is_profile_complete?: boolean
           is_public?: boolean
+          is_accepting_new_work?: boolean
           show_completed_work_on_public_profile?: boolean
           languages?: string[]
           linkedin_url?: string | null
@@ -266,6 +268,7 @@ export interface Database {
           id?: string
           is_profile_complete?: boolean
           is_public?: boolean
+          is_accepting_new_work?: boolean
           show_completed_work_on_public_profile?: boolean
           languages?: string[]
           linkedin_url?: string | null
@@ -603,13 +606,6 @@ export interface Database {
           vip_days?: number | null
         }
         Relationships: [
-          {
-            foreignKeyName: "vip_payments_listing_id_fkey"
-            columns: ["listing_id"]
-            isOneToOne: false
-            referencedRelation: "jobs"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "vip_payments_user_id_fkey"
             columns: ["user_id"]
@@ -964,6 +960,38 @@ export interface Database {
             columns: ["freelancer_profile_id"]
             isOneToOne: false
             referencedRelation: "freelancer_profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      user_saved_items: {
+        Row: {
+          created_at: string
+          id: string
+          resource_id: string
+          resource_type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          resource_id: string
+          resource_type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          resource_id?: string
+          resource_type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_saved_items_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           }
         ]

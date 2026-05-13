@@ -75,6 +75,8 @@ function embedJoinRow<T extends Record<string, unknown>>(v: T | T[] | null | und
   return Array.isArray(v) ? (v[0] as T | undefined) ?? null : v
 }
 
+type CancelRequestedByRole = "hirer" | "freelancer" | null
+
 type DashboardFreelancerInquiry = {
   id: string
   createdAt: string
@@ -87,6 +89,7 @@ type DashboardFreelancerInquiry = {
   hirerProfileId: string | null
   hirerUserId: string | null
   serviceId: string | null
+  cancelRequestedBy: CancelRequestedByRole
 }
 
 type DashboardHirerInquiry = {
@@ -100,6 +103,7 @@ type DashboardHirerInquiry = {
   freelancerName: string
   freelancerSlug: string | null
   freelancerUserId: string | null
+  cancelRequestedBy: CancelRequestedByRole
 }
 
 type FreelancerPendingJobOffer = {
@@ -107,8 +111,10 @@ type FreelancerPendingJobOffer = {
   jobId: string
   jobTitle: string
   hirerLabel: string
+  hirerUserId: string | null
   createdAt: string
   status: string
+  cancelRequestedBy: CancelRequestedByRole
 }
 
 type FreelancerJobOfferStatusTab = "all" | "pending" | "accepted" | "rejected"
@@ -141,6 +147,7 @@ function mapServiceInquiryRowsForFreelancer(rows: unknown[] | null | undefined):
       hirerProfileId: typeof hp?.id === "string" && hp.id.trim() ? hp.id : null,
       hirerUserId: typeof hp?.user_id === "string" && hp.user_id.trim() ? hp.user_id : null,
       serviceId: typeof svc?.id === "string" && svc.id.trim() ? svc.id : null,
+      cancelRequestedBy: (row.cancel_requested_by as CancelRequestedByRole) ?? null,
     })
   }
   return out
@@ -168,6 +175,7 @@ function mapServiceInquiryRowsForHirer(rows: unknown[] | null | undefined): Dash
       freelancerName: name,
       freelancerSlug: typeof fp?.slug === "string" ? fp.slug : null,
       freelancerUserId: typeof fp?.user_id === "string" && fp.user_id.trim() ? fp.user_id : null,
+      cancelRequestedBy: (row.cancel_requested_by as CancelRequestedByRole) ?? null,
     })
   }
   return out
@@ -207,6 +215,7 @@ type HirerApplicationRow = {
   freelancerSlug: string | null
   createdAt: string
   status: string
+  cancelRequestedBy: CancelRequestedByRole
 }
 
 function formatDate(dateString: string) {
@@ -323,6 +332,7 @@ async function fetchHirerDashboardSection(
   client: SupabaseClient,
   hirerProfileId: string,
 ): Promise<{ myJobs: JobRow[]; applications: HirerApplicationRow[]; counts: Record<string, number> }> {
+  const clientAny = client as any
   const { data: myJobsData, error: myJobsError } = await client
     .from("jobs")
     .select("*")
@@ -345,10 +355,12 @@ async function fetchHirerDashboardSection(
     return { myJobs: myJobsList, applications: [], counts: {} }
   }
 
-  const { data: applicationsData, error: applicationsError } = await client
+  const { data: applicationsData, error: applicationsError } = await clientAny
     .from("job_applications")
     .select("*")
     .in("job_id", jobIds)
+    .eq("deleted_by_hirer", false)
+    .eq("deleted_by_freelancer", false)
     .order("created_at", { ascending: false })
     .limit(100)
 
@@ -388,6 +400,7 @@ async function fetchHirerDashboardSection(
     const fp = fpById[app.freelancer_profile_id]
     const freelancerUserId = fp?.user_id ?? ""
     const freelancerName = fp ? profileNameById[fp.user_id] ?? "ფრილანსერი" : "ფრილანსერი"
+    const rowExtra = app as JobApplicationRow & { cancel_requested_by?: string | null }
     return {
       applicationId: app.id,
       jobId: app.job_id,
@@ -399,6 +412,7 @@ async function fetchHirerDashboardSection(
       freelancerSlug: fp?.slug ?? null,
       createdAt: app.created_at,
       status: app.status,
+      cancelRequestedBy: (rowExtra.cancel_requested_by as CancelRequestedByRole) ?? null,
     }
   })
 
@@ -590,6 +604,8 @@ export default function DashboardPage() {
   const [hirerListingReviewSubmitting, setHirerListingReviewSubmitting] = useState(false)
   const [hirerListingReviewError, setHirerListingReviewError] = useState("")
   const [listingInquiryBusyId, setListingInquiryBusyId] = useState<string | null>(null)
+  const [listingInquiryDeleteBusyId, setListingInquiryDeleteBusyId] = useState<string | null>(null)
+  const [jobApplicationDeleteBusyId, setJobApplicationDeleteBusyId] = useState<string | null>(null)
   const [hirerDashboardTab, setHirerDashboardTab] = useState<
     "applicants" | "my_jobs" | "listing_offers" | "ongoing" | "completed"
   >(
@@ -619,6 +635,7 @@ export default function DashboardPage() {
     },
     [supabase],
   )
+  const supabaseAny = supabase as any
   void hirerCompletedJobsCount
   void freelancerCompletedJobsCount
   void freelancerCompletedPlatformJobs
@@ -687,7 +704,7 @@ export default function DashboardPage() {
 
           if (freelancerData) {
             try {
-              const { data: inqRows, error: inqLoadErr } = await supabase
+              const { data: inqRows, error: inqLoadErr } = await supabaseAny
                 .from("service_inquiries")
                 .select(
                   `
@@ -696,12 +713,15 @@ export default function DashboardPage() {
                   message,
                   proposed_budget,
                   status,
+                  cancel_requested_by,
                   completed_at,
                   services ( id, title ),
                   hirer_profiles ( id, company_name, user_id )
                 `,
                 )
                 .eq("freelancer_profile_id", freelancerData.id)
+                .eq("deleted_by_hirer", false)
+                .eq("deleted_by_freelancer", false)
                 .order("created_at", { ascending: false })
                 .limit(40)
               if (inqLoadErr) throw inqLoadErr
@@ -756,10 +776,12 @@ export default function DashboardPage() {
             }, {})
 
             if (jobIds.length > 0) {
-              const { data: applicationsData, error: applicationsError } = await supabase
+              const { data: applicationsData, error: applicationsError } = await supabaseAny
                 .from("job_applications")
                 .select("*")
                 .in("job_id", jobIds)
+                .eq("deleted_by_hirer", false)
+                .eq("deleted_by_freelancer", false)
                 .order("created_at", { ascending: false })
                 .limit(100)
               if (applicationsError) throw applicationsError
@@ -796,6 +818,7 @@ export default function DashboardPage() {
                   freelancerSlug: p?.slug ?? null,
                   createdAt: app.created_at,
                   status: app.status,
+                  cancelRequestedBy: ((app as unknown as Record<string, unknown>).cancel_requested_by as CancelRequestedByRole) ?? null,
                 }
               })
 
@@ -849,7 +872,7 @@ export default function DashboardPage() {
 
           void (async () => {
             try {
-              const { data: pendingAppsRows, error: pendingAppsErr } = await supabase
+              const { data: pendingAppsRows, error: pendingAppsErr } = await supabaseAny
                 .from("job_applications")
                 .select(
                   `
@@ -857,9 +880,11 @@ export default function DashboardPage() {
                   job_id,
                   created_at,
                   status,
+                  cancel_requested_by,
                   jobs (
                     title,
                     hirer_profiles (
+                      user_id,
                       company_name,
                       profiles:profiles!hirer_profiles_user_id_fkey ( full_name )
                     )
@@ -867,6 +892,8 @@ export default function DashboardPage() {
                 `,
                 )
                 .eq("freelancer_profile_id", freelancerData.id)
+                .eq("deleted_by_hirer", false)
+                .eq("deleted_by_freelancer", false)
                 .order("created_at", { ascending: false })
               if (pendingAppsErr) throw pendingAppsErr
 
@@ -882,7 +909,9 @@ export default function DashboardPage() {
                   createdAt: String(row.created_at ?? ""),
                   jobTitle: typeof job?.title === "string" && job.title.trim() ? job.title : "განცხადება",
                   hirerLabel: companyName || fullName || "დამქირავებელი",
+                  hirerUserId: typeof hp?.user_id === "string" && hp.user_id.trim() ? hp.user_id : null,
                   status: String(row.status ?? "pending"),
+                  cancelRequestedBy: (row.cancel_requested_by as CancelRequestedByRole) ?? null,
                 }
               })
               setFreelancerPendingJobOffers(mappedOffers.filter((item) => item.applicationId))
@@ -925,10 +954,12 @@ export default function DashboardPage() {
               const [{ count: cjCount, error: cjCountErr }, { count: listingDoneCount, error: listingDoneErr }] =
                 await Promise.all([
                   supabase.from("completed_jobs").select("id", { count: "exact", head: true }).eq("freelancer_profile_id", freelancerData.id),
-                  supabase
+                  supabaseAny
                     .from("service_inquiries")
                     .select("id", { count: "exact", head: true })
                     .eq("freelancer_profile_id", freelancerData.id)
+                    .eq("deleted_by_hirer", false)
+                    .eq("deleted_by_freelancer", false)
                     .eq("status", "completed"),
                 ])
               if (cjCountErr && import.meta.env.DEV) {
@@ -1004,10 +1035,12 @@ export default function DashboardPage() {
               const [{ count: hCjCount, error: hCjErr }, { count: hListingDone, error: hListingDoneErr }] =
                 await Promise.all([
                   supabase.from("completed_jobs").select("id", { count: "exact", head: true }).eq("hirer_profile_id", hirerData.id),
-                  supabase
+                  supabaseAny
                     .from("service_inquiries")
                     .select("id", { count: "exact", head: true })
                     .eq("hirer_profile_id", hirerData.id)
+                    .eq("deleted_by_hirer", false)
+                    .eq("deleted_by_freelancer", false)
                     .eq("status", "completed"),
                 ])
               if (hCjErr && import.meta.env.DEV) {
@@ -1030,7 +1063,7 @@ export default function DashboardPage() {
 
           void (async () => {
             try {
-              const { data: hInqRows, error: hInqErr } = await supabase
+              const { data: hInqRows, error: hInqErr } = await supabaseAny
                 .from("service_inquiries")
                 .select(
                   `
@@ -1039,6 +1072,7 @@ export default function DashboardPage() {
                   message,
                   proposed_budget,
                   status,
+                  cancel_requested_by,
                   completed_at,
                   services ( title ),
                   freelancer_profiles (
@@ -1049,6 +1083,8 @@ export default function DashboardPage() {
                 `,
                 )
                 .eq("hirer_profile_id", hirerData.id)
+                .eq("deleted_by_hirer", false)
+                .eq("deleted_by_freelancer", false)
                 .order("created_at", { ascending: false })
                 .limit(40)
               if (hInqErr) throw hInqErr
@@ -1117,7 +1153,10 @@ export default function DashboardPage() {
     [hirerListingInquiries],
   )
   const hirerOngoingApplications = useMemo(
-    () => hirerApplications.filter((item) => item.status !== "completed" && item.jobStatus !== "completed"),
+    () =>
+      hirerApplications.filter(
+        (item) => item.status !== "completed" && item.jobStatus !== "completed" && item.status !== "cancelled",
+      ),
     [hirerApplications],
   )
   const hirerCompletedApplications = useMemo(
@@ -1156,7 +1195,7 @@ export default function DashboardPage() {
     () =>
       hirerApplicantsInRange.filter((item) => {
         if (hirerApplicantStatusTab === "accepted") return isHirerApplicantAcceptedStatus(item.status)
-        if (hirerApplicantStatusTab === "rejected") return item.status === "rejected"
+        if (hirerApplicantStatusTab === "rejected") return ["rejected", "cancelled"].includes(item.status)
         return item.status === "pending"
       }),
     [hirerApplicantStatusTab, hirerApplicantsInRange],
@@ -1165,7 +1204,7 @@ export default function DashboardPage() {
     () => ({
       pending: hirerApplicantsInRange.filter((item) => item.status === "pending").length,
       accepted: hirerApplicantsInRange.filter((item) => isHirerApplicantAcceptedStatus(item.status)).length,
-      rejected: hirerApplicantsInRange.filter((item) => item.status === "rejected").length,
+      rejected: hirerApplicantsInRange.filter((item) => ["rejected", "cancelled"].includes(item.status)).length,
     }),
     [hirerApplicantsInRange],
   )
@@ -1221,7 +1260,8 @@ export default function DashboardPage() {
       freelancerJobOffersInRange.filter((offer) => {
         if (freelancerJobOfferStatusTab === "all") return true
         if (freelancerJobOfferStatusTab === "accepted") return ["accepted", "completed"].includes(offer.status)
-        return offer.status === freelancerJobOfferStatusTab
+        if (freelancerJobOfferStatusTab === "rejected") return ["rejected", "cancelled"].includes(offer.status)
+        return offer.status === "pending"
       }),
     [freelancerJobOfferStatusTab, freelancerJobOffersInRange],
   )
@@ -1230,7 +1270,7 @@ export default function DashboardPage() {
       all: freelancerJobOffersInRange.length,
       pending: freelancerJobOffersInRange.filter((offer) => offer.status === "pending").length,
       accepted: freelancerJobOffersInRange.filter((offer) => ["accepted", "completed"].includes(offer.status)).length,
-      rejected: freelancerJobOffersInRange.filter((offer) => offer.status === "rejected").length,
+      rejected: freelancerJobOffersInRange.filter((offer) => ["rejected", "cancelled"].includes(offer.status)).length,
     }),
     [freelancerJobOffersInRange],
   )
@@ -1345,12 +1385,14 @@ export default function DashboardPage() {
         { data: cjListRows, error: cjListErr },
       ] = await Promise.all([
         supabase.from("completed_jobs").select("id", { count: "exact", head: true }).eq("freelancer_profile_id", freelancerProfile.id),
-        supabase
+        supabaseAny
           .from("service_inquiries")
           .select("id", { count: "exact", head: true })
           .eq("freelancer_profile_id", freelancerProfile.id)
+          .eq("deleted_by_hirer", false)
+          .eq("deleted_by_freelancer", false)
           .eq("status", "completed"),
-        supabase
+        supabaseAny
           .from("service_inquiries")
           .select(
             `
@@ -1359,12 +1401,15 @@ export default function DashboardPage() {
             message,
             proposed_budget,
             status,
+            cancel_requested_by,
             completed_at,
             services ( id, title ),
             hirer_profiles ( id, company_name, user_id )
           `,
           )
           .eq("freelancer_profile_id", freelancerProfile.id)
+          .eq("deleted_by_hirer", false)
+          .eq("deleted_by_freelancer", false)
           .order("created_at", { ascending: false })
           .limit(40),
         supabase
@@ -1406,12 +1451,14 @@ export default function DashboardPage() {
     try {
       const [{ count: hCjCount }, { count: hListingDone }, { data: hInqRows, error: hInqErr }] = await Promise.all([
         supabase.from("completed_jobs").select("id", { count: "exact", head: true }).eq("hirer_profile_id", hirerProfile.id),
-        supabase
+        supabaseAny
           .from("service_inquiries")
           .select("id", { count: "exact", head: true })
           .eq("hirer_profile_id", hirerProfile.id)
+          .eq("deleted_by_hirer", false)
+          .eq("deleted_by_freelancer", false)
           .eq("status", "completed"),
-        supabase
+        supabaseAny
           .from("service_inquiries")
           .select(
             `
@@ -1420,6 +1467,7 @@ export default function DashboardPage() {
             message,
             proposed_budget,
             status,
+            cancel_requested_by,
             completed_at,
             services ( title ),
             freelancer_profiles (
@@ -1430,6 +1478,8 @@ export default function DashboardPage() {
           `,
           )
           .eq("hirer_profile_id", hirerProfile.id)
+          .eq("deleted_by_hirer", false)
+          .eq("deleted_by_freelancer", false)
           .order("created_at", { ascending: false })
           .limit(40),
       ])
@@ -1468,8 +1518,19 @@ export default function DashboardPage() {
     if (nextStatus === "declined" && !window.confirm("ნამდვილად გსურს შეთავაზების უარყოფა?")) return
     setListingInquiryBusyId(inquiryId)
     try {
+      if (nextStatus === "accepted") {
+        const { data: current } = await supabaseAny
+          .from("service_inquiries")
+          .select("deleted_by_hirer")
+          .eq("id", inquiryId)
+          .single()
+        if (current?.deleted_by_hirer === true) {
+          await reloadFreelancerListingInquiries()
+          return
+        }
+      }
       const nowIso = new Date().toISOString()
-      const { error } = await supabase
+      const { error } = await supabaseAny
         .from("service_inquiries")
         .update({ status: nextStatus, updated_at: nowIso })
         .eq("id", inquiryId)
@@ -1528,7 +1589,7 @@ export default function DashboardPage() {
       }
 
       const nextStatus = "completed"
-      const { error } = await supabase
+      const { error } = await supabaseAny
         .from("service_inquiries")
         .update({
           status: nextStatus,
@@ -1572,21 +1633,39 @@ export default function DashboardPage() {
     await submitFreelancerListingCompletion(false)
   }
 
-  const cancelHirerListingInquiry = async (inquiryId: string) => {
+  const deleteHirerListingInquiry = async (inquiryId: string) => {
     if (!supabase) return
-    if (!window.confirm("გაუქმდეს ეს შეთავაზება?")) return
-    setListingInquiryBusyId(inquiryId)
+    if (!window.confirm("ნამდვილად გსურს შეთავაზების წაშლა?")) return
+    setListingInquiryDeleteBusyId(inquiryId)
     try {
-      const { error } = await supabase
+      const { error } = await supabaseAny
         .from("service_inquiries")
-        .update({ status: "cancelled", updated_at: new Date().toISOString() })
+        .update({ deleted_by_hirer: true, updated_at: new Date().toISOString() })
         .eq("id", inquiryId)
       if (error) throw error
       await reloadHirerListingInquiries()
     } catch {
       /* ignore */
     } finally {
-      setListingInquiryBusyId(null)
+      setListingInquiryDeleteBusyId(null)
+    }
+  }
+
+  const deleteFreelancerListingInquiry = async (inquiryId: string) => {
+    if (!supabase) return
+    if (!window.confirm("ნამდვილად გსურს შეთავაზების წაშლა?")) return
+    setListingInquiryDeleteBusyId(inquiryId)
+    try {
+      const { error } = await supabaseAny
+        .from("service_inquiries")
+        .update({ deleted_by_freelancer: true, updated_at: new Date().toISOString() })
+        .eq("id", inquiryId)
+      if (error) throw error
+      await reloadFreelancerListingInquiries()
+    } catch {
+      /* ignore */
+    } finally {
+      setListingInquiryDeleteBusyId(null)
     }
   }
 
@@ -1777,6 +1856,49 @@ export default function DashboardPage() {
       setHirerActionError(e instanceof Error ? e.message : "შეცდომა მოხდა.")
     } finally {
       setApplicationBusyId(null)
+    }
+  }
+
+  const deleteHirerApplication = async (item: HirerApplicationRow) => {
+    if (!supabase) return
+    if (!window.confirm("ნამდვილად გსურს განცხადების წაშლა?")) return
+    setJobApplicationDeleteBusyId(item.applicationId)
+    try {
+      const { error } = await supabaseAny
+        .from("job_applications")
+        .update({ deleted_by_hirer: true, updated_at: new Date().toISOString() })
+        .eq("id", item.applicationId)
+        .eq("status", "rejected")
+      if (error) throw error
+      await reloadHirerSection()
+    } catch {
+      /* ignore */
+    } finally {
+      setJobApplicationDeleteBusyId(null)
+    }
+  }
+
+  const deleteFreelancerApplication = async (item: FreelancerPendingJobOffer) => {
+    if (!supabase) return
+    if (!window.confirm("ნამდვილად გსურს ამ შეთავაზების წაშლა?")) return
+    setJobApplicationDeleteBusyId(item.applicationId)
+    try {
+      const { error, count } = await supabaseAny
+        .from("job_applications")
+        .update({ deleted_by_freelancer: true })
+        .eq("id", item.applicationId)
+        .select("id", { count: "exact", head: true })
+      if (error) throw error
+      void count
+      // If count is 0, the RLS blocked it or row not found —
+      // still remove from local state optimistically
+      setFreelancerPendingJobOffers((prev) =>
+        prev.filter((o) => o.applicationId !== item.applicationId),
+      )
+    } catch {
+      /* ignore */
+    } finally {
+      setJobApplicationDeleteBusyId(null)
     }
   }
 
@@ -2398,6 +2520,16 @@ export default function DashboardPage() {
                             დასრულება
                           </button>
                         ) : null}
+                        {["declined", "cancelled"].includes(q.status) ? (
+                          <button
+                            type="button"
+                            disabled={listingInquiryDeleteBusyId === q.id}
+                            onClick={() => void deleteFreelancerListingInquiry(q.id)}
+                            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            დამალვა
+                          </button>
+                        ) : null}
                       </div>
                     </li>
                   ))}
@@ -2480,7 +2612,7 @@ export default function DashboardPage() {
                     {freelancerJobOffersFiltered.map((offer) => (
                       <li
                         key={offer.applicationId}
-                        className="flex flex-col gap-1 rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                        className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
                       >
                         <div className="min-w-0">
                           <p className="font-semibold text-[#1B2B4B]">{offer.jobTitle}</p>
@@ -2498,6 +2630,18 @@ export default function DashboardPage() {
                         >
                           {freelancerJobOfferStatusLabel(offer.status)}
                         </span>
+                        <div className="flex shrink-0 flex-wrap gap-2">
+                          {offer.status === "pending" || offer.status === "rejected" ? (
+                            <button
+                              type="button"
+                              disabled={jobApplicationDeleteBusyId === offer.applicationId}
+                              onClick={() => void deleteFreelancerApplication(offer)}
+                              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                            >
+                              წაშლა
+                            </button>
+                          ) : null}
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -2571,7 +2715,7 @@ export default function DashboardPage() {
                                     მიმდინარეობაში
                                   </button>
                                 ) : null}
-                                {["accepted", "in_progress", "hirer_done"].includes(q.status) ? (
+                                {["accepted", "in_progress", "freelancer_done", "hirer_done"].includes(q.status) ? (
                                   <button
                                     type="button"
                                     disabled={listingInquiryBusyId === q.id}
@@ -3067,11 +3211,11 @@ export default function DashboardPage() {
                           {q.status === "pending" ? (
                             <button
                               type="button"
-                              disabled={listingInquiryBusyId === q.id}
-                              onClick={() => void cancelHirerListingInquiry(q.id)}
+                              disabled={listingInquiryDeleteBusyId === q.id}
+                              onClick={() => void deleteHirerListingInquiry(q.id)}
                               className="shrink-0 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
                             >
-                              გაუქმება
+                              წაშლა
                             </button>
                           ) : null}
                           {["accepted", "in_progress", "freelancer_done"].includes(q.status) ? (
@@ -3186,47 +3330,56 @@ export default function DashboardPage() {
                         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">განმცხადებლები</p>
                         <div className="space-y-3">
                           {hirerOngoingApplications.map((item) => (
-                            <div
-                              key={`ongoing-app-${item.applicationId}`}
-                              className="flex flex-col gap-3 rounded-lg border border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between"
-                            >
-                              <div className="min-w-0 flex-1">
-                                <p className="font-semibold text-[#1B2B4B]">{item.freelancerName}</p>
-                                <p className="mt-1 text-sm text-slate-600">
-                                  {item.jobTitle} • {formatDate(item.createdAt)} • {statusLabel(item.status)}
-                                </p>
-                              </div>
-                              <div className="flex shrink-0 flex-wrap gap-2">
-                                {item.status === "pending" ? (
-                                  <>
+                            <div key={`ongoing-app-${item.applicationId}`} className="rounded-lg border border-slate-200 p-4">
+                              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-semibold text-[#1B2B4B]">{item.freelancerName}</p>
+                                  <p className="mt-1 text-sm text-slate-600">
+                                    {item.jobTitle} • {formatDate(item.createdAt)} • {statusLabel(item.status)}
+                                  </p>
+                                </div>
+                                <div className="flex shrink-0 flex-wrap gap-2">
+                                  {item.status === "pending" ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        disabled={applicationBusyId === item.applicationId}
+                                        onClick={() => void acceptApplication(item)}
+                                        className="rounded-lg bg-[#1B2B4B] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:opacity-50"
+                                      >
+                                        მიღება
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={applicationBusyId === item.applicationId}
+                                        onClick={() => void rejectApplication(item)}
+                                        className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                                      >
+                                        უარყოფა
+                                      </button>
+                                    </>
+                                  ) : null}
+                                  {item.status === "accepted" && hirerAcceptedApplicantShowsJobActions(item.jobStatus) ? (
                                     <button
                                       type="button"
-                                      disabled={applicationBusyId === item.applicationId}
-                                      onClick={() => void acceptApplication(item)}
-                                      className="rounded-lg bg-[#1B2B4B] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:opacity-50"
+                                      disabled={!item.freelancerUserId}
+                                      onClick={() => openCompleteReviewModal(item)}
+                                      className="rounded-lg border border-[#D4A843] bg-amber-50 px-3 py-1.5 text-xs font-semibold text-[#1B2B4B] transition hover:bg-[#D4A843]/30 disabled:cursor-not-allowed disabled:opacity-50"
                                     >
-                                      მიღება
+                                      დასრულება
                                     </button>
+                                  ) : null}
+                                  {item.status === "rejected" ? (
                                     <button
                                       type="button"
-                                      disabled={applicationBusyId === item.applicationId}
-                                      onClick={() => void rejectApplication(item)}
+                                      disabled={jobApplicationDeleteBusyId === item.applicationId}
+                                      onClick={() => void deleteHirerApplication(item)}
                                       className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                                     >
-                                      უარყოფა
+                                      დამალვა
                                     </button>
-                                  </>
-                                ) : null}
-                                {item.status === "accepted" && hirerAcceptedApplicantShowsJobActions(item.jobStatus) ? (
-                                  <button
-                                    type="button"
-                                    disabled={!item.freelancerUserId}
-                                    onClick={() => openCompleteReviewModal(item)}
-                                    className="rounded-lg border border-[#D4A843] bg-amber-50 px-3 py-1.5 text-xs font-semibold text-[#1B2B4B] transition hover:bg-[#D4A843]/30 disabled:cursor-not-allowed disabled:opacity-50"
-                                  >
-                                    დასრულება
-                                  </button>
-                                ) : null}
+                                  ) : null}
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -3238,37 +3391,36 @@ export default function DashboardPage() {
                         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">ლისტინგები</p>
                         <div className="space-y-3">
                           {hirerOngoingListingInquiries.map((q) => (
-                            <div
-                              key={`ongoing-listing-${q.id}`}
-                              className="flex flex-col gap-3 rounded-lg border border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between"
-                            >
-                              <div className="min-w-0 flex-1">
-                                <p className="font-semibold text-[#1B2B4B]">{q.listingTitle}</p>
-                                <p className="mt-1 text-sm text-slate-600">
-                                  {q.freelancerName} • {formatDate(q.createdAt)} • {listingInquiryStatusLabel(q.status)}
-                                </p>
-                              </div>
-                              <div className="flex shrink-0 flex-wrap gap-2">
-                                {q.status === "pending" ? (
-                                  <button
-                                    type="button"
-                                    disabled={listingInquiryBusyId === q.id}
-                                    onClick={() => void cancelHirerListingInquiry(q.id)}
-                                    className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
-                                  >
-                                    გაუქმება
-                                  </button>
-                                ) : null}
-                                {["accepted", "in_progress", "freelancer_done"].includes(q.status) ? (
-                                  <button
-                                    type="button"
-                                    disabled={listingInquiryBusyId === q.id}
-                                    onClick={() => void markHirerListingInquiryDone(q)}
-                                    className="rounded-lg border border-emerald-600/40 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 disabled:opacity-50"
-                                  >
-                                    დასრულება
-                                  </button>
-                                ) : null}
+                            <div key={`ongoing-listing-${q.id}`} className="rounded-lg border border-slate-200 p-4">
+                              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-semibold text-[#1B2B4B]">{q.listingTitle}</p>
+                                  <p className="mt-1 text-sm text-slate-600">
+                                    {q.freelancerName} • {formatDate(q.createdAt)} • {listingInquiryStatusLabel(q.status)}
+                                  </p>
+                                </div>
+                                <div className="flex shrink-0 flex-wrap gap-2">
+                                  {q.status === "pending" ? (
+                                    <button
+                                      type="button"
+                                      disabled={listingInquiryDeleteBusyId === q.id}
+                                      onClick={() => void deleteHirerListingInquiry(q.id)}
+                                      className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                                    >
+                                      წაშლა
+                                    </button>
+                                  ) : null}
+                                  {["accepted", "in_progress", "freelancer_done"].includes(q.status) ? (
+                                    <button
+                                      type="button"
+                                      disabled={listingInquiryBusyId === q.id}
+                                      onClick={() => void markHirerListingInquiryDone(q)}
+                                      className="rounded-lg border border-emerald-600/40 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 disabled:opacity-50"
+                                    >
+                                      დასრულება
+                                    </button>
+                                  ) : null}
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -3457,6 +3609,16 @@ export default function DashboardPage() {
                             className="rounded-lg border border-[#D4A843] bg-amber-50 px-3 py-1.5 text-xs font-semibold text-[#1B2B4B] transition hover:bg-[#D4A843]/30 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             დასრულება
+                          </button>
+                        ) : null}
+                        {item.status === "rejected" ? (
+                          <button
+                            type="button"
+                            disabled={jobApplicationDeleteBusyId === item.applicationId}
+                            onClick={() => void deleteHirerApplication(item)}
+                            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            დამალვა
                           </button>
                         ) : null}
                         {(item.status === "completed" || item.jobStatus === "completed") ? (

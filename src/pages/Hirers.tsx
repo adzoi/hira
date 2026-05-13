@@ -375,7 +375,7 @@ export default function HirersPage() {
                 <input
                   value={searchText}
                   onChange={(event) => setSearchText(event.target.value)}
-                  className="h-10 w-full rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#2563EB]"
+                  className="h-10 w-full rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#0088FF]"
                   placeholder="კომპანია, ინდუსტრია, ქალაქი ან აღწერა"
                 />
               </div>
@@ -421,7 +421,7 @@ export default function HirersPage() {
                   <span>გაფართოებული ძიება</span>
                   <span className="text-slate-400">▾</span>
                   {advancedFilterCount > 0 ? (
-                    <span className="ml-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#2563EB] px-1 text-xs font-bold text-white">
+                    <span className="ml-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#0088FF] px-1 text-xs font-bold text-white">
                       {advancedFilterCount}
                     </span>
                   ) : null}
@@ -437,14 +437,14 @@ export default function HirersPage() {
                       className="absolute right-0 z-50 mt-2 flex max-h-[min(72vh,560px)] w-[min(100vw-2rem,24rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
                     >
                       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-4">
-                        <h2 className="border-l-4 border-[#2563EB] pl-3 text-base font-bold text-[#1B2B4B]">გაფართოებული ფილტრები</h2>
+                        <h2 className="border-l-4 border-[#0088FF] pl-3 text-base font-bold text-[#1B2B4B]">გაფართოებული ფილტრები</h2>
                         <div className="mt-4 space-y-4">
                           <label className="block pb-1">
                             <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">ლოკაცია / ქალაქი</span>
                             <LocationFilterSelect
                               value={draftLocationFilter}
                               onChange={setDraftLocationFilter}
-                              className="h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-[#2563EB] focus:ring-2"
+                              className="h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
                             />
                           </label>
                         </div>
@@ -454,7 +454,7 @@ export default function HirersPage() {
                         <button
                           type="button"
                           onClick={clearDraftAdvanced}
-                          className="h-11 w-full rounded-lg border border-[#2563EB] text-sm font-semibold text-[#1B2B4B] hover:bg-blue-50"
+                          className="h-11 w-full rounded-lg border border-[#0088FF] text-sm font-semibold text-[#1B2B4B] hover:bg-[#E8F4FF]"
                         >
                           ფილტრების გასუფთავება
                         </button>
@@ -469,7 +469,7 @@ export default function HirersPage() {
                           <button
                             type="button"
                             onClick={saveAdvancedFilters}
-                            className="h-11 flex-1 rounded-lg bg-[#2563EB] text-sm font-semibold text-white hover:bg-blue-700"
+                            className="h-11 flex-1 rounded-lg bg-[#0088FF] text-sm font-semibold text-white hover:bg-[#006ACC]"
                           >
                             შენახვა
                           </button>
@@ -498,7 +498,7 @@ export default function HirersPage() {
               <button
                 type="button"
                 onClick={() => setAdvancedDropdownOpen(false)}
-                className="ml-auto inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-[#2563EB] px-8 text-base font-bold text-white transition hover:bg-blue-700"
+                className="ml-auto inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-[#0088FF] px-8 text-base font-bold text-white transition hover:bg-[#006ACC]"
               >
                 ძიება
               </button>
@@ -530,7 +530,7 @@ export default function HirersPage() {
                     return (
                       <li
                         key={h.id}
-                        className="flex h-full flex-col rounded-2xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-4 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#2563EB] hover:shadow-[-4px_0_12px_rgba(37,99,235,0.25)]"
+                        className="flex h-full flex-col rounded-2xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-4 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#0088FF] hover:shadow-[-4px_0_12px_rgba(0,136,255,0.25)]"
                       >
                         <div className="flex items-start gap-3">
                           <button
@@ -588,7 +588,7 @@ export default function HirersPage() {
                               href={h.websiteUrl.startsWith("http") ? h.websiteUrl : `https://${h.websiteUrl}`}
                               target="_blank"
                               rel="noreferrer noopener"
-                              className={`${websiteChipClass} hover:border-[#2563EB] hover:text-[#2563EB]`}
+                              className={`${websiteChipClass} hover:border-[#0088FF] hover:text-[#0088FF]`}
                             >
                               ვებგვერდი
                               <ExternalLinkArrowIcon className="h-3.5 w-3.5 opacity-80" />
@@ -603,7 +603,7 @@ export default function HirersPage() {
                         <div className="mt-auto pt-3">
                           <Link
                             to={`/hirer/${h.id}`}
-                            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-[#2563EB] px-4 text-sm font-bold text-white transition hover:bg-[#1D4ED8]"
+                            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-[#0088FF] px-4 text-sm font-bold text-white transition hover:bg-[#006ACC]"
                           >
                             პროფილი
                           </Link>
@@ -618,7 +618,7 @@ export default function HirersPage() {
                   <button
                     type="button"
                     onClick={() => setVisibleCount((c) => c + 24)}
-                    className="h-11 rounded-lg border border-[#2563EB] px-6 text-sm font-semibold text-[#2563EB] transition hover:bg-blue-50"
+                    className="h-11 rounded-lg border border-[#0088FF] px-6 text-sm font-semibold text-[#0088FF] transition hover:bg-[#E8F4FF]"
                   >
                     მეტის ნახვა
                   </button>

@@ -9,6 +9,7 @@ import { listingPriceNegotiable } from "../lib/homeFeed.ts"
 import { formatCityForDisplay } from "../lib/marketplaceFilters.ts"
 import { supabaseEdgeHeaders } from "../lib/supabaseEdgeHeaders.ts"
 import FollowListsModal, { type FollowModalTab } from "../components/FollowListsModal.tsx"
+import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import { countFollowers, countFollowing, followUser, isFollowing, unfollowUser } from "../lib/follows.ts"
 import { avatarImageUrl, jobOrServiceImageDisplayUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
@@ -37,6 +38,7 @@ type FreelancerData = {
   portfolio_url: string | null
   bio: string | null
   user_id: string
+  is_accepting_new_work?: boolean | null
   /** საჯარო პროფილის ჩვენების კონტროლი (RLS/RPC-თან თანხვედრაში). */
   show_completed_work_on_public_profile?: boolean
 }
@@ -216,7 +218,7 @@ const tagChipClass =
   "inline-flex max-w-full items-center rounded-full border border-[#D1D5DB] bg-white px-2.5 py-0.5 text-xs font-medium text-[#374151] [overflow-wrap:anywhere]"
 
 const primaryBtnClass =
-  "inline-flex h-9 min-h-9 shrink-0 items-center justify-center rounded-lg bg-[#2563EB] px-4 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#1D4ED8] disabled:pointer-events-none disabled:opacity-60"
+  "inline-flex h-9 min-h-9 shrink-0 items-center justify-center rounded-lg bg-[#0088FF] px-4 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#006ACC] disabled:pointer-events-none disabled:opacity-60"
 
 const outlineBtnClass =
   "inline-flex h-9 min-h-9 shrink-0 items-center justify-center rounded-lg border border-[#E5E7EB] bg-white px-4 text-sm font-medium text-[#374151] transition-colors duration-150 hover:bg-[#F9FAFB] disabled:pointer-events-none disabled:opacity-60"
@@ -892,25 +894,27 @@ export default function FreelancerProfilePage() {
           <div className="space-y-5">
             <section className="rounded-[14px] border border-[#E5E7EB] bg-white px-6 py-5 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
               <div className="flex items-start gap-4">
-                <button
-                  type="button"
-                  onClick={() => setAvatarLightboxOpen(true)}
-                  className="group relative box-border h-[88px] w-[88px] shrink-0 overflow-hidden rounded-full border-2 border-[#E5E7EB] bg-white p-0 transition hover:border-[#2563EB] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2"
-                  aria-label="ავატარის გადიდება"
-                >
-                  {profile.avatar_url ? (
-                    <img
-                      src={profileAvatarDisplayUrl ?? profile.avatar_url}
-                      alt={`${profile.full_name} ავატარი`}
-                      loading="lazy"
-                      className="h-full w-full rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center rounded-full bg-[#2563EB] text-2xl font-bold text-white transition group-hover:bg-[#1D4ED8]">
-                      {getInitials(profile.full_name)}
-                    </div>
-                  )}
-                </button>
+                <div className="flex shrink-0 flex-col items-center">
+                  <button
+                    type="button"
+                    onClick={() => setAvatarLightboxOpen(true)}
+                    className="group relative box-border h-[88px] w-[88px] shrink-0 overflow-hidden rounded-full border-2 border-[#E5E7EB] bg-white p-0 transition hover:border-[#0088FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0088FF] focus-visible:ring-offset-2"
+                    aria-label="ავატარის გადიდება"
+                  >
+                    {profile.avatar_url ? (
+                      <img
+                        src={profileAvatarDisplayUrl ?? profile.avatar_url}
+                        alt={`${profile.full_name} ავატარი`}
+                        loading="lazy"
+                        className="h-full w-full rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center rounded-full bg-[#0088FF] text-2xl font-bold text-white transition group-hover:bg-[#006ACC]">
+                        {getInitials(profile.full_name)}
+                      </div>
+                    )}
+                  </button>
+                </div>
 
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
@@ -919,6 +923,9 @@ export default function FreelancerProfilePage() {
                       <p className="mt-0.5 text-sm text-gray-500">{freelancer.professional_title ?? "ფრილანსერი"}</p>
                     </div>
                     <div className="ml-auto flex flex-shrink-0 flex-wrap items-center justify-end gap-2">
+                      {!viewerIsOwner ? (
+                        <SaveBookmarkButton variant="icon" resourceType="freelancer" resourceId={freelancer.id} />
+                      ) : null}
                       {followButtonMode !== "hidden" ? (
                         <button
                           type="button"
@@ -949,6 +956,12 @@ export default function FreelancerProfilePage() {
                       </button>
                     </div>
                   </div>
+
+                  {freelancer.is_accepting_new_work === false ? (
+                    <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                      ეს ფრილანსერი ამჟამად ახალი სამუშაოებისთვის ხელმიუწვდომელია — შეთავაზება ლისტინგებიდან მაინც შეგიძლიათ.
+                    </p>
+                  ) : null}
 
                   <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-gray-500">
                     <span className="inline-flex items-center gap-1.5">
@@ -1029,7 +1042,7 @@ export default function FreelancerProfilePage() {
                           href={freelancer.linkedin_url}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 rounded-full border border-[#E5E7EB] px-3 py-1 text-sm text-blue-600 transition hover:bg-[#F9FAFB]"
+                          className="inline-flex items-center gap-1 rounded-full border border-[#E5E7EB] px-3 py-1 text-sm text-[#0088FF] transition hover:bg-[#F9FAFB]"
                         >
                           <LinkedInBrandIcon className="h-4 w-4" />
                           LinkedIn
@@ -1048,7 +1061,7 @@ export default function FreelancerProfilePage() {
                           href={freelancer.github_url}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 rounded-full border border-[#E5E7EB] px-3 py-1 text-sm text-blue-600 transition hover:bg-[#F9FAFB]"
+                          className="inline-flex items-center gap-1 rounded-full border border-[#E5E7EB] px-3 py-1 text-sm text-[#0088FF] transition hover:bg-[#F9FAFB]"
                         >
                           <GitHubBrandIcon className="h-4 w-4" />
                           GitHub
@@ -1142,7 +1155,7 @@ export default function FreelancerProfilePage() {
                 onClick={() => setProfileTab("services")}
                 className={`cursor-pointer rounded-full px-5 py-2 text-sm font-medium transition-colors duration-150 ${
                   profileTab === "services"
-                    ? "border border-[#2563EB] bg-[#2563EB] text-white"
+                    ? "border border-[#0088FF] bg-[#0088FF] text-white"
                     : "border border-[#E5E7EB] bg-white text-[#6B7280]"
                 }`}
               >
@@ -1153,7 +1166,7 @@ export default function FreelancerProfilePage() {
                 onClick={() => setProfileTab("bio")}
                 className={`cursor-pointer rounded-full px-5 py-2 text-sm font-medium transition-colors duration-150 ${
                   profileTab === "bio"
-                    ? "border border-[#2563EB] bg-[#2563EB] text-white"
+                    ? "border border-[#0088FF] bg-[#0088FF] text-white"
                     : "border border-[#E5E7EB] bg-white text-[#6B7280]"
                 }`}
               >
@@ -1164,7 +1177,7 @@ export default function FreelancerProfilePage() {
                 onClick={() => setProfileTab("reviews")}
                 className={`cursor-pointer rounded-full px-5 py-2 text-sm font-medium transition-colors duration-150 ${
                   profileTab === "reviews"
-                    ? "border border-[#2563EB] bg-[#2563EB] text-white"
+                    ? "border border-[#0088FF] bg-[#0088FF] text-white"
                     : "border border-[#E5E7EB] bg-white text-[#6B7280]"
                 }`}
               >
@@ -1182,7 +1195,7 @@ export default function FreelancerProfilePage() {
                     return (
                       <article
                         key={service.id}
-                        className="flex min-h-[280px] flex-col rounded-[14px] border border-[#E5E7EB] border-l-[3px] border-l-transparent bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#2563EB] hover:shadow-[-4px_0_12px_rgba(37,99,235,0.2)]"
+                        className="flex min-h-[280px] flex-col rounded-[14px] border border-[#E5E7EB] border-l-[3px] border-l-transparent bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#0088FF] hover:shadow-[-4px_0_12px_rgba(0,136,255,0.2)]"
                       >
                         <p className="mb-1 text-xs text-gray-400">ფრილანსერი · სერვისი</p>
                         <div className="flex items-center gap-2 text-sm font-semibold">
@@ -1312,7 +1325,7 @@ export default function FreelancerProfilePage() {
                     reviews.map((review) => (
                       <div key={review.id} className="rounded-[10px] border border-[#E5E7EB] p-4">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#2563EB] text-xs font-bold text-white">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0088FF] text-xs font-bold text-white">
                             {getInitials(review.reviewer_name)}
                           </div>
                           <div>
@@ -1341,7 +1354,7 @@ export default function FreelancerProfilePage() {
                       key={item.id}
                       type="button"
                       onClick={() => setSelectedImageUrl(item.image_url)}
-                      className="overflow-hidden rounded-[14px] border border-[#E5E7EB] bg-white text-left shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition hover:border-[#2563EB]/40"
+                      className="overflow-hidden rounded-[14px] border border-[#E5E7EB] bg-white text-left shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition hover:border-[#0088FF]/40"
                     >
                       <img
                         src={jobOrServiceImageDisplayUrl(supabase, item.image_url, "thumbnail") ?? item.image_url}
@@ -1397,7 +1410,7 @@ export default function FreelancerProfilePage() {
                   <button
                     type="button"
                     onClick={() => void copyClip(profile.phone!, "ნომერი")}
-                    className="mt-2 text-sm font-semibold text-[#2563EB] hover:underline"
+                    className="mt-2 text-sm font-semibold text-[#0088FF] hover:underline"
                   >
                     კოპირება
                   </button>
@@ -1411,7 +1424,7 @@ export default function FreelancerProfilePage() {
                   <button
                     type="button"
                     onClick={() => void copyClip(profile.email!, "ელფოსტა")}
-                    className="mt-2 text-sm font-semibold text-[#2563EB] hover:underline"
+                    className="mt-2 text-sm font-semibold text-[#0088FF] hover:underline"
                   >
                     კოპირება
                   </button>
@@ -1468,7 +1481,7 @@ export default function FreelancerProfilePage() {
                 className="max-h-[min(85vh,900px)] max-w-[min(85vw,900px)] rounded-full object-contain"
               />
             ) : (
-              <div className="flex aspect-square max-h-[min(85vh,900px)] max-w-[min(85vw,900px)] min-h-[200px] min-w-[200px] items-center justify-center rounded-full bg-[#2563EB] p-16 text-7xl font-bold text-white sm:text-8xl">
+              <div className="flex aspect-square max-h-[min(85vh,900px)] max-w-[min(85vw,900px)] min-h-[200px] min-w-[200px] items-center justify-center rounded-full bg-[#0088FF] p-16 text-7xl font-bold text-white sm:text-8xl">
                 {getInitials(profile.full_name)}
               </div>
             )}

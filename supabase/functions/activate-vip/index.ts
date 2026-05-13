@@ -270,10 +270,9 @@ Deno.serve(async (req) => {
   const expiresAt = new Date(base + tierCfg.days * 24 * 60 * 60 * 1000).toISOString()
 
   const vipPaymentInsert: {
-    job_id?: string
     listing_id: string
     user_id: string
-    vip_tier: string
+    tier: string
     vip_days: number
     paypal_order_id: string
     amount: number
@@ -283,16 +282,13 @@ Deno.serve(async (req) => {
   } = {
     listing_id: listingId,
     user_id: user.id,
-    vip_tier: tier,
+    tier,
     vip_days: tierCfg.days,
     paypal_order_id: orderId,
     amount: tierCfg.price,
     currency: tierCfg.currency,
     status: "completed",
     completed_at: now.toISOString(),
-  }
-  if (listingType === "job") {
-    vipPaymentInsert.job_id = listingId
   }
 
   const { error: payInsErr } = await admin.from("vip_payments").insert(vipPaymentInsert)

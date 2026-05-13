@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import Navbar from "../components/Navbar"
+import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { avatarImageUrl, serviceImageDetailUrl, serviceImageThumbnailUrl } from "../lib/storageImageUrl.ts"
@@ -52,6 +53,7 @@ type ListingDetail = {
   freelancerSlug: string
   averageRating: number
   viewsCount: number
+  isAcceptingNewWork: boolean
 }
 
 export default function ListingDetailPage() {
@@ -103,6 +105,7 @@ export default function ListingDetailPage() {
               slug,
               professional_title,
               average_rating,
+              is_accepting_new_work,
               profiles:profiles!freelancer_profiles_user_id_fkey (
                 full_name,
                 avatar_url
@@ -120,6 +123,7 @@ export default function ListingDetailPage() {
           slug: string | null
           professional_title: string | null
           average_rating: number | null
+          is_accepting_new_work?: boolean | null
           profiles: { full_name: string | null; avatar_url: string | null } | null
         } | null
         if (!fp?.slug) throw new Error("ლისტინგი ვერ მოიძებნა.")
@@ -141,6 +145,7 @@ export default function ListingDetailPage() {
           freelancerSlug: fp.slug,
           averageRating: Number(fp.average_rating ?? 0),
           viewsCount: Number((data as { views_count?: number | null }).views_count ?? 0),
+          isAcceptingNewWork: fp.is_accepting_new_work !== false,
         })
       } catch (e) {
         setError(e instanceof Error ? e.message : "ჩატვირთვა ვერ მოხერხდა.")
@@ -237,6 +242,11 @@ export default function ListingDetailPage() {
     viewerType === "hirer" &&
     item!.freelancerProfileId &&
     viewerFreelancerProfileId !== item!.freelancerProfileId
+
+  const viewerOwnsListing =
+    Boolean(item) &&
+    viewerFreelancerProfileId != null &&
+    viewerFreelancerProfileId === item!.freelancerProfileId
 
   const submitOffer = async () => {
     if (!item || !supabase) return
@@ -345,24 +355,38 @@ export default function ListingDetailPage() {
             </section>
 
             <aside className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
-              <Link to={`/freelancer/${encodeURIComponent(item.freelancerSlug)}`} className="flex items-center gap-3 border-b border-slate-100 pb-4">
-                <span className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-xs font-bold text-[#1B2B4B]">
-                  {item.avatarUrl ? (
-                    <img
-                      src={avatarImageUrl(supabase, item.avatarUrl) ?? item.avatarUrl}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    item.fullName.slice(0, 2).toUpperCase()
-                  )}
-                </span>
-                <div className="min-w-0">
+              <div className="flex items-start gap-3 border-b border-slate-100 pb-4">
+                <div className="flex shrink-0 flex-col items-center gap-2">
+                  <Link
+                    to={`/freelancer/${encodeURIComponent(item.freelancerSlug)}`}
+                    className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-xs font-bold text-[#1B2B4B]"
+                  >
+                    {item.avatarUrl ? (
+                      <img
+                        src={avatarImageUrl(supabase, item.avatarUrl) ?? item.avatarUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      item.fullName.slice(0, 2).toUpperCase()
+                    )}
+                  </Link>
+                  {!viewerOwnsListing ? (
+                    <SaveBookmarkButton resourceType="service" resourceId={item.id} className="w-[88px]" />
+                  ) : null}
+                </div>
+                <Link to={`/freelancer/${encodeURIComponent(item.freelancerSlug)}`} className="min-w-0 flex-1">
                   <p className="truncate font-bold text-[#1B2B4B]">{item.fullName}</p>
                   <p className="truncate text-xs text-slate-600">{item.professionalTitle}</p>
                   <p className="mt-0.5 text-xs font-semibold text-[#D4A843]">★ {item.averageRating.toFixed(1)}</p>
-                </div>
-              </Link>
+                </Link>
+              </div>
+
+              {!item.isAcceptingNewWork ? (
+                <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium leading-snug text-amber-900">
+                  ეს ფრილანსერი ამჟამად ახალი სამუშაოებისთვის ხელმიუწვდომელია. შეთავაზების გაგზავნა მაინც შეგიძლიათ.
+                </p>
+              ) : null}
 
               <div className="mt-4 space-y-2 text-sm text-slate-700">
                 <p>
@@ -394,10 +418,17 @@ export default function ListingDetailPage() {
                 </div>
               ) : null}
 
-              <div className="mt-5">
+              <div className="mt-5 flex gap-2">
+                {!viewerOwnsListing ? (
+                  <SaveBookmarkButton
+                    variant="icon"
+                    resourceType="freelancer"
+                    resourceId={item.freelancerProfileId}
+                  />
+                ) : null}
                 <Link
                   to={`/freelancer/${encodeURIComponent(item.freelancerSlug)}`}
-                  className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-[#1B2B4B] px-4 text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B]"
+                  className="inline-flex h-11 min-w-0 flex-1 items-center justify-center rounded-lg bg-[#1B2B4B] px-4 text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B]"
                 >
                   ფრილანსერის პროფილი
                 </Link>

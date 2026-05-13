@@ -4,6 +4,8 @@ import Navbar from "../components/Navbar.tsx"
 import EmptyState from "../components/ui/EmptyState.tsx"
 import ErrorState from "../components/ui/ErrorState.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
+import FreelancerAvailabilityIndicator from "../components/FreelancerAvailabilityIndicator.tsx"
+import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
 import { useToast } from "../components/ui/ToastProvider.tsx"
 import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
@@ -60,6 +62,8 @@ type ListingRow = {
   city: string | null
   bio: string | null
   availability: string | null
+  /** Mirrors freelancer_profiles.is_accepting_new_work (false = busy / unavailable banner). */
+  isAcceptingNewWork: boolean
   averageRating: number
   completedJobsCount: number
   viewsCount: number
@@ -156,6 +160,7 @@ const mockListings: ListingRow[] = [
     city: "თბილისი",
     bio: null,
     availability: "full_time",
+    isAcceptingNewWork: true,
     averageRating: 4.8,
     completedJobsCount: 31,
     viewsCount: 0,
@@ -180,6 +185,7 @@ const mockListings: ListingRow[] = [
     city: "თბილისი",
     bio: null,
     availability: "part_time",
+    isAcceptingNewWork: true,
     averageRating: 4.9,
     completedJobsCount: 22,
     viewsCount: 0,
@@ -432,6 +438,7 @@ export default function ListingsPage() {
             avatar_url: string | null
             city: string | null
             skills: unknown
+            is_accepting_new_work?: boolean | null
           }
           if (!r.slug || r.is_public === false) continue
           const parsed = parseListingDescription(r.description ?? null)
@@ -458,6 +465,7 @@ export default function ListingsPage() {
             city: r.city ?? null,
             bio: r.bio ?? null,
             availability: r.availability ?? null,
+            isAcceptingNewWork: r.is_accepting_new_work !== false,
             averageRating: Number(r.average_rating ?? 0),
             completedJobsCount: Number(r.completed_jobs_count ?? 0),
             viewsCount: Number(r.views_count ?? 0),
@@ -598,7 +606,7 @@ export default function ListingsPage() {
   }
   const availabilityBadgeClass: Record<Availability, string> = {
     full_time: "bg-green-100 text-green-700",
-    part_time: "bg-blue-100 text-blue-700",
+    part_time: "bg-[#D4EEFF] text-[#006ACC]",
     weekends: "bg-orange-100 text-orange-700",
   }
 
@@ -789,7 +797,7 @@ export default function ListingsPage() {
                 <input
                   value={searchText}
                   onChange={(event) => setSearchText(event.target.value)}
-                  className="h-10 w-full rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#2563EB]"
+                  className="h-10 w-full rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#0088FF]"
                   placeholder="საძიებო სიტყვა, სათაური ან დამამრგვალებელი"
                 />
               </div>
@@ -837,7 +845,7 @@ export default function ListingsPage() {
                   <span>დეტალური ძებნა</span>
                   <span className="text-slate-400">▾</span>
                   {advancedFilterCount > 0 ? (
-                    <span className="ml-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#2563EB] px-1 text-xs font-bold text-white">
+                    <span className="ml-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#0088FF] px-1 text-xs font-bold text-white">
                       {advancedFilterCount}
                     </span>
                   ) : null}
@@ -853,7 +861,7 @@ export default function ListingsPage() {
                       className="absolute right-0 z-50 mt-2 flex max-h-[min(72vh,560px)] w-[min(100vw-2rem,24rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
                     >
                       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-4">
-                        <h2 className="border-l-4 border-[#2563EB] pl-3 text-base font-bold text-[#1B2B4B]">დეტალური ფილტრები</h2>
+                        <h2 className="border-l-4 border-[#0088FF] pl-3 text-base font-bold text-[#1B2B4B]">დეტალური ფილტრები</h2>
                         <div className="mt-4 space-y-4">
                           <div>
                             <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">უნარები</p>
@@ -884,7 +892,7 @@ export default function ListingsPage() {
                             <select
                               value={draftMinRating}
                               onChange={(event) => setDraftMinRating(Number(event.target.value) as 0 | 3 | 4 | 5)}
-                              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#2563EB] focus:ring-2"
+                              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
                             >
                               <option value={0}>ნებისმიერი</option>
                               <option value={3}>3+ ვარსკვლავი</option>
@@ -903,7 +911,7 @@ export default function ListingsPage() {
                                 value={draftMinPrice}
                                 onChange={(event) => setDraftMinPrice(event.target.value)}
                                 placeholder="მინ"
-                                className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#2563EB] focus:ring-2"
+                                className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
                               />
                               <input
                                 type="number"
@@ -911,7 +919,7 @@ export default function ListingsPage() {
                                 value={draftMaxPrice}
                                 onChange={(event) => setDraftMaxPrice(event.target.value)}
                                 placeholder="მაქს"
-                                className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#2563EB] focus:ring-2"
+                                className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
                               />
                             </div>
                           </div>
@@ -922,7 +930,7 @@ export default function ListingsPage() {
                         <button
                           type="button"
                           onClick={clearDraftAdvanced}
-                          className="h-11 w-full rounded-lg border border-[#2563EB] text-sm font-semibold text-[#1B2B4B] hover:bg-blue-50"
+                          className="h-11 w-full rounded-lg border border-[#0088FF] text-sm font-semibold text-[#1B2B4B] hover:bg-[#E8F4FF]"
                         >
                           ფილტრების გასუფთავება
                         </button>
@@ -937,7 +945,7 @@ export default function ListingsPage() {
                           <button
                             type="button"
                             onClick={saveAdvancedFilters}
-                            className="h-11 flex-1 rounded-lg bg-[#2563EB] text-sm font-semibold text-white hover:bg-blue-700"
+                            className="h-11 flex-1 rounded-lg bg-[#0088FF] text-sm font-semibold text-white hover:bg-[#006ACC]"
                           >
                             შენახვა
                           </button>
@@ -968,7 +976,7 @@ export default function ListingsPage() {
               <button
                 type="button"
                 onClick={() => setAdvancedDropdownOpen(false)}
-                className="ml-auto inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-[#2563EB] px-8 text-base font-bold text-white transition hover:bg-blue-700"
+                className="ml-auto inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-[#0088FF] px-8 text-base font-bold text-white transition hover:bg-[#006ACC]"
               >
                 ძიება
               </button>
@@ -1014,8 +1022,8 @@ export default function ListingsPage() {
                         key={item.id}
                         role="link"
                         tabIndex={0}
-                        className={`relative flex h-full cursor-pointer flex-col rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[#2563EB] ${
-                          flashListingId === item.id ? "ring-2 ring-[#2563EB] ring-offset-2 ring-offset-white" : ""
+                        className={`relative flex h-full cursor-pointer flex-col rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[#0088FF] ${
+                          flashListingId === item.id ? "ring-2 ring-[#0088FF] ring-offset-2 ring-offset-white" : ""
                         }`}
                         onClick={() => navigate(`/listing/${encodeURIComponent(item.id)}`)}
                         onKeyDown={(e) => {
@@ -1025,6 +1033,11 @@ export default function ListingsPage() {
                           }
                         }}
                       >
+                        <FreelancerAvailabilityIndicator
+                          available={item.isAcceptingNewWork}
+                          labelWhenAvailable="ფრილანსერი ახალი სამუშაოებისთვის ხელმისაწვდომია."
+                          labelWhenUnavailable="ეს ფრილანსერი ამჟამად ახალი სამუშაოებისთვის ხელმიუწვდომელია. შეთავაზების გაგზავნა მაინც შეგიძლიათ."
+                        />
                         <div className="shrink-0">
                           <div className="flex items-start gap-3">
                             <Link
@@ -1049,13 +1062,13 @@ export default function ListingsPage() {
                               <div className="flex flex-wrap items-center gap-2">
                                 <Link
                                   to={`/freelancer/${item.freelancerSlug}`}
-                                  className="truncate text-lg font-bold text-gray-900 hover:text-[#2563EB]"
+                                  className="truncate text-lg font-bold text-gray-900 hover:text-[#0088FF]"
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   {item.fullName}
                                 </Link>
                                 {item.vipActive ? (
-                                  <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#2563EB]">
+                                  <span className="rounded-full bg-[#E8F4FF] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#0088FF]">
                                     VIP
                                   </span>
                                 ) : null}
@@ -1088,7 +1101,7 @@ export default function ListingsPage() {
                           {item.tags.length > 0 || (item.subcategoryId && subcategoryNamesById.get(item.subcategoryId)) ? (
                             <div className="flex flex-wrap gap-2">
                               {item.subcategoryId && subcategoryNamesById.get(item.subcategoryId) ? (
-                                <span className="rounded-full border border-[#2563EB]/35 bg-blue-50 px-2 py-1 text-xs font-semibold text-[#2563EB]">
+                                <span className="rounded-full border border-[#0088FF]/35 bg-[#E8F4FF] px-2 py-1 text-xs font-semibold text-[#0088FF]">
                                   {subcategoryNamesById.get(item.subcategoryId)}
                                 </span>
                               ) : null}
@@ -1133,26 +1146,40 @@ export default function ListingsPage() {
                                   e.stopPropagation()
                                   openListingInquiry(item)
                                 }}
-                                className="inline-flex h-11 min-w-0 flex-1 items-center justify-center rounded-lg border border-[#2563EB] bg-white px-3 text-sm font-semibold text-[#2563EB] transition hover:bg-blue-50"
+                                className="inline-flex h-11 min-w-0 flex-1 items-center justify-center rounded-lg border border-[#0088FF] bg-white px-2 text-sm font-semibold text-[#0088FF] transition hover:bg-[#E8F4FF]"
                               >
                                 შეთავაზება
                               </button>
+                              <SaveBookmarkButton
+                                variant="icon"
+                                resourceType="freelancer"
+                                resourceId={item.freelancerProfileId}
+                              />
                               <Link
                                 to={`/freelancer/${item.freelancerSlug}`}
-                                className="inline-flex h-11 min-w-0 flex-1 items-center justify-center rounded-lg bg-[#2563EB] px-3 text-sm font-semibold text-white transition hover:bg-[#1D4ED8]"
+                                className="inline-flex h-11 min-w-0 flex-1 items-center justify-center rounded-lg bg-[#0088FF] px-2 text-sm font-semibold text-white transition hover:bg-[#006ACC]"
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 პროფილის ნახვა
                               </Link>
                             </>
                           ) : (
-                            <Link
-                              to={`/freelancer/${item.freelancerSlug}`}
-                              className="inline-flex h-11 w-full min-w-0 items-center justify-center rounded-lg bg-[#2563EB] px-4 text-sm font-semibold text-white transition hover:bg-[#1D4ED8]"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              პროფილის ნახვა
-                            </Link>
+                            <>
+                              {viewerFreelancerProfileId !== item.freelancerProfileId ? (
+                                <SaveBookmarkButton
+                                  variant="icon"
+                                  resourceType="freelancer"
+                                  resourceId={item.freelancerProfileId}
+                                />
+                              ) : null}
+                              <Link
+                                to={`/freelancer/${item.freelancerSlug}`}
+                                className="inline-flex h-11 w-full min-w-0 flex-1 items-center justify-center rounded-lg bg-[#0088FF] px-4 text-sm font-semibold text-white transition hover:bg-[#006ACC]"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                პროფილის ნახვა
+                              </Link>
+                            </>
                           )}
                         </div>
                       </li>
@@ -1167,7 +1194,7 @@ export default function ListingsPage() {
                     type="button"
                     disabled={listingsLoadingMore}
                     onClick={() => void fetchListingsPage(true)}
-                    className="h-11 rounded-lg border border-[#2563EB] px-6 text-sm font-semibold text-[#2563EB] hover:bg-blue-50 disabled:opacity-60"
+                    className="h-11 rounded-lg border border-[#0088FF] px-6 text-sm font-semibold text-[#0088FF] hover:bg-[#E8F4FF] disabled:opacity-60"
                   >
                     {listingsLoadingMore ? "იტვირთება…" : "მეტის ნახვა"}
                   </button>
@@ -1198,7 +1225,7 @@ export default function ListingsPage() {
                   value={inquiryMessage}
                   onChange={(e) => setInquiryMessage(e.target.value)}
                   rows={4}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-[#2563EB] focus:ring-2"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-[#0088FF] focus:ring-2"
                   placeholder="რა გჭირდება, ვადები, კონტექსტი…"
                 />
               </label>
@@ -1209,7 +1236,7 @@ export default function ListingsPage() {
                   min={0}
                   value={inquiryBudget}
                   onChange={(e) => setInquiryBudget(e.target.value)}
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#2563EB] focus:ring-2"
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
                   placeholder="მაგ. 500"
                 />
               </label>
@@ -1219,7 +1246,7 @@ export default function ListingsPage() {
                   type="button"
                   disabled={inquirySubmitting}
                   onClick={() => void submitListingInquiry()}
-                  className="flex-1 rounded-lg bg-[#2563EB] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60"
+                  className="flex-1 rounded-lg bg-[#0088FF] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#006ACC] disabled:opacity-60"
                 >
                   {inquirySubmitting ? "იგზავნება…" : "გაგზავნა"}
                 </button>

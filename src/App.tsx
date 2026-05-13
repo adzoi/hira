@@ -31,6 +31,7 @@ const HirerPublicPage = lazy(() => import("./pages/HirerPublic.tsx"))
 const ForgotPasswordPage = lazy(() => import("./pages/ForgotPassword.tsx"))
 const ResetPasswordPage = lazy(() => import("./pages/ResetPassword.tsx"))
 const PayPalCheckoutE2EPage = lazy(() => import("./pages/PayPalCheckoutE2E.tsx"))
+const SavedPage = lazy(() => import("./pages/Saved.tsx"))
 
 type HomeStats = {
   freelancerCount: number
@@ -344,7 +345,7 @@ function HomePage() {
     <main className="page-enter">
       <Navbar />
 
-      <section className="bg-[#2563EB]">
+      <section className="bg-[#0088FF]">
         <div className="mx-auto grid w-full max-w-[1200px] items-stretch gap-8 px-4 py-10 md:px-6 lg:grid-cols-2 lg:py-16">
           <div className="flex flex-col justify-center">
             <p className="text-sm font-semibold uppercase tracking-widest text-[#F59E0B]">
@@ -368,19 +369,19 @@ function HomePage() {
                   if (event.key === "Enter") handleSearch()
                 }}
                 placeholder="რომელ უნარს ეძებ?"
-                className="h-10 min-w-0 flex-1 rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#2563EB]"
+                className="h-10 min-w-0 flex-1 rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#0088FF]"
               />
               <button
                 type="button"
                 onClick={handleSearch}
-                className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-white px-8 text-base font-bold text-[#2563EB] transition hover:bg-blue-50"
+                className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-white px-8 text-base font-bold text-[#0088FF] transition hover:bg-[#E8F4FF]"
               >
                 ძებნა
               </button>
             </div>
           </div>
 
-          <div className="relative min-h-0 rounded-2xl border border-white/15 bg-[#1D4ED8] p-4">
+          <div className="relative min-h-0 rounded-2xl border border-white/15 bg-[#006ACC] p-4">
             <p className="mb-2 text-sm font-bold uppercase tracking-wide text-white">
               {vipBoxMode === "job" ? "VIP სამუშაოები" : "VIP ფრილანსერები"}
             </p>
@@ -408,7 +409,7 @@ function HomePage() {
                   <Link
                     key={`${item.type}-${item.id}`}
                     to={item.href}
-                    className="relative block overflow-hidden rounded-xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-3 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#2563EB] hover:shadow-[-4px_0_12px_rgba(37,99,235,0.25)]"
+                    className="relative block overflow-hidden rounded-xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-3 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#0088FF] hover:shadow-[-4px_0_12px_rgba(0,136,255,0.25)]"
                   >
                     <span className="absolute right-3 top-3 z-10 rounded-full bg-[#F59E0B] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
                       VIP
@@ -567,7 +568,7 @@ function LoginPage() {
       <Navbar />
       <div className="mx-auto w-full max-w-xl px-4 py-10 md:px-6 md:py-16">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-8">
-          <h1 className="text-[28px] font-bold text-[#2563EB] md:text-4xl">ანგარიშში შესვლა</h1>
+          <h1 className="text-[28px] font-bold text-[#0088FF] md:text-4xl">ანგარიშში შესვლა</h1>
 
           {reason === "post-job" ? (
             <div className="mt-5 flex items-center gap-3 rounded-lg border border-[#D4A843] bg-[#FFF8E7] px-4 py-3">
@@ -617,7 +618,7 @@ function LoginPage() {
             <label className="block">
               <div className="mb-1 flex items-center justify-between">
                 <span className="text-sm font-semibold text-[#1B2B4B]">პაროლი</span>
-                <Link to="/forgot-password" className="text-xs font-semibold text-[#2563EB] hover:underline">
+                <Link to="/forgot-password" className="text-xs font-semibold text-[#0088FF] hover:underline">
                   დაგავიწყდა პაროლი?
                 </Link>
               </div>
@@ -648,7 +649,7 @@ function LoginPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="h-11 w-full rounded-lg bg-[#2563EB] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-70"
+              className="h-11 w-full rounded-lg bg-[#0088FF] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC] disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isSubmitting ? "მიმდინარეობს..." : "შესვლა"}
             </button>
@@ -656,7 +657,7 @@ function LoginPage() {
 
           <p className="mt-5 text-center text-sm text-slate-600">
             ჯერ არ გაქვს ანგარიში?{" "}
-            <Link to="/register" className="font-semibold text-[#2563EB] hover:underline">
+            <Link to="/register" className="font-semibold text-[#0088FF] hover:underline">
               რეგისტრაცია
             </Link>
           </p>
@@ -820,7 +821,7 @@ function RegisterPage() {
       <Navbar />
       <div className="mx-auto w-full max-w-3xl px-4 py-10 md:px-6 md:py-14">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-8">
-          <h1 className="text-[28px] font-bold text-[#2563EB] md:text-4xl">რეგისტრაცია</h1>
+          <h1 className="text-[28px] font-bold text-[#0088FF] md:text-4xl">რეგისტრაცია</h1>
           <p className="mt-2 text-sm text-slate-500">
             ნაბიჯი {step}/2 — შექმენი ანგარიში გიგორზე.
           </p>
@@ -956,7 +957,7 @@ function RegisterPage() {
               <button
                 type="submit"
                 disabled={isSubmitting || cooldownSeconds > 0}
-                className="h-11 w-full rounded-lg bg-[#2563EB] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-70"
+                className="h-11 w-full rounded-lg bg-[#0088FF] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC] disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {isSubmitting
                   ? "მიმდინარეობს..."
@@ -1026,6 +1027,14 @@ function App() {
         />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/checkout" element={<PayPalCheckoutE2EPage />} />
+        <Route
+          path="/saved"
+          element={
+            <ProtectedRoute>
+              <SavedPage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/onboarding"
           element={

@@ -67,7 +67,7 @@ const PAGE_SIZE = 20
 function FreelancerFeedCard({ item }: { item: HomeFreelancerServiceItem }) {
   const negotiable = item.priceNegotiable
   return (
-    <li className="relative flex h-full min-h-0 max-w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-4 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#2563EB] hover:shadow-[-4px_0_12px_rgba(37,99,235,0.25)]">
+    <li className="relative flex h-full min-h-0 max-w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-4 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#0088FF] hover:shadow-[-4px_0_12px_rgba(0,136,255,0.25)]">
       {item.vipFeatured ? (
         <span className="absolute right-4 top-4 z-10 rounded-full bg-[#F59E0B] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
           VIP
@@ -98,7 +98,7 @@ function FreelancerFeedCard({ item }: { item: HomeFreelancerServiceItem }) {
             )}
           </span>
           <div className="min-w-0 text-left">
-            <p className="truncate font-bold text-gray-900 group-hover:text-[#2563EB]">{item.fullName}</p>
+            <p className="truncate font-bold text-gray-900 group-hover:text-[#0088FF]">{item.fullName}</p>
             <p className="truncate text-xs text-slate-500">{item.professionalTitle || "ფრილანსერი"}</p>
           </div>
         </Link>
@@ -123,7 +123,7 @@ function FreelancerFeedCard({ item }: { item: HomeFreelancerServiceItem }) {
       <div className="mt-auto flex w-full shrink-0 flex-col gap-2 pt-3 sm:flex-row">
         <Link
           to={`/listing/${encodeURIComponent(item.id)}`}
-          className="inline-flex h-10 min-h-10 w-full min-w-0 flex-1 items-center justify-center whitespace-nowrap rounded-lg bg-[#2563EB] px-3 text-sm font-bold text-white transition hover:bg-[#1D4ED8]"
+          className="inline-flex h-10 min-h-10 w-full min-w-0 flex-1 items-center justify-center whitespace-nowrap rounded-lg bg-[#0088FF] px-3 text-sm font-bold text-white transition hover:bg-[#006ACC]"
         >
           დეტალების ნახვა
         </Link>
@@ -141,7 +141,7 @@ function FreelancerFeedCard({ item }: { item: HomeFreelancerServiceItem }) {
 function JobListingFeedCard({ item }: { item: HomeJobListingItem }) {
   const showRating = showHirerRatingValue(item.hirerAverageRating)
   return (
-    <li className="relative flex h-full min-h-0 max-w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-4 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#2563EB] hover:shadow-[-4px_0_12px_rgba(37,99,235,0.25)]">
+    <li className="relative flex h-full min-h-0 max-w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-4 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#0088FF] hover:shadow-[-4px_0_12px_rgba(0,136,255,0.25)]">
       {item.vipFeatured ? (
         <span className="absolute right-4 top-4 z-10 rounded-full bg-[#F59E0B] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
           VIP
@@ -186,7 +186,7 @@ function JobListingFeedCard({ item }: { item: HomeJobListingItem }) {
         </div>
 
         <Link to={`/job/${encodeURIComponent(item.id)}`} className="group mt-3 block">
-          <h2 className={`text-lg font-bold text-gray-900 group-hover:text-[#2563EB] md:text-xl ${wrapText}`}>{item.title}</h2>
+          <h2 className={`text-lg font-bold text-gray-900 group-hover:text-[#0088FF] md:text-xl ${wrapText}`}>{item.title}</h2>
         </Link>
 
         <div className="mt-2 flex flex-wrap gap-2">
@@ -208,7 +208,7 @@ function JobListingFeedCard({ item }: { item: HomeJobListingItem }) {
       <div className="mt-auto w-full shrink-0 pt-3">
         <Link
           to={`/job/${encodeURIComponent(item.id)}`}
-          className="inline-flex h-10 min-h-10 w-full items-center justify-center whitespace-nowrap rounded-lg bg-[#2563EB] px-4 text-sm font-bold text-white transition hover:bg-[#1D4ED8]"
+          className="inline-flex h-10 min-h-10 w-full items-center justify-center whitespace-nowrap rounded-lg bg-[#0088FF] px-4 text-sm font-bold text-white transition hover:bg-[#006ACC]"
         >
           დეტალების ნახვა
         </Link>
@@ -292,7 +292,7 @@ export default function HomeFeedSection() {
       <div className="mx-auto w-full max-w-[1200px] px-4 py-10 md:px-6 md:py-14">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
           <div className="min-w-0 flex-1">
-            <h2 className="mt-2 text-2xl font-bold text-[#2563EB] md:text-[28px]">სერვისები და სამუშაოები</h2>
+            <h2 className="mt-2 text-2xl font-bold text-[#0088FF] md:text-[28px]">სერვისები და სამუშაოები</h2>
           </div>
           <div className="w-full shrink-0 lg:w-auto lg:max-w-none">
             <div className="flex max-w-full flex-nowrap items-center justify-end gap-2 overflow-x-auto pl-1 pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -301,7 +301,7 @@ export default function HomeFeedSection() {
                 onClick={() => setFeedFilter("all")}
                 className={`inline-flex h-10 min-h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full border px-4 text-sm font-medium transition ${
                   feedFilter === "all"
-                    ? "border-transparent bg-[#2563EB] text-white"
+                    ? "border-transparent bg-[#0088FF] text-white"
                     : "border-[#D1D5DB] bg-white text-slate-600 hover:border-slate-400 hover:text-slate-700"
                 }`}
               >
@@ -312,7 +312,7 @@ export default function HomeFeedSection() {
                 onClick={() => setFeedFilter("freelancer")}
                 className={`inline-flex h-10 min-h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full border px-4 text-sm font-medium transition ${
                   feedFilter === "freelancer"
-                    ? "border-transparent bg-[#2563EB] text-white"
+                    ? "border-transparent bg-[#0088FF] text-white"
                     : "border-[#D1D5DB] bg-white text-slate-600 hover:border-slate-400 hover:text-slate-700"
                 }`}
               >
@@ -323,7 +323,7 @@ export default function HomeFeedSection() {
                 onClick={() => setFeedFilter("hirer")}
                 className={`inline-flex h-10 min-h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full border px-4 text-sm font-medium transition ${
                   feedFilter === "hirer"
-                    ? "border-transparent bg-[#2563EB] text-white"
+                    ? "border-transparent bg-[#0088FF] text-white"
                     : "border-[#D1D5DB] bg-white text-slate-600 hover:border-slate-400 hover:text-slate-700"
                 }`}
               >
@@ -342,11 +342,11 @@ export default function HomeFeedSection() {
         ) : visible.length === 0 ? (
           <p className="mt-8 rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-600">
             ჯერ არ არის შეთავაზება. იხილეთ{" "}
-            <Link className="font-semibold text-[#2563EB] underline" to="/listings">
+            <Link className="font-semibold text-[#0088FF] underline" to="/listings">
               სერვისების კატალოგი
             </Link>{" "}
             ან{" "}
-            <Link className="font-semibold text-[#2563EB] underline" to="/jobs">
+            <Link className="font-semibold text-[#0088FF] underline" to="/jobs">
               სამუშაოები
             </Link>
             .
@@ -367,7 +367,7 @@ export default function HomeFeedSection() {
                 <button
                   type="button"
                   onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
-                  className="h-11 rounded-lg border border-[#2563EB] px-6 text-sm font-semibold text-[#2563EB] transition hover:bg-blue-50"
+                  className="h-11 rounded-lg border border-[#0088FF] px-6 text-sm font-semibold text-[#0088FF] transition hover:bg-[#E8F4FF]"
                 >
                   მეტის ჩატვირთვა
                 </button>

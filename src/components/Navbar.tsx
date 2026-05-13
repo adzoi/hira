@@ -104,12 +104,38 @@ export default function Navbar() {
   const [fullName, setFullName] = useState("")
   const [userId, setUserId] = useState<string | null>(null)
   const [publicProfileHref, setPublicProfileHref] = useState<string | null>(null)
+  const [userType, setUserType] = useState<"freelancer" | "hirer" | null>(null)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [detailNotification, setDetailNotification] = useState<AppNotification | null>(null)
   const notificationsRef = useRef<HTMLDivElement>(null)
 
   const unreadCount = useMemo(() => notifications.filter((n) => !n.is_read).length, [notifications])
+
+  const postListingOrJob = useMemo(() => {
+    if (userType === "freelancer") {
+      const listingComposer =
+        location.pathname === "/listing/new" ||
+        (location.pathname.startsWith("/listing/") && !location.pathname.startsWith("/listings"))
+      return {
+        to: "/listing/new",
+        ariaLabel: "ლისტინგის განთავსება",
+        active: listingComposer,
+      } as const
+    }
+    if (userType === "hirer") {
+      return {
+        to: "/post-job",
+        ariaLabel: "სამუშაოს განთავსება",
+        active: location.pathname.startsWith("/post-job"),
+      } as const
+    }
+    return {
+      to: "/onboarding",
+      ariaLabel: "პროფილის შევსება",
+      active: location.pathname.startsWith("/onboarding"),
+    } as const
+  }, [userType, location.pathname])
 
   const navbarAvatarSrc = useMemo(() => {
     if (!avatarUrl) return null
@@ -131,6 +157,7 @@ export default function Navbar() {
         setAvatarUrl(null)
         setFullName("")
         setPublicProfileHref(null)
+        setUserType(null)
         setNotifications([])
         setNotificationsOpen(false)
         return
@@ -141,12 +168,14 @@ export default function Navbar() {
       ])
       setAvatarUrl(data?.avatar_url ?? null)
       setFullName(data?.full_name ?? "")
-      const userType = data?.user_type
-      if (userType === "freelancer") {
+      const ut = data?.user_type
+      const normalizedType = ut === "freelancer" || ut === "hirer" ? ut : null
+      setUserType(normalizedType)
+      if (normalizedType === "freelancer") {
         const { data: fp } = await client.from("freelancer_profiles").select("slug").eq("user_id", uid).maybeSingle()
         const slug = fp?.slug?.trim()
         setPublicProfileHref(slug ? `/freelancer/${encodeURIComponent(slug)}` : null)
-      } else if (userType === "hirer") {
+      } else if (normalizedType === "hirer") {
         const { data: hp } = await client.from("hirer_profiles").select("id").eq("user_id", uid).maybeSingle()
         const id = hp?.id?.trim()
         setPublicProfileHref(id ? `/hirer/${encodeURIComponent(id)}` : null)
@@ -335,7 +364,7 @@ export default function Navbar() {
                 to={link.to}
                 className={`inline-flex h-10 items-center rounded-full border px-4 transition ${
                   navLinkUnderlineActive(location.pathname, link.to)
-                    ? "border-transparent bg-[#2563EB] text-white"
+                    ? "border-transparent bg-[#0088FF] text-white"
                     : "border-slate-300 bg-white text-slate-500 hover:border-slate-400 hover:text-slate-700"
                 }`}
               >
@@ -347,16 +376,32 @@ export default function Navbar() {
 
         <div className="hidden shrink-0 items-center gap-3 md:flex">
           {isAuthed ? (
-            <Link
-              to="/dashboard"
-              className={`inline-flex h-10 items-center rounded-full border px-4 text-sm font-medium transition ${
-                location.pathname.startsWith("/dashboard")
-                  ? "border-transparent bg-[#2563EB] text-white"
-                  : "border-[#BFDBFE] bg-[#EFF6FF] text-[#2563EB] hover:border-[#93C5FD] hover:bg-[#DBEAFE]"
-              }`}
-            >
-              დაშბორდი
-            </Link>
+            <>
+              <Link
+                to="/dashboard"
+                className={`inline-flex h-10 items-center rounded-full border px-4 text-sm font-medium transition ${
+                  location.pathname.startsWith("/dashboard")
+                    ? "border-transparent bg-[#0088FF] text-white"
+                    : "border-[#B3DEFF] bg-[#E8F4FF] text-[#0088FF] hover:border-[#80C8FF] hover:bg-[#D4EEFF]"
+                }`}
+              >
+                დაშბორდი
+              </Link>
+              <Link
+                to={postListingOrJob.to}
+                aria-label={postListingOrJob.ariaLabel}
+                title={postListingOrJob.ariaLabel}
+                className={`grid h-10 w-10 shrink-0 place-items-center rounded-full border transition ${
+                  postListingOrJob.active
+                    ? "border-transparent bg-[#0088FF] text-white"
+                    : "border-[#B3DEFF] bg-[#E8F4FF] text-[#0088FF] hover:border-[#80C8FF] hover:bg-[#D4EEFF]"
+                }`}
+              >
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden className="h-[1.125rem] w-[1.125rem] shrink-0">
+                  <path stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" d="M12 5v14M5 12h14" />
+                </svg>
+              </Link>
+            </>
           ) : null}
 
           {isAuthed ? (
@@ -471,6 +516,9 @@ export default function Navbar() {
                 <Link to="/settings" onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
                   პარამეტრები
                 </Link>
+                <Link to="/saved" onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
+                  შენახული
+                </Link>
                 {publicProfileHref ? (
                   <Link to={publicProfileHref} onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
                     პროფილი
@@ -505,7 +553,7 @@ export default function Navbar() {
                 event.preventDefault()
                 handlePostJob()
               }}
-              className="inline-flex h-11 items-center rounded-md bg-[#2563EB] px-4 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#1D4ED8]"
+              className="inline-flex h-11 items-center rounded-md bg-[#0088FF] px-4 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC]"
             >
               სამუშაოს განთავსება
             </Link>
@@ -558,6 +606,19 @@ export default function Navbar() {
               <Link to="/dashboard" onClick={() => setMobileMenuOpen(false)} className="rounded-md px-3 py-3 text-sm font-semibold text-[#1B2B4B]">
                 დაშბორდი
               </Link>
+              <Link
+                to={postListingOrJob.to}
+                aria-label={postListingOrJob.ariaLabel}
+                title={postListingOrJob.ariaLabel}
+                onClick={() => setMobileMenuOpen(false)}
+                className={`grid place-items-center rounded-md px-3 py-3 ${
+                  postListingOrJob.active ? "bg-amber-50 text-[#1B2B4B]" : "text-[#1B2B4B]"
+                }`}
+              >
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden className="h-6 w-6 shrink-0">
+                  <path stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" d="M12 5v14M5 12h14" />
+                </svg>
+              </Link>
               <Link to="/settings" onClick={() => setMobileMenuOpen(false)} className="rounded-md px-3 py-3 text-sm font-semibold text-[#1B2B4B]">
                 პარამეტრები
               </Link>
@@ -588,7 +649,7 @@ export default function Navbar() {
                   setMobileMenuOpen(false)
                   handlePostJob()
                 }}
-                className="inline-flex h-11 items-center justify-center rounded-md bg-[#2563EB] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#1D4ED8]"
+                className="inline-flex h-11 items-center justify-center rounded-md bg-[#0088FF] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC]"
               >
                 სამუშაოს განთავსება
               </button>

@@ -9,6 +9,8 @@ import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { formatCityForDisplay, matchesLocationFilter } from "../lib/marketplaceFilters.ts"
+import FreelancerAvailabilityIndicator from "../components/FreelancerAvailabilityIndicator.tsx"
+import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
 
 type SortOption = "rating" | "price_asc" | "price_desc" | "newest" | "completed"
@@ -21,6 +23,8 @@ type FreelancerCardItem = {
   averageRating: number
   totalReviewsCount: number
   availability: string | null
+  /** false = temporarily not taking new work (shown on card; inquiries still allowed on listings). */
+  isAcceptingNewWork: boolean
   completedJobsCount: number
   createdAt: string
   fullName: string
@@ -46,6 +50,7 @@ const mockFreelancers: FreelancerCardItem[] = [
     totalReviewsCount: 24,
     completedJobsCount: 31,
     availability: "full_time",
+    isAcceptingNewWork: true,
     skills: [
       { id: "r1", name: "React", categoryId: null },
       { id: "r2", name: "Node.js", categoryId: null },
@@ -68,6 +73,7 @@ const mockFreelancers: FreelancerCardItem[] = [
     totalReviewsCount: 18,
     completedJobsCount: 22,
     availability: "part_time",
+    isAcceptingNewWork: true,
     skills: [
       { id: "d1", name: "Figma", categoryId: null },
       { id: "d2", name: "Adobe XD", categoryId: null },
@@ -89,6 +95,7 @@ const mockFreelancers: FreelancerCardItem[] = [
     totalReviewsCount: 9,
     completedJobsCount: 14,
     availability: "full_time",
+    isAcceptingNewWork: true,
     skills: [
       { id: "m1", name: "SEO", categoryId: null },
       { id: "m2", name: "Google Ads", categoryId: null },
@@ -110,6 +117,7 @@ const mockFreelancers: FreelancerCardItem[] = [
     totalReviewsCount: 31,
     completedJobsCount: 45,
     availability: "weekends",
+    isAcceptingNewWork: true,
     skills: [
       { id: "w1", name: "კოპირაიტინგი", categoryId: null },
       { id: "w2", name: "SEO წერა", categoryId: null },
@@ -370,6 +378,7 @@ export default function BrowsePage() {
           averageRating: item.average_rating ?? 0,
           totalReviewsCount: item.total_reviews_count ?? 0,
           availability: item.availability ?? null,
+          isAcceptingNewWork: item.is_accepting_new_work !== false,
           completedJobsCount: Number(item.completed_jobs_count ?? 0),
           createdAt: item.created_at,
           fullName: item.profiles?.full_name ?? "ფრილანსერი",
@@ -612,7 +621,7 @@ export default function BrowsePage() {
   }
   const availabilityBadgeClass: Record<Availability, string> = {
     full_time: "bg-green-100 text-green-700",
-    part_time: "bg-blue-100 text-blue-700",
+    part_time: "bg-[#D4EEFF] text-[#006ACC]",
     weekends: "bg-orange-100 text-orange-700",
   }
 
@@ -650,7 +659,7 @@ export default function BrowsePage() {
                 <input
                   value={searchText}
                   onChange={(event) => setSearchText(event.target.value)}
-                  className="h-10 w-full rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#2563EB]"
+                  className="h-10 w-full rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#0088FF]"
                   placeholder="ძიება"
                 />
               </div>
@@ -686,7 +695,7 @@ export default function BrowsePage() {
                   <span>დეტალური ძებნა</span>
                   <span className="text-slate-400">▾</span>
                   {advancedFilterCount > 0 ? (
-                    <span className="ml-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#2563EB] px-1 text-xs font-bold text-white">
+                    <span className="ml-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#0088FF] px-1 text-xs font-bold text-white">
                       {advancedFilterCount}
                     </span>
                   ) : null}
@@ -702,7 +711,7 @@ export default function BrowsePage() {
                       className="absolute right-0 z-50 mt-2 flex max-h-[min(72vh,560px)] w-[min(100vw-2rem,24rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
                     >
                       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-4">
-                        <h2 className="border-l-4 border-[#2563EB] pl-3 text-base font-bold text-[#1B2B4B]">დეტალური ფილტრები</h2>
+                        <h2 className="border-l-4 border-[#0088FF] pl-3 text-base font-bold text-[#1B2B4B]">დეტალური ფილტრები</h2>
                         <div className="mt-4 space-y-4">
                           <div>
                             <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">უნარები</p>
@@ -733,7 +742,7 @@ export default function BrowsePage() {
                             <select
                               value={draftMinRating}
                               onChange={(event) => setDraftMinRating(Number(event.target.value) as 0 | 3 | 4 | 5)}
-                              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#2563EB] focus:ring-2"
+                              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
                             >
                               <option value={0}>ნებისმიერი</option>
                               <option value={3}>3+ ვარსკვლავი</option>
@@ -751,7 +760,7 @@ export default function BrowsePage() {
                                 value={draftMinPrice}
                                 onChange={(event) => setDraftMinPrice(event.target.value)}
                                 placeholder="მინ"
-                                className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#2563EB] focus:ring-2"
+                                className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
                               />
                               <input
                                 type="number"
@@ -759,7 +768,7 @@ export default function BrowsePage() {
                                 value={draftMaxPrice}
                                 onChange={(event) => setDraftMaxPrice(event.target.value)}
                                 placeholder="მაქს"
-                                className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#2563EB] focus:ring-2"
+                                className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
                               />
                             </div>
                           </div>
@@ -769,7 +778,7 @@ export default function BrowsePage() {
                             <LocationFilterSelect
                               value={draftLocationFilter}
                               onChange={setDraftLocationFilter}
-                              className="h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-[#2563EB] focus:ring-2"
+                              className="h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
                             />
                           </label>
                         </div>
@@ -779,7 +788,7 @@ export default function BrowsePage() {
                         <button
                           type="button"
                           onClick={clearDraftAdvanced}
-                          className="h-11 w-full rounded-lg border border-[#2563EB] text-sm font-semibold text-[#1B2B4B] hover:bg-blue-50"
+                          className="h-11 w-full rounded-lg border border-[#0088FF] text-sm font-semibold text-[#1B2B4B] hover:bg-[#E8F4FF]"
                         >
                           ფილტრების გასუფთავება
                         </button>
@@ -794,7 +803,7 @@ export default function BrowsePage() {
                           <button
                             type="button"
                             onClick={saveAdvancedFilters}
-                            className="h-11 flex-1 rounded-lg bg-[#2563EB] text-sm font-semibold text-white hover:bg-blue-700"
+                            className="h-11 flex-1 rounded-lg bg-[#0088FF] text-sm font-semibold text-white hover:bg-[#006ACC]"
                           >
                             შენახვა
                           </button>
@@ -826,7 +835,7 @@ export default function BrowsePage() {
               <button
                 type="button"
                 onClick={() => setAdvancedDropdownOpen(false)}
-                className="ml-auto inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-[#2563EB] px-8 text-base font-bold text-white transition hover:bg-blue-700"
+                className="ml-auto inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-[#0088FF] px-8 text-base font-bold text-white transition hover:bg-[#006ACC]"
               >
                 ძიება
               </button>
@@ -866,11 +875,19 @@ export default function BrowsePage() {
                         : "შეთანხმებით"
 
                     return (
-                      <Link
+                      <div
                         key={freelancer.id}
-                        to={`/freelancer/${freelancer.slug}`}
-                        className="flex h-full flex-col rounded-2xl border border-slate-200/80 bg-transparent p-4 transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white/40"
+                        className="relative flex h-full flex-col rounded-2xl border border-slate-200/80 bg-transparent p-4 transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white/40"
                       >
+                        <Link
+                          to={`/freelancer/${freelancer.slug}`}
+                          className="group flex min-h-0 flex-1 flex-col text-inherit no-underline"
+                        >
+                        <FreelancerAvailabilityIndicator
+                          available={freelancer.isAcceptingNewWork}
+                          labelWhenAvailable="ახალი სამუშაოებისთვის ხელმისაწვდომია."
+                          labelWhenUnavailable="ახალი სამუშაოებისთვის დროებით ხელმიუწვდომელია."
+                        />
                         <div className="flex items-start gap-3">
                           {freelancer.avatarUrl ? (
                             <img
@@ -922,13 +939,22 @@ export default function BrowsePage() {
                         </div>
 
                         <p className="mt-2 text-xs text-slate-500">💼 {freelancer.completedJobsCount} შესრულებული</p>
+                        </Link>
 
-                        <div className="mt-auto pt-3">
-                          <span className="inline-flex h-11 w-full items-center justify-center rounded-full bg-[#2563EB] px-4 text-sm font-semibold text-white transition hover:bg-[#1D4ED8]">
+                        <div className="mt-auto flex shrink-0 gap-2 pt-3">
+                          <SaveBookmarkButton
+                            variant="icon"
+                            resourceType="freelancer"
+                            resourceId={freelancer.id}
+                          />
+                          <Link
+                            to={`/freelancer/${freelancer.slug}`}
+                            className="inline-flex h-11 min-w-0 flex-1 items-center justify-center rounded-full bg-[#0088FF] px-4 text-sm font-semibold text-white transition hover:bg-[#006ACC]"
+                          >
                             პროფილის ნახვა
-                          </span>
+                          </Link>
                         </div>
-                      </Link>
+                      </div>
                     )
                   })}
                 </div>

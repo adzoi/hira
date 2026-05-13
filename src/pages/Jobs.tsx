@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import Navbar from "../components/Navbar.tsx"
+import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import EmptyState from "../components/ui/EmptyState.tsx"
 import ErrorState from "../components/ui/ErrorState.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
@@ -770,7 +771,7 @@ export default function JobsPage() {
                 {sortedJobs.map((job) => (
                   <article
                     key={job.id}
-                    className="relative flex w-full max-w-full flex-col rounded-2xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-4 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#2563EB] hover:shadow-[-4px_0_12px_rgba(37,99,235,0.25)]"
+                    className="relative flex w-full max-w-full flex-col rounded-2xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-4 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#0088FF] hover:shadow-[-4px_0_12px_rgba(0,136,255,0.25)]"
                   >
                     {job.vipActive ? (
                       <span className="absolute right-4 top-4 z-10 rounded-full bg-[#F59E0B] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
@@ -809,7 +810,7 @@ export default function JobsPage() {
                     </div>
 
                     <Link to={`/job/${job.id}`} className="group mt-3 block">
-                      <h2 className="text-lg font-bold text-gray-900 group-hover:text-[#2563EB] md:text-xl">{job.title}</h2>
+                      <h2 className="text-lg font-bold text-gray-900 group-hover:text-[#0088FF] md:text-xl">{job.title}</h2>
                     </Link>
 
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -860,10 +861,11 @@ export default function JobsPage() {
                       ) : null}
                     </div>
 
-                    <div className="mt-4 flex justify-end">
+                    <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+                      <SaveBookmarkButton variant="icon" resourceType="job" resourceId={job.id} />
                       <Link
                         to={`/job/${job.id}`}
-                        className="inline-flex h-10 items-center justify-center rounded-lg bg-[#2563EB] px-4 text-sm font-semibold text-white transition hover:bg-[#1D4ED8]"
+                        className="inline-flex h-10 min-w-0 flex-1 items-center justify-center rounded-lg bg-[#0088FF] px-4 text-sm font-semibold text-white transition hover:bg-[#006ACC] sm:flex-none sm:px-5"
                       >
                         დეტალების ნახვა
                       </Link>
@@ -878,7 +880,7 @@ export default function JobsPage() {
                   type="button"
                   disabled={loadingMore}
                   onClick={loadMoreJobs}
-                  className="h-11 rounded-lg border border-[#2563EB] px-4 text-sm font-semibold text-[#2563EB] transition hover:bg-blue-50 disabled:opacity-60"
+                  className="h-11 rounded-lg border border-[#0088FF] px-4 text-sm font-semibold text-[#0088FF] transition hover:bg-[#E8F4FF] disabled:opacity-60"
                 >
                   მეტის ჩატვირთვა
                 </button>

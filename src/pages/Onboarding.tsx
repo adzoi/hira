@@ -470,7 +470,7 @@ export default function OnboardingPage() {
       <Navbar />
       <main className="mx-auto max-w-3xl px-6 py-10">
         <div className="mx-auto max-w-[640px] rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-          <h1 className="text-3xl font-bold text-[#2563EB]">ონბორდინგი</h1>
+          <h1 className="text-3xl font-bold text-[#0088FF]">ონბორდინგი</h1>
 
           {userType === "hirer" ? (
             <div className="mt-6 space-y-4">
@@ -541,7 +541,7 @@ export default function OnboardingPage() {
                       }}
                       onFocus={() => setLanguageMenuOpen(true)}
                       placeholder="ძიება"
-                      className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#2563EB]/30 focus:border-[#2563EB] focus:ring-2"
+                      className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF]/30 focus:border-[#0088FF] focus:ring-2"
                       autoComplete="off"
                     />
                     {languageMenuOpen ? (
@@ -559,7 +559,7 @@ export default function OnboardingPage() {
                                 <button
                                   type="button"
                                   className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 ${
-                                    selected ? "bg-blue-50/80 font-medium text-[#2563EB]" : "text-slate-800"
+                                    selected ? "bg-[#E8F4FF]/80 font-medium text-[#0088FF]" : "text-slate-800"
                                   }`}
                                   onClick={() => toggleLanguage(lng)}
                                 >
@@ -577,7 +577,7 @@ export default function OnboardingPage() {
                   <button
                     type="button"
                     onClick={nextFromStep1}
-                    className="h-11 w-full rounded-lg bg-[#2563EB] text-sm font-medium text-white transition-colors duration-150 hover:bg-[#1D4ED8]"
+                    className="h-11 w-full rounded-lg bg-[#0088FF] text-sm font-medium text-white transition-colors duration-150 hover:bg-[#006ACC]"
                   >
                     შემდეგი
                   </button>
@@ -601,7 +601,7 @@ export default function OnboardingPage() {
                       </label>
                       <select
                         id="onboarding-skill-category"
-                        className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/25"
+                        className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#0088FF] focus:ring-2 focus:ring-[#0088FF]/25"
                         value={skillFocusCategory}
                         onChange={(e) => setSkillFocusCategory(e.target.value)}
                       >
@@ -616,7 +616,7 @@ export default function OnboardingPage() {
 
                     {skillFocusCategory && groupedSkills[skillFocusCategory] ? (
                       <div className="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
-                        <p className="mb-2 text-sm font-semibold text-[#2563EB]">{skillFocusCategory}</p>
+                        <p className="mb-2 text-sm font-semibold text-[#0088FF]">{skillFocusCategory}</p>
                         {(() => {
                           const list = groupedSkills[skillFocusCategory]!
                           const selectedInCategory = list.filter((s) => selectedSkillIds.includes(s.id))
@@ -647,7 +647,7 @@ export default function OnboardingPage() {
                               <select
                                 id="onboarding-skill-add-active"
                                 key={`skill-dd-${skillFocusCategory}-${selectedInCategory.map((s) => s.id).join("-")}`}
-                                className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/25"
+                                className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#0088FF] focus:ring-2 focus:ring-[#0088FF]/25"
                                 defaultValue=""
                                 onChange={(e) => {
                                   const id = e.target.value
@@ -705,7 +705,7 @@ export default function OnboardingPage() {
                             { title: "", organization: "", start_date: "", end_date: "", is_present: false, description: "" },
                           ])
                         }
-                        className="inline-flex h-11 w-full items-center justify-center rounded-lg border border-dashed border-[#2563EB]/50 bg-[#EFF6FF] px-4 text-sm font-semibold text-[#2563EB] transition hover:bg-[#DBEAFE]"
+                        className="inline-flex h-11 w-full items-center justify-center rounded-lg border border-dashed border-[#0088FF]/50 bg-[#E8F4FF] px-4 text-sm font-semibold text-[#0088FF] transition hover:bg-[#D4EEFF]"
                       >
                         ＋ სამუშაოს / გამოცდილების დამატება
                       </button>
@@ -778,7 +778,7 @@ export default function OnboardingPage() {
                               { title: "", organization: "", start_date: "", end_date: "", is_present: false, description: "" },
                             ])
                           }
-                          className="inline-flex h-10 w-full items-center justify-center rounded-lg border border-slate-300 bg-white text-sm font-semibold text-[#2563EB] transition hover:bg-slate-50 disabled:opacity-50"
+                          className="inline-flex h-10 w-full items-center justify-center rounded-lg border border-slate-300 bg-white text-sm font-semibold text-[#0088FF] transition hover:bg-slate-50 disabled:opacity-50"
                         >
                           ＋ კიდევ ერთი სამუშაოს დამატება
                         </button>
@@ -794,7 +794,7 @@ export default function OnboardingPage() {
                         onClick={() =>
                           setEducations([{ institution: "", degree_level: "", field_of_study: "", end_date: "" }])
                         }
-                        className="inline-flex h-11 w-full items-center justify-center rounded-lg border border-dashed border-[#2563EB]/50 bg-[#EFF6FF] px-4 text-sm font-semibold text-[#2563EB] transition hover:bg-[#DBEAFE]"
+                        className="inline-flex h-11 w-full items-center justify-center rounded-lg border border-dashed border-[#0088FF]/50 bg-[#E8F4FF] px-4 text-sm font-semibold text-[#0088FF] transition hover:bg-[#D4EEFF]"
                       >
                         ＋ განათლების დამატება
                       </button>
@@ -851,7 +851,7 @@ export default function OnboardingPage() {
                               { institution: "", degree_level: "", field_of_study: "", end_date: "" },
                             ])
                           }
-                          className="inline-flex h-10 w-full items-center justify-center rounded-lg border border-slate-300 bg-white text-sm font-semibold text-[#2563EB] transition hover:bg-slate-50 disabled:opacity-50"
+                          className="inline-flex h-10 w-full items-center justify-center rounded-lg border border-slate-300 bg-white text-sm font-semibold text-[#0088FF] transition hover:bg-slate-50 disabled:opacity-50"
                         >
                           ＋ კიდევ განათლების დამატება
                         </button>
@@ -864,7 +864,7 @@ export default function OnboardingPage() {
                     <button
                       type="button"
                       onClick={nextFromStep2}
-                      className="h-11 rounded-lg bg-[#2563EB] text-sm font-medium text-white transition-colors duration-150 hover:bg-[#1D4ED8]"
+                      className="h-11 rounded-lg bg-[#0088FF] text-sm font-medium text-white transition-colors duration-150 hover:bg-[#006ACC]"
                     >
                       შემდეგი
                     </button>
@@ -985,7 +985,7 @@ export default function OnboardingPage() {
                       type="button"
                       disabled={submitting}
                       onClick={submitFreelancer}
-                      className="h-11 rounded-lg bg-[#2563EB] text-sm font-medium text-white transition-colors duration-150 hover:bg-[#1D4ED8] disabled:opacity-60"
+                      className="h-11 rounded-lg bg-[#0088FF] text-sm font-medium text-white transition-colors duration-150 hover:bg-[#006ACC] disabled:opacity-60"
                     >
                       {submitting ? "იტვირთება..." : "პროფილის გამოქვეყნება"}
                     </button>

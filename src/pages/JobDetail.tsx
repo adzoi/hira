@@ -4,6 +4,7 @@ import Navbar from "../components/Navbar.tsx"
 import VIPUpgrade from "../components/VIPUpgrade.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
 import { useToast } from "../components/ui/ToastProvider.tsx"
+import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { jobVacancyStats } from "../lib/jobVacancies.ts"
@@ -614,31 +615,40 @@ export default function JobDetailPage() {
 
           <aside className="space-y-4">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-3">
-                {job.hirer_avatar_url ? (
-                  <img
-                    src={avatarImageUrl(supabase, job.hirer_avatar_url) ?? job.hirer_avatar_url}
-                    alt={`${job.hirer_company_name} ავატარი`}
-                    loading="lazy"
-                    className="h-14 w-14 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#1B2B4B] text-sm font-bold text-white">
-                    {getInitials(job.hirer_company_name)}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-3">
+                  {job.hirer_avatar_url ? (
+                    <img
+                      src={avatarImageUrl(supabase, job.hirer_avatar_url) ?? job.hirer_avatar_url}
+                      alt={`${job.hirer_company_name} ავატარი`}
+                      loading="lazy"
+                      className="h-14 w-14 shrink-0 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#1B2B4B] text-sm font-bold text-white">
+                      {getInitials(job.hirer_company_name)}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="font-bold text-[#1B2B4B]">{job.hirer_company_name}</p>
+                    <p className="text-xs text-slate-500">წევრი: {formatDate(job.hirer_member_since)}</p>
                   </div>
-                )}
-                <div>
-                  <p className="font-bold text-[#1B2B4B]">{job.hirer_company_name}</p>
-                  <p className="text-xs text-slate-500">წევრი: {formatDate(job.hirer_member_since)}</p>
                 </div>
+                <SaveBookmarkButton resourceType="job" resourceId={job.id} className="w-full" />
               </div>
               <p className="mt-3 text-sm text-slate-600">განთავსებული განცხადებები: {job.hirer_jobs_posted_count}</p>
               <button type="button" onClick={copyContact} className="mt-3 inline-flex h-10 items-center rounded-lg border border-slate-300 px-3 text-sm font-semibold text-[#1B2B4B]">
                 საკონტაქტოს კოპირება
               </button>
-              <Link to={`/hirer/${job.hirer_profile_id}`} className="mt-3 inline-flex text-sm font-semibold text-[#D4A843] hover:underline">
-                პროფილის ნახვა
-              </Link>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <SaveBookmarkButton variant="icon" resourceType="hirer" resourceId={job.hirer_profile_id} />
+                <Link
+                  to={`/hirer/${job.hirer_profile_id}`}
+                  className="inline-flex min-h-[44px] min-w-0 flex-1 items-center justify-center rounded-lg border border-transparent px-3 py-2 text-center text-sm font-semibold text-[#D4A843] underline hover:bg-amber-50/60 sm:flex-none sm:justify-start"
+                >
+                  პროფილის ნახვა
+                </Link>
+              </div>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

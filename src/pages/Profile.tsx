@@ -94,6 +94,9 @@ export default function ProfilePage() {
   const [industry, setIndustry] = useState("")
   const [companyWebsite, setCompanyWebsite] = useState("")
   const [freelancerProfileId, setFreelancerProfileId] = useState<string | null>(null)
+  /** When false, marketplace shows "temporarily unavailable" but hirers can still send listing inquiries. */
+  const [acceptingNewWork, setAcceptingNewWork] = useState(true)
+  const [acceptingNewWorkBusy, setAcceptingNewWorkBusy] = useState(false)
   const [serviceListings, setServiceListings] = useState<ServiceListingForm[]>([])
   const [initialServiceIds, setInitialServiceIds] = useState<string[]>([])
   const [skillsCatalog, setSkillsCatalog] = useState<Array<{ id: string; name: string; category_id: string | null }>>([])
@@ -189,6 +192,7 @@ export default function ProfilePage() {
             const loadedBio = fp.bio ?? ""
             setBio(loadedBio.trim() === "ბიო უნდა შეიცავდეს მინიმუმ 50 სიმბოლოს" ? "" : loadedBio)
             setAvailability(fp.availability ?? "")
+            setAcceptingNewWork(fp.is_accepting_new_work !== false)
             setLanguages(Array.isArray(fp.languages) ? fp.languages : [])
             const loadedLi = (fp.linkedin_url ?? "").trim()
             const loadedGh = (fp.github_url ?? "").trim()
@@ -337,6 +341,31 @@ export default function ProfilePage() {
     }
   }
 
+  const toggleAcceptingNewWork = async () => {
+    if (!supabase || !userId || !freelancerProfileId) return
+    const next = !acceptingNewWork
+    setAcceptingNewWorkBusy(true)
+    setError("")
+    setSuccess("")
+    try {
+      const { error } = await supabase
+        .from("freelancer_profiles")
+        .update({ is_accepting_new_work: next, updated_at: new Date().toISOString() })
+        .eq("id", freelancerProfileId)
+      if (error) throw error
+      setAcceptingNewWork(next)
+      setSuccess(
+        next
+          ? "მითითებულია, რომ ხელმისაწვდომი ხარ ახალი სამუშაოებისთვის."
+          : "მითითებულია, რომ დროებით ხელმიუწვდომელი ხარ — ეს ჩანს ბაზარზე; დამქირავებლებს შეთავაზების გაგზავნა მაინც შეუძლიათ.",
+      )
+    } catch (e) {
+      setError(formatSaveError(e))
+    } finally {
+      setAcceptingNewWorkBusy(false)
+    }
+  }
+
   const onSave = async () => {
     if (!supabase) return
     setSaving(true)
@@ -391,6 +420,7 @@ export default function ProfilePage() {
               portfolio_url: parsedPf.value,
               is_public: existingFp?.is_public ?? true,
               is_profile_complete: existingFp?.is_profile_complete ?? true,
+              is_accepting_new_work: acceptingNewWork,
             },
             { onConflict: "user_id" },
           )
@@ -788,7 +818,7 @@ export default function ProfilePage() {
       <main className="mx-auto max-w-3xl px-6 py-10">
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
           <div className="mb-6 flex items-start justify-between gap-4">
-            <h1 className="text-3xl font-bold text-[#2563EB]">ჩემი პროფილი</h1>
+            <h1 className="text-3xl font-bold text-[#0088FF]">ჩემი პროფილი</h1>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -837,7 +867,7 @@ export default function ProfilePage() {
                   const element = document.getElementById("avatar-input") as HTMLInputElement | null
                   element?.click()
                 }}
-                className="rounded-lg bg-[#2563EB] px-4 py-2 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#1D4ED8]"
+                className="rounded-lg bg-[#0088FF] px-4 py-2 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC]"
               >
                 {avatarUrl ? "📷 სურათის შეცვლა" : "📷 პროფილის სურათის ატვირთვა"}
               </button>
@@ -878,7 +908,7 @@ export default function ProfilePage() {
           </div>
 
           <section className="mt-8 rounded-xl border border-slate-200 bg-slate-50 p-6">
-            <h2 className="text-lg font-semibold text-[#2563EB]">ელფოსტა და პაროლი</h2>
+            <h2 className="text-lg font-semibold text-[#0088FF]">ელფოსტა და პაროლი</h2>
             <p className="mt-1 text-sm text-slate-600">
               ანგარიშის შესვლის ელფოსტასა და პაროლს ცვლი აქ. პროფილის დასამახსოვრებლად ქვემოთ ისევ დააჭირე „შენახვა“, თუ სხვა ველებიც შეცვლილი გაქვს.
             </p>
@@ -913,7 +943,7 @@ export default function ProfilePage() {
                   <input
                     type="email"
                     autoComplete="email"
-                    className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-[#2563EB]/30 focus:border-[#2563EB] focus:ring-2"
+                    className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-[#0088FF]/30 focus:border-[#0088FF] focus:ring-2"
                     placeholder="ახალი მისამართი"
                     value={newEmail}
                     onChange={(e) => {
@@ -927,7 +957,7 @@ export default function ProfilePage() {
                   type="button"
                   disabled={emailBusy}
                   onClick={() => void handleUpdateEmail()}
-                  className="h-11 w-full rounded-lg bg-[#2563EB] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:px-6"
+                  className="h-11 w-full rounded-lg bg-[#0088FF] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC] disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:px-6"
                 >
                   {emailBusy ? "მიმდინარეობს..." : "ელფოსტის შეცვლა"}
                 </button>
@@ -952,7 +982,7 @@ export default function ProfilePage() {
                   <input
                     type="password"
                     autoComplete="current-password"
-                    className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 outline-none ring-[#2563EB]/30 focus:border-[#2563EB] focus:ring-2"
+                    className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 outline-none ring-[#0088FF]/30 focus:border-[#0088FF] focus:ring-2"
                     value={currentPasswordPw}
                     onChange={(e) => {
                       setCurrentPasswordPw(e.target.value)
@@ -966,7 +996,7 @@ export default function ProfilePage() {
                   <input
                     type="password"
                     autoComplete="new-password"
-                    className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 outline-none ring-[#2563EB]/30 focus:border-[#2563EB] focus:ring-2"
+                    className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 outline-none ring-[#0088FF]/30 focus:border-[#0088FF] focus:ring-2"
                     value={newPassword}
                     onChange={(e) => {
                       setNewPassword(e.target.value)
@@ -980,7 +1010,7 @@ export default function ProfilePage() {
                   <input
                     type="password"
                     autoComplete="new-password"
-                    className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 outline-none ring-[#2563EB]/30 focus:border-[#2563EB] focus:ring-2"
+                    className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 outline-none ring-[#0088FF]/30 focus:border-[#0088FF] focus:ring-2"
                     value={confirmNewPassword}
                     onChange={(e) => {
                       setConfirmNewPassword(e.target.value)
@@ -993,7 +1023,7 @@ export default function ProfilePage() {
                   type="button"
                   disabled={passwordBusy}
                   onClick={() => void handleUpdatePassword()}
-                  className="h-11 w-full rounded-lg bg-[#2563EB] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:px-6"
+                  className="h-11 w-full rounded-lg bg-[#0088FF] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC] disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:px-6"
                 >
                   {passwordBusy ? "მიმდინარეობს..." : "პაროლის განახლება"}
                 </button>
@@ -1003,6 +1033,39 @@ export default function ProfilePage() {
 
           {userType === "freelancer" ? (
             <div className="mt-5 space-y-5">
+              {freelancerProfileId ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-base font-semibold text-gray-900">ხელმისაწვდომობა ახალი სამუშაოზე</p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        გამორთე, თუ დროებით დაკავებული ხარ — ეს ჩანს ფრილანსერებისა და ლისტინგების გვერდებზე. დამქირავებლებს შეთავაზების
+                        გაგზავნა მაინც შეუძლიათ.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={acceptingNewWork}
+                      disabled={acceptingNewWorkBusy}
+                      onClick={() => void toggleAcceptingNewWork()}
+                      className={`relative h-9 w-[3.25rem] shrink-0 rounded-full transition disabled:opacity-50 ${
+                        acceptingNewWork ? "bg-emerald-600" : "bg-slate-400"
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-1 left-1 h-7 w-7 rounded-full bg-white shadow transition-transform ${
+                          acceptingNewWork ? "translate-x-[1.35rem]" : "translate-x-0"
+                        }`}
+                      />
+                      <span className="sr-only">{acceptingNewWork ? "ხელმისაწვდომი" : "ხელმიუწვდომელი"}</span>
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs font-medium text-slate-700">
+                    {acceptingNewWork ? "სტატუსი: ხელმისაწვდომი ხარ ახალი სამუშაოებისთვის." : "სტატუსი: დროებით ხელმიუწვდომელი ხარ ახალი სამუშაოებისთვის."}
+                  </p>
+                </div>
+              ) : null}
               <div>
                 <label className="mb-1 block text-base font-semibold text-gray-900">პროფესიული სათაური</label>
                 <input className="h-11 w-full rounded-lg border border-slate-300 px-3" placeholder="React Developer, Graphic Designer" value={professionalTitle} onChange={(e)=>setProfessionalTitle(e.target.value)} />
@@ -1164,7 +1227,7 @@ export default function ProfilePage() {
                   </label>
                   <select
                     id="profile-skill-category"
-                    className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/25"
+                    className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#0088FF] focus:ring-2 focus:ring-[#0088FF]/25"
                     value={skillFocusCategory}
                     onChange={(e) => setSkillFocusCategory(e.target.value)}
                   >
@@ -1179,7 +1242,7 @@ export default function ProfilePage() {
 
                 {skillFocusCategory && groupedSkills[skillFocusCategory] ? (
                   <div className="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
-                    <p className="mb-2 text-sm font-semibold text-[#2563EB]">{skillFocusCategory}</p>
+                    <p className="mb-2 text-sm font-semibold text-[#0088FF]">{skillFocusCategory}</p>
                     {(() => {
                       const list = groupedSkills[skillFocusCategory]!
                       const selectedInCategory = list.filter((s) => selectedSkillIds.includes(s.id))
@@ -1210,7 +1273,7 @@ export default function ProfilePage() {
                           <select
                             id="profile-skill-add-active"
                             key={`profile-skill-dd-${skillFocusCategory}-${selectedInCategory.map((s) => s.id).join("-")}`}
-                            className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/25"
+                            className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#0088FF] focus:ring-2 focus:ring-[#0088FF]/25"
                             defaultValue=""
                             onChange={(e) => {
                               const id = e.target.value
@@ -1538,7 +1601,7 @@ export default function ProfilePage() {
           <button
             disabled={saving}
             onClick={onSave}
-            className="mt-6 h-11 w-full rounded-lg bg-[#2563EB] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-70"
+            className="mt-6 h-11 w-full rounded-lg bg-[#0088FF] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC] disabled:cursor-not-allowed disabled:opacity-70"
           >
             {saving ? "ინახება..." : "ცვლილებების შენახვა"}
           </button>

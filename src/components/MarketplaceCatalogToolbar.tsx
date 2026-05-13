@@ -64,7 +64,7 @@ export default function MarketplaceCatalogToolbar({
       {showPageHeader ? (
         <>
           <p className="text-xs font-semibold uppercase tracking-widest text-[#D4A843]">{eyebrow}</p>
-          <h1 className="mt-1 text-2xl font-bold text-[#2563EB] md:text-2xl">{title}</h1>
+          <h1 className="mt-1 text-2xl font-bold text-[#0088FF] md:text-2xl">{title}</h1>
         </>
       ) : null}
 
@@ -75,7 +75,7 @@ export default function MarketplaceCatalogToolbar({
             <input
               value={searchValue}
               onChange={(event) => onSearchChange(event.target.value)}
-              className="h-10 w-full rounded-full border border-slate-300 bg-white pl-10 pr-3 text-sm outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#2563EB]"
+              className="h-10 w-full rounded-full border border-slate-300 bg-white pl-10 pr-3 text-sm outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#0088FF]"
               placeholder={searchPlaceholder}
             />
           </div>
@@ -114,7 +114,7 @@ export default function MarketplaceCatalogToolbar({
             aria-haspopup="dialog"
             onClick={() => (advancedDropdownOpen ? onDismissAdvanced() : onToggleAdvanced())}
             className={`relative inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-600 transition hover:border-slate-400 md:w-auto ${
-              advancedDropdownOpen ? "border-slate-400 ring-2 ring-[#2563EB]/30" : ""
+              advancedDropdownOpen ? "border-slate-400 ring-2 ring-[#0088FF]/30" : ""
             }`}
           >
             გაფართოებული ძიება
@@ -122,7 +122,7 @@ export default function MarketplaceCatalogToolbar({
               ▾
             </span>
             {!advancedDropdownOpen && advancedFilterCount > 0 ? (
-              <span className="ml-2 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#2563EB] px-1 text-xs font-bold text-white">
+              <span className="ml-2 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#0088FF] px-1 text-xs font-bold text-white">
                 {advancedFilterCount}
               </span>
             ) : null}
@@ -196,7 +196,7 @@ export default function MarketplaceCatalogToolbar({
 
         <button
           type="button"
-          className="ml-auto inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-[#2563EB] px-6 text-base font-bold text-white transition hover:bg-[#1D4ED8]"
+          className="ml-auto inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-[#0088FF] px-6 text-base font-bold text-white transition hover:bg-[#006ACC]"
           onClick={() => onSearchChange(searchValue)}
           aria-label={searchLabel}
         >

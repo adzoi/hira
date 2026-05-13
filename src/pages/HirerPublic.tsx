@@ -8,6 +8,7 @@ import { countHirerProfileVisits, recordProfileVisit } from "../lib/profileVisit
 import FollowListsModal, { FollowStatPills, type FollowModalTab } from "../components/FollowListsModal.tsx"
 import { countFollowers, countFollowing, followUser, isFollowing, unfollowUser } from "../lib/follows.ts"
 import { jobVacancyStats } from "../lib/jobVacancies.ts"
+import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 
@@ -613,26 +614,29 @@ export default function HirerPublicPage() {
               ) : null}
             </div>
             </div>
-            {hirer.ownerUserId && !viewerOwnsHirer && followButtonMode !== "hidden" ? (
-              <div className="w-full shrink-0 sm:w-auto">
-                <button
-                  type="button"
-                  onClick={() => void handleHirerFollowToggle()}
-                  disabled={followBusy || followButtonMode === "loading"}
-                  className={`h-11 w-full rounded-lg border px-5 text-sm font-semibold transition sm:w-auto disabled:pointer-events-none disabled:opacity-60 ${
-                    followButtonMode === "unfollow"
-                      ? "border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
-                      : "border-[#1B2B4B] bg-[#1B2B4B] text-white hover:bg-[#D4A843] hover:text-[#1B2B4B]"
-                  }`}
-                >
-                  {followBusy
-                    ? "მიმდინარეობს..."
-                    : followButtonMode === "loading"
-                      ? "იტვირთება…"
-                      : followButtonMode === "unfollow"
-                        ? "გამოწერილი"
-                        : "გამოწერა"}
-                </button>
+            {!viewerOwnsHirer ? (
+              <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                <SaveBookmarkButton variant="icon" resourceType="hirer" resourceId={hirer.id} />
+                {hirer.ownerUserId && followButtonMode !== "hidden" ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleHirerFollowToggle()}
+                    disabled={followBusy || followButtonMode === "loading"}
+                    className={`h-11 w-full rounded-lg border px-5 text-sm font-semibold transition sm:min-w-[8.5rem] disabled:pointer-events-none disabled:opacity-60 ${
+                      followButtonMode === "unfollow"
+                        ? "border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                        : "border-[#1B2B4B] bg-[#1B2B4B] text-white hover:bg-[#D4A843] hover:text-[#1B2B4B]"
+                    }`}
+                  >
+                    {followBusy
+                      ? "მიმდინარეობს..."
+                      : followButtonMode === "loading"
+                        ? "იტვირთება…"
+                        : followButtonMode === "unfollow"
+                          ? "გამოწერილი"
+                          : "გამოწერა"}
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>

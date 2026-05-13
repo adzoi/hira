@@ -408,7 +408,7 @@ export default function ListingFormPage() {
       <main className="mx-auto max-w-4xl px-6 py-10">
         <div className="rounded-2xl border border-slate-200 bg-white p-6">
           <div className="mb-5 flex items-center justify-between">
-            <h1 className={`text-2xl font-bold ${isEdit ? "text-[#1B2B4B]" : "text-[#2563EB]"}`}>
+            <h1 className={`text-2xl font-bold ${isEdit ? "text-[#1B2B4B]" : "text-[#0088FF]"}`}>
               {isEdit ? "ლისტინგის რედაქტირება" : "ახალი ლისტინგის დამატება"}
             </h1>
             <Link to="/dashboard" className="text-sm font-semibold text-[#D4A843] hover:underline">
@@ -540,7 +540,7 @@ export default function ListingFormPage() {
                     event.currentTarget.value = ""
                   }}
                   disabled={existingImageUrls.length + newImageFiles.length >= MAX_LISTING_IMAGES}
-                  className="block w-full text-xs text-slate-700 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-[#2563EB] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white file:transition-colors file:duration-150 file:hover:bg-[#1D4ED8]"
+                  className="block w-full text-xs text-slate-700 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-[#0088FF] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white file:transition-colors file:duration-150 file:hover:bg-[#006ACC]"
                 />
                 <p className="mt-2 text-xs text-slate-500">
                   PNG/JPG/WEBP. თითო ფაილი მაქს 10MB, ავტომატურად მცირდება ზომაში.
@@ -594,7 +594,7 @@ export default function ListingFormPage() {
               type="button"
               onClick={handleSave}
               disabled={!canSubmit}
-              className="h-11 rounded-lg bg-[#2563EB] px-5 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#1D4ED8] disabled:pointer-events-none disabled:opacity-60"
+              className="h-11 rounded-lg bg-[#0088FF] px-5 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC] disabled:pointer-events-none disabled:opacity-60"
             >
               {saving ? "ინახება..." : "შენახვა"}
             </button>
