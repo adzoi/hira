@@ -12,6 +12,7 @@ import { jobVacancyStats } from "../lib/jobVacancies.ts"
 import { formatCityForDisplay, jobMatchesUnifiedLocation } from "../lib/marketplaceFilters.ts"
 import { jobVipIsActive } from "../lib/vipJobTiers.ts"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
+import { catalogToolbarCategories, type CategoryBranchRow } from "../lib/marketplaceCategoryTree.ts"
 
 type SortOption = "newest" | "budget_high" | "budget_low" | "applicants" | "deadline"
 type BudgetType = "fixed" | "hourly" | "monthly"
@@ -47,7 +48,7 @@ type JobItem = {
   vacancyFull: boolean
 }
 
-type CategoryItem = { id: string; name_ka: string }
+type CategoryItem = { id: string; name_ka: string; parent_id: string | null }
 
 const mockJobs: JobItem[] = [
   {
@@ -278,6 +279,7 @@ export default function JobsPage() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [jobs, setJobs] = useState<JobItem[]>([])
   const [categories, setCategories] = useState<CategoryItem[]>([])
+  const catalogFilterCategories = useMemo(() => catalogToolbarCategories(categories as CategoryBranchRow[]), [categories])
 
   const [advancedDropdownOpen, setAdvancedDropdownOpen] = useState(false)
   const advancedDropdownRef = useRef<HTMLDivElement>(null)
@@ -400,7 +402,11 @@ export default function JobsPage() {
         setCategories(
           categoryRows.map((c) => {
             const row = c as Record<string, unknown>
-            return { id: String(row.id ?? ""), name_ka: String(row.name_ka ?? "") }
+            return {
+              id: String(row.id ?? ""),
+              name_ka: String(row.name_ka ?? ""),
+              parent_id: (row.parent_id as string | null | undefined) ?? null,
+            }
           }) as CategoryItem[],
         )
       } catch (loadError) {
@@ -651,7 +657,7 @@ export default function JobsPage() {
             searchValue={searchText}
             onSearchChange={setSearchText}
             searchPlaceholder="სათაური, აღწერა, კომპანია..."
-            categories={categories}
+            categories={catalogFilterCategories}
             categoryId={categoryId}
             onCategoryChange={setCategoryId}
             locationDisplay={appliedLocationFilter}
@@ -761,7 +767,7 @@ export default function JobsPage() {
           </div>
         ) : (
           <>
-            <p className="mt-6 text-sm font-medium text-slate-600">შედეგი {sortedJobs.length} განცხადება</p>
+            <p className="mt-6 text-sm font-medium text-slate-600">მოიძებნა {sortedJobs.length} განცხადება</p>
             {sortedJobs.length === 0 ? (
               <div className="mt-6">
                 <EmptyState message="განცხადებები ჯერ არ არის. იყავი პირველი!" actionLabel="ფილტრების გასუფთავება" onAction={clearFilters} />

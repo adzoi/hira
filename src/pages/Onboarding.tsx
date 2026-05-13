@@ -10,6 +10,11 @@ import { parseGitHubField, parseLinkedInField, parseOptionalWebUrl } from "../li
 import { avatarPublicUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 
+/** Skills without a valid mid-level category_id (picker bucket). */
+const SKILL_PICKER_UNCATEGORIZED = "__uncategorized__"
+
+type SkillCategoryRow = { id: string; name_ka: string; parent_id: string | null }
+
 const industryOptions = ["ტექნოლოგია", "მარკეტინგი", "განათლება", "ფინანსები", "ჯანდაცვა", "უძრავი ქონება", "სხვა"]
 
 type ExperienceForm = {
@@ -39,7 +44,7 @@ export default function OnboardingPage() {
 
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [skills, setSkills] = useState<Array<{ id: string; name: string; category_id: string | null }>>([])
-  const [categoriesMap, setCategoriesMap] = useState<Record<string, string>>({})
+  const [skillCategories, setSkillCategories] = useState<SkillCategoryRow[]>([])
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
   const [professionalTitle, setProfessionalTitle] = useState("")
   const [bio, setBio] = useState("")
@@ -62,8 +67,8 @@ export default function OnboardingPage() {
   const [freelancerSlug, setFreelancerSlug] = useState<string | null>(null)
   const [experiences, setExperiences] = useState<ExperienceForm[]>([])
   const [educations, setEducations] = useState<EducationForm[]>([])
-  /** Which skill category is active for picking tags (Georgian label key in groupedSkills). */
-  const [skillFocusCategory, setSkillFocusCategory] = useState("")
+  /** Mid-level marketplace category id, or SKILL_PICKER_UNCATEGORIZED. */
+  const [skillFocusCategoryId, setSkillFocusCategoryId] = useState("")
 
   const [companyName, setCompanyName] = useState("")
   const [companyDescription, setCompanyDescription] = useState("")
@@ -96,8 +101,12 @@ export default function OnboardingPage() {
         if (profile.user_type === "freelancer") {
           const [{ data: fp }, { data: skillsData }, { data: categoriesData }] = await Promise.all([
             supabase.from("freelancer_profiles").select("*").eq("user_id", user.id).maybeSingle(),
-            supabase.from("skills").select("id,name,category_id"),
-            supabase.from("categories").select("id,name_ka"),
+            supabase.from("skills").select("id,name,category_id").eq("is_approved", true).order("name"),
+            supabase
+              .from("categories")
+              .select("id,name_ka,parent_id")
+              .eq("is_active", true)
+              .order("sort_order", { ascending: true }),
           ])
 
           if (fp?.is_profile_complete) {
@@ -162,9 +171,7 @@ export default function OnboardingPage() {
           }
 
           setSkills(skillsData ?? [])
-          const map: Record<string, string> = {}
-          for (const c of categoriesData ?? []) map[c.id] = c.name_ka
-          setCategoriesMap(map)
+          setSkillCategories((categoriesData ?? []) as SkillCategoryRow[])
         } else {
           const { data: hp } = await supabase.from("hirer_profiles").select("*").eq("user_id", user.id).maybeSingle()
           if (hp?.company_name && hp?.description && hp?.industry) {
@@ -189,12 +196,34 @@ export default function OnboardingPage() {
 
   const filteredLanguageOptions = useMemo(() => filterProfileLanguageOptions(languageQuery), [languageQuery])
 
-  const groupedSkills = skills.reduce<Record<string, Array<{ id: string; name: string }>>>((acc, skill) => {
-    const key = skill.category_id ? categoriesMap[skill.category_id] ?? "სხვა" : "სხვა"
-    if (!acc[key]) acc[key] = []
-    acc[key].push({ id: skill.id, name: skill.name })
-    return acc
-  }, {})
+  const skillPickerMidCategories = useMemo(
+    () =>
+      skillCategories
+        .filter((c) => Boolean(c.parent_id))
+        .sort((a, b) => a.name_ka.localeCompare(b.name_ka, "ka")),
+    [skillCategories],
+  )
+
+  const skillsByCategoryId = useMemo(() => {
+    const known = new Set(skillCategories.map((c) => c.id))
+    const m = new Map<string, Array<{ id: string; name: string }>>()
+    for (const sk of skills) {
+      const cid = sk.category_id && known.has(sk.category_id) ? sk.category_id : SKILL_PICKER_UNCATEGORIZED
+      const list = m.get(cid) ?? []
+      list.push({ id: sk.id, name: sk.name })
+      m.set(cid, list)
+    }
+    for (const [, list] of m) list.sort((a, b) => a.name.localeCompare(b.name))
+    return m
+  }, [skills, skillCategories])
+
+  const uncategorizedSkillCount = skillsByCategoryId.get(SKILL_PICKER_UNCATEGORIZED)?.length ?? 0
+
+  const skillFocusCategoryLabel = useMemo(() => {
+    if (!skillFocusCategoryId) return ""
+    if (skillFocusCategoryId === SKILL_PICKER_UNCATEGORIZED) return "სხვა"
+    return skillCategories.find((c) => c.id === skillFocusCategoryId)?.name_ka ?? "კატეგორია"
+  }, [skillFocusCategoryId, skillCategories])
 
   const skillNameById = useMemo(() => {
     const m = new Map<string, string>()
@@ -602,25 +631,35 @@ export default function OnboardingPage() {
                       <select
                         id="onboarding-skill-category"
                         className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#0088FF] focus:ring-2 focus:ring-[#0088FF]/25"
-                        value={skillFocusCategory}
-                        onChange={(e) => setSkillFocusCategory(e.target.value)}
+                        value={skillFocusCategoryId}
+                        onChange={(e) => setSkillFocusCategoryId(e.target.value)}
                       >
                         <option value="">აირჩიე კატეგორია…</option>
-                        {Object.keys(groupedSkills).map((cat) => (
-                          <option key={cat} value={cat}>
-                            {cat}
+                        {skillPickerMidCategories.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name_ka}
                           </option>
                         ))}
+                        {uncategorizedSkillCount > 0 ? (
+                          <option value={SKILL_PICKER_UNCATEGORIZED}>სხვა</option>
+                        ) : null}
                       </select>
                     </div>
 
-                    {skillFocusCategory && groupedSkills[skillFocusCategory] ? (
-                      <div className="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
-                        <p className="mb-2 text-sm font-semibold text-[#0088FF]">{skillFocusCategory}</p>
-                        {(() => {
-                          const list = groupedSkills[skillFocusCategory]!
-                          const selectedInCategory = list.filter((s) => selectedSkillIds.includes(s.id))
+                    {skillFocusCategoryId ? (
+                      (() => {
+                        const list = skillsByCategoryId.get(skillFocusCategoryId) ?? []
+                        if (list.length === 0) {
                           return (
+                            <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-3 py-3 text-xs text-slate-500">
+                              ამ კატეგორიაში დამტკიცებული უნარები ჯერ არ არის.
+                            </p>
+                          )
+                        }
+                        const selectedInCategory = list.filter((s) => selectedSkillIds.includes(s.id))
+                        return (
+                          <div className="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
+                            <p className="mb-2 text-sm font-semibold text-[#0088FF]">{skillFocusCategoryLabel}</p>
                             <>
                               {selectedInCategory.length > 0 ? (
                                 <div className="mb-2 flex flex-wrap gap-1.5">
@@ -642,11 +681,11 @@ export default function OnboardingPage() {
                                 <p className="mb-2 text-xs text-slate-500">ამ კატეგორიიდან ჯერ არაფერი არ არის არჩეული.</p>
                               )}
                               <label className="sr-only" htmlFor="onboarding-skill-add-active">
-                                უნარის დამატება — {skillFocusCategory}
+                                უნარის დამატება — {skillFocusCategoryLabel}
                               </label>
                               <select
                                 id="onboarding-skill-add-active"
-                                key={`skill-dd-${skillFocusCategory}-${selectedInCategory.map((s) => s.id).join("-")}`}
+                                key={`skill-dd-${skillFocusCategoryId}-${selectedInCategory.map((s) => s.id).join("-")}`}
                                 className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#0088FF] focus:ring-2 focus:ring-[#0088FF]/25"
                                 defaultValue=""
                                 onChange={(e) => {
@@ -665,9 +704,9 @@ export default function OnboardingPage() {
                                 ))}
                               </select>
                             </>
-                          )
-                        })()}
-                      </div>
+                          </div>
+                        )
+                      })()
                     ) : (
                       <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-3 py-3 text-xs text-slate-500">
                         კატეგორიის ასარჩევად გამოიყენე ზემოთ სია — აქ გამოჩნდება შესაბამისი ტეგები.

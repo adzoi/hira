@@ -507,7 +507,7 @@ export default function HirersPage() {
         </section>
 
         <section className="mt-6 min-w-0">
-          <p className="text-sm font-medium text-slate-600">შედეგი {sorted.length} დამქირავებელი</p>
+          <p className="text-sm font-medium text-slate-600">მოიძებნა {sorted.length} დამქირავებელი</p>
 
           {error ? <ErrorState message={error} /> : null}
 

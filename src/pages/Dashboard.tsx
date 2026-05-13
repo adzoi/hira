@@ -641,7 +641,7 @@ export default function DashboardPage() {
   void freelancerCompletedPlatformJobs
 
   useEffect(() => {
-    document.title = "დაშბორდი — გიგორი"
+    document.title = "მართვის პანელი — გიგორი"
   }, [])
 
   useEffect(() => {
@@ -1281,7 +1281,7 @@ export default function DashboardPage() {
   const handleDeleteJob = async (jobId: string) => {
     if (!supabase || !hirerProfile?.id) return
     const confirmed = window.confirm(
-      "ნამდვილად გსურს ამ განცხადების წაშლა? დაკავშირებული განმცხადებლების ჩანაწერებიც იშლება.",
+      "ნამდვილად გსურს ამ განცხადების წაშლა?",
     )
     if (!confirmed) return
     setJobsActionError("")
@@ -1561,9 +1561,9 @@ export default function DashboardPage() {
       if (withReview) {
         if (!modal.hirerUserId) throw new Error("დამქირავებლის პროფილი ვერ მოიძებნა.")
         const comment = freelancerListingReviewComment.trim()
-        if (comment.length < 10) throw new Error("კომენტარი მინიმუმ 10 სიმბოლო უნდა იყოს.")
+        if (comment.length < 10) throw new Error("კომენტარი უნდა შედგებოდეს მინიმუნ 10 სიმბოლოსგან.")
         if (freelancerListingReviewStars < 1 || freelancerListingReviewStars > 5) {
-          throw new Error("აირჩიე შეფასება 1-დან 5 ვარსკვლაური.")
+          throw new Error("აირჩიე შეფასება.")
         }
         const { data: existingRev } = await supabase
           .from("reviews")
@@ -1722,11 +1722,11 @@ export default function DashboardPage() {
     }
     const comment = hirerListingReviewComment.trim()
     if (comment.length < 10) {
-      setHirerListingReviewError("კომენტარი მინიმუმ 10 სიმბოლო უნდა იყოს.")
+      setHirerListingReviewError("კომენტარი უნდა შედგებოდეს მინიმუმ 10 სიმბოლოსგან.")
       return
     }
     if (hirerListingReviewStars < 1 || hirerListingReviewStars > 5) {
-      setHirerListingReviewError("აირჩიე შეფასება 1-დან 5 ვარსკვლაური.")
+      setHirerListingReviewError("აირჩიე შეფასება.")
       return
     }
     setHirerListingReviewSubmitting(true)
@@ -1853,7 +1853,7 @@ export default function DashboardPage() {
       )
       await reloadHirerSection()
     } catch (e) {
-      setHirerActionError(e instanceof Error ? e.message : "შეცდომა მოხდა.")
+      setHirerActionError(e instanceof Error ? e.message : "შეცდომა.")
     } finally {
       setApplicationBusyId(null)
     }
@@ -1962,10 +1962,10 @@ export default function DashboardPage() {
       if (withReview) {
         const comment = reviewComment.trim()
         if (comment.length < 10) {
-          throw new Error("კომენტარი მინიმუმ 10 სიმბოლო უნდა იყოს.")
+          throw new Error("კომენტარი უნდა შედგებოდეს მინიმუმ 10 სიმბოლოსგან.")
         }
         if (reviewStars < 1 || reviewStars > 5) {
-          throw new Error("აირჩიე შეფასება 1-დან 5 ვარსკვლაური.")
+          throw new Error("აირჩიე შეფასება.")
         }
         const { data: existingRev } = await supabase
           .from("reviews")
@@ -2044,11 +2044,11 @@ export default function DashboardPage() {
     if (!supabase || !profile || !modal) return
     const comment = reviewComment.trim()
     if (comment.length < 10) {
-      setFreelancerHirerReviewError("კომენტარი მინიმუმ 10 სიმბოლო უნდა იყოს.")
+      setFreelancerHirerReviewError("კომენტარი უნდა შედგებოდეს მინიმუმ 10 სიმბოლოსგან.")
       return
     }
     if (reviewStars < 1 || reviewStars > 5) {
-      setFreelancerHirerReviewError("აირჩიე შეფასება 1-დან 5 ვარსკვლაური.")
+      setFreelancerHirerReviewError("აირჩიე შეფასება.")
       return
     }
     setFreelancerHirerReviewSubmitting(true)
@@ -2122,7 +2122,7 @@ export default function DashboardPage() {
         .filter((item) => item.title || item.description || item.priceRaw || item.deliveryDaysRaw)
 
       if (nonEmptyDrafts.length > 3) {
-        throw new Error("მაქსიმუმ 3 სერვისის დამატება შეგიძლია.")
+        throw new Error("მაქსიმუმ შესაძლებელია 3 სერვისის დამატება.")
       }
 
       const normalized = nonEmptyDrafts.map((item, index) => {
@@ -2228,7 +2228,7 @@ export default function DashboardPage() {
       <Navbar />
       <main className="mx-auto max-w-7xl px-6 py-10">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-[#1B2B4B]">დაშბორდი</h1>
+          <h1 className="text-3xl font-bold text-[#1B2B4B]">მართვის პანელი</h1>
         </div>
 
         {!loading && !error && successMessage ? (
@@ -2342,7 +2342,7 @@ export default function DashboardPage() {
                       : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
                   }`}
                 >
-                  შეთავაზებები ლისტინგებზე
+                  შეთავაზებები განცხადებებზე
                 </button>
                 <button
                   type="button"
@@ -2393,9 +2393,8 @@ export default function DashboardPage() {
 
             {freelancerDashboardTab === "listing_offers" ? (
               <div className="rounded-xl border border-slate-200 bg-white p-6">
-              <h3 className="text-xl font-bold text-[#1B2B4B]">შეთავაზებები ლისტინგებზე</h3>
-              <p className="mt-1 text-sm text-slate-500">დამქირავებლის პირდაპირი მოთხოვნა შენს სერვისზე.</p>
-              {freelancerListingInquiries.length === 0 ? <p className="mt-4 text-sm text-slate-500">ჯერ შეთავაზებები არ გაქვს.</p> : null}
+              <h3 className="text-xl font-bold text-[#1B2B4B]">შეთავაზებები განცხადებებზე</h3>
+              {freelancerListingInquiries.length === 0 ? <p className="mt-4 text-sm text-slate-500">ჯერ შემოთავაზებები არ გაქვს.</p> : null}
 
               {freelancerListingInquiries.length > 0 ? (
                 <div className="mt-4">
@@ -2431,7 +2430,7 @@ export default function DashboardPage() {
                           : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
                       }`}
                     >
-                      ყველა დრო
+                      ყველა
                     </button>
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -2535,7 +2534,7 @@ export default function DashboardPage() {
                   ))}
                   </ul>
                   {freelancerListingOffersFiltered.length === 0 ? (
-                    <p className="mt-3 text-sm text-slate-500">ამ ფილტრით შეთავაზებები არ მოიძებნა.</p>
+                    <p className="mt-3 text-sm text-slate-500">ამ ფილტრით შემოთავაზებები არ მოიძებნა.</p>
                   ) : null}
                 </div>
               ) : null}
@@ -2546,9 +2545,6 @@ export default function DashboardPage() {
             {freelancerDashboardTab === "job_offers" ? (
               <div className="rounded-xl border border-slate-200 bg-white p-6">
                 <h3 className="text-xl font-bold text-[#1B2B4B]">გაგზავნილი შეთავაზებები</h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  შენ მიერ გაგზავნილი ყველა შეთავაზება სტატუსებით: მოლოდინში, დადასტურებული და უარყოფილი.
-                </p>
                 <div className="mt-4 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
@@ -2581,7 +2577,7 @@ export default function DashboardPage() {
                         : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
                     }`}
                   >
-                    ყველა დრო
+                    ყველა
                   </button>
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -2658,7 +2654,6 @@ export default function DashboardPage() {
                   <div className="mt-4 space-y-4">
                     {freelancerOngoingJobOffers.length > 0 ? (
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">განცხადებებზე მიღებული შეთავაზებები</p>
                         <ul className="mt-2 space-y-3">
                           {freelancerOngoingJobOffers.map((offer) => (
                             <li
@@ -3125,7 +3120,7 @@ export default function DashboardPage() {
               <div className="rounded-xl border border-slate-200 bg-white p-6">
               <h3 className="text-xl font-bold text-[#1B2B4B]">ლისტინგებზე გაგზავნილი შეთავაზებები</h3>
               <p className="mt-1 text-sm text-slate-500">
-                ფრილანსერი ხედავს ამას თავის დაშბორდზე. სამუშაოს დასრულება იქ ფიქსირდება სტატუსით — განცხადების გამოქვეყნება არ გჭირდება.
+                ფრილანსერი ხედავს ამას თავის მართვის პანელზე. სამუშაოს დასრულება იქ ფიქსირდება სტატუსით — განცხადების გამოქვეყნება არ გჭირდება.
               </p>
               {hirerListingInquiries.length === 0 ? <p className="mt-4 text-sm text-slate-500">ჯერ არაფერი გაგიგზავნია. იხილე ლისტინგები და დააჭირე „შეთავაზება“.</p> : null}
               {hirerListingInquiries.length > 0 ? (

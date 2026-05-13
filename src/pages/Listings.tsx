@@ -13,6 +13,7 @@ import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { mergeFreelancerCompletedWorkCounts } from "../lib/freelancerCompletedWorkCounts.ts"
 import { formatCityForDisplay, matchesLocationFilter } from "../lib/marketplaceFilters.ts"
+import { catalogToolbarCategories, type CategoryBranchRow } from "../lib/marketplaceCategoryTree.ts"
 type ListingMeta = { categoryId: string | null; subcategoryId: string | null; tags: string[] }
 type Availability = "full_time" | "part_time" | "weekends"
 type SkillItem = { id: string; name: string; category_id: string | null }
@@ -74,7 +75,7 @@ type ListingRow = {
   vipActive: boolean
 }
 
-type CategoryItem = { id: string; name_ka: string }
+type CategoryItem = { id: string; name_ka: string; parent_id: string | null }
 
 function getInitials(fullName: string) {
   const parts = fullName.trim().split(" ").filter(Boolean)
@@ -214,6 +215,8 @@ export default function ListingsPage() {
   const [listingsNextOffset, setListingsNextOffset] = useState(0)
   const listingsNextOffsetRef = useRef(0)
   const [listingsLoadingMore, setListingsLoadingMore] = useState(false)
+
+  const catalogFilterCategories = useMemo(() => catalogToolbarCategories(categories as CategoryBranchRow[]), [categories])
 
   const [advancedDropdownOpen, setAdvancedDropdownOpen] = useState(false)
   const advancedDropdownRef = useRef<HTMLDivElement>(null)
@@ -515,8 +518,12 @@ export default function ListingsPage() {
 
         setCategories(
           categoriesData.map((c) => {
-            const row = c as { id?: string; name_ka?: string }
-            return { id: String(row.id ?? ""), name_ka: String(row.name_ka ?? "") }
+            const row = c as { id?: string; name_ka?: string; parent_id?: string | null }
+            return {
+              id: String(row.id ?? ""),
+              name_ka: String(row.name_ka ?? ""),
+              parent_id: row.parent_id ?? null,
+            }
           }),
         )
         if (!append) {
@@ -798,7 +805,7 @@ export default function ListingsPage() {
                   value={searchText}
                   onChange={(event) => setSearchText(event.target.value)}
                   className="h-10 w-full rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#0088FF]"
-                  placeholder="საძიებო სიტყვა, სათაური ან დამამრგვალებელი"
+                  placeholder="ძიება"
                 />
               </div>
 
@@ -813,7 +820,7 @@ export default function ListingsPage() {
                   aria-label="კატეგორია"
                 >
                   <option value="">ყველა კატეგორია</option>
-                  {categories.map((category) => (
+                  {catalogFilterCategories.map((category) => (
                     <option key={category.id} value={category.id}>
                       {category.name_ka}
                     </option>
@@ -996,7 +1003,7 @@ export default function ListingsPage() {
           ) : (
             <>
               <div className="mb-4 flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-slate-600">შედეგი {filteredSorted.length} ლისტინგი</p>
+                <p className="text-sm font-medium text-slate-600">მოიძებნა {filteredSorted.length} განცხადება</p>
               </div>
 
               {filteredSorted.length === 0 ? (
@@ -1217,7 +1224,7 @@ export default function ListingsPage() {
               <h3 className="text-lg font-bold text-[#1B2B4B]">შეთავაზება ფრილანსერს</h3>
               <p className="mt-1 text-sm text-slate-600 line-clamp-2">{inquiryListing.title}</p>
               <p className="mt-2 text-xs text-slate-500">
-                ტექსტი გამოჩნდება ფრილანსერის დაშბორდზე „შეთავაზებები ლისტინგებზე“. სამუშაოს დასრულება იქვე ფიქსირდება (სტატუსი „დასრულებული“) — განცხადების გარეშე.
+                ტექსტი გამოჩნდება ფრილანსერის მართვის პანელზე „შეთავაზებები ლისტინგებზე“. სამუშაოს დასრულება იქვე ფიქსირდება (სტატუსი „დასრულებული“) — განცხადების გარეშე.
               </p>
               <label className="mt-4 block">
                 <span className="mb-1 block text-xs font-semibold uppercase text-slate-500">შეტყობინება</span>

@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import Navbar from "../components/Navbar.tsx"
-import { isSupabaseConfigured, supabase } from "../lib/supabase"
+import { formatSupabaseClientError, isSupabaseConfigured, supabase } from "../lib/supabase"
 import { jobImageThumbnailUrl } from "../lib/storageImageUrl.ts"
+import {
+  categoryChildrenOf,
+  categoryIdsWithChildren,
+  categoryRoots,
+  rootIdContainingCategory,
+  type CategoryBranchRow,
+} from "../lib/marketplaceCategoryTree.ts"
 
 const MAX_JOB_IMAGES = 3
 const MAX_INPUT_IMAGE_BYTES = 10 * 1024 * 1024
@@ -66,7 +73,13 @@ const CONTACT_LABELS: Record<string, string> = {
   phone: "ტელეფონი",
 }
 
-type CategoryRow = { id: string; name_ka: string; is_active: boolean | null; sort_order: number | null }
+type CategoryRow = {
+  id: string
+  name_ka: string
+  is_active: boolean | null
+  sort_order: number | null
+  parent_id: string | null
+}
 type SkillRow = { id: string; name: string; category_id: string | null; is_approved: boolean | null }
 type SubcategoryRow = { id: string; name_ka: string; category_id: string; is_active: boolean | null }
 
@@ -122,6 +135,7 @@ export default function PostJobPage() {
 
   const [title, setTitle] = useState("")
   const [categoryId, setCategoryId] = useState("")
+  const [rootCategoryId, setRootCategoryId] = useState("")
   const [subcategoryId, setSubcategoryId] = useState("")
   const [description, setDescription] = useState("")
   const [isUrgent, setIsUrgent] = useState(false)
@@ -172,16 +186,13 @@ export default function PostJobPage() {
           return
         }
 
-        const [{ data: hirerRow, error: hirerErr }, { data: catRows, error: catErr }, { data: skillRows, error: skillErr }] =
-          await Promise.all([
-            supabase.from("hirer_profiles").select("id").eq("user_id", user.id).maybeSingle(),
-            supabase.from("categories").select("id,name_ka,is_active,sort_order").eq("is_active", true).order("sort_order", { ascending: true }),
-            supabase.from("skills").select("id,name,category_id,is_approved").eq("is_approved", true).order("name", { ascending: true }),
-          ])
+        const [{ data: hirerRow, error: hirerErr }, { data: catRows, error: catErr }] = await Promise.all([
+          supabase.from("hirer_profiles").select("id").eq("user_id", user.id).maybeSingle(),
+          supabase.from("categories").select("id,name_ka,is_active,sort_order,parent_id").eq("is_active", true).order("sort_order", { ascending: true }),
+        ])
 
         if (hirerErr) throw hirerErr
         if (catErr) throw catErr
-        if (skillErr) throw skillErr
 
         if (!hirerRow?.id) {
           navigate("/onboarding", { replace: true })
@@ -189,8 +200,26 @@ export default function PostJobPage() {
         }
 
         setHirerProfileId(hirerRow.id)
-        setCategories(catRows ?? [])
-        setAllSkills(skillRows ?? [])
+        const fullCats: CategoryRow[] = (catRows ?? []).map((row: Record<string, unknown>) => ({
+          id: String(row.id ?? ""),
+          name_ka: String(row.name_ka ?? ""),
+          is_active: (row.is_active as boolean | null | undefined) ?? null,
+          sort_order: (row.sort_order as number | null | undefined) ?? null,
+          parent_id: (row.parent_id as string | null | undefined) ?? null,
+        }))
+        setCategories(fullCats)
+
+        const { data: skillRows, error: skillErr } = await supabase
+          .from("skills")
+          .select("id,name,category_id,is_approved")
+          .eq("is_approved", true)
+          .order("name", { ascending: true })
+        if (skillErr) {
+          if (import.meta.env.DEV) console.warn("[PostJob] skills catalog:", skillErr)
+          setAllSkills([])
+        } else {
+          setAllSkills(skillRows ?? [])
+        }
 
         if (jobId) {
           const { data: jobRow, error: jobErr } = await supabase
@@ -208,18 +237,41 @@ export default function PostJobPage() {
           const { data: jsRows, error: jsErr } = await supabase.from("job_skills").select("skill_id").eq("job_id", jobRow.id)
           if (jsErr) throw jsErr
 
+          const byId = new Map(fullCats.map((c) => [c.id, c]))
+          let midForQuery = String(jobRow.category_id ?? "")
+          const initialNode = midForQuery ? byId.get(midForQuery) : undefined
+          if (initialNode && initialNode.parent_id == null && jobRow.subcategory_id) {
+            const { data: loneSub } = await supabase.from("subcategories").select("category_id").eq("id", jobRow.subcategory_id).maybeSingle()
+            if (loneSub?.category_id) midForQuery = loneSub.category_id
+          }
+
           const { data: subRows, error: subErr } = await supabase
             .from("subcategories")
             .select("id,name_ka,category_id,is_active")
-            .eq("category_id", jobRow.category_id)
+            .eq("category_id", midForQuery)
             .eq("is_active", true)
             .order("name_ka", { ascending: true })
 
           if (subErr) throw subErr
 
+          let resolvedMid = midForQuery
+          let resolvedRoot = ""
+          if (resolvedMid) {
+            const node = byId.get(resolvedMid)
+            const hasKids = categoryIdsWithChildren(fullCats as CategoryBranchRow[])
+            if (node?.parent_id) {
+              resolvedRoot = rootIdContainingCategory(fullCats as CategoryBranchRow[], resolvedMid)
+            } else if (hasKids.has(resolvedMid)) {
+              resolvedRoot = resolvedMid
+              resolvedMid = ""
+            } else {
+              resolvedRoot = resolvedMid
+            }
+          }
+          setRootCategoryId(resolvedRoot)
+          setCategoryId(resolvedMid)
           setSubcategories(subRows ?? [])
           setTitle(jobRow.title)
-          setCategoryId(jobRow.category_id)
           setSubcategoryId(jobRow.subcategory_id ?? "")
           setDescription(jobRow.description)
           setIsUrgent(jobRow.is_urgent)
@@ -243,7 +295,7 @@ export default function PostJobPage() {
           )
         }
       } catch (e) {
-        setPageError(e instanceof Error ? e.message : "გვერდის ჩატვირთვა ვერ მოხერხდა.")
+        setPageError(formatSupabaseClientError(e, "გვერდის ჩატვირთვა ვერ მოხერხდა."))
       } finally {
         setLoading(false)
       }
@@ -254,7 +306,7 @@ export default function PostJobPage() {
 
   useEffect(() => {
     const loadSubs = async () => {
-      if (!supabase || !categoryId) {
+      if (!supabase || !specializationParentCategoryId) {
         setSubcategories([])
         setSubcategoryId("")
         return
@@ -262,7 +314,7 @@ export default function PostJobPage() {
       const { data, error } = await supabase
         .from("subcategories")
         .select("id,name_ka,category_id,is_active")
-        .eq("category_id", categoryId)
+        .eq("category_id", specializationParentCategoryId)
         .eq("is_active", true)
         .order("name_ka", { ascending: true })
 
@@ -275,14 +327,33 @@ export default function PostJobPage() {
     }
 
     void loadSubs()
-  }, [categoryId])
+  }, [specializationParentCategoryId])
+
+  const categoryRootsList = useMemo(() => categoryRoots(categories as CategoryBranchRow[]), [categories])
+  const categoryMidsList = useMemo(
+    () => (rootCategoryId ? categoryChildrenOf(categories as CategoryBranchRow[], rootCategoryId) : []),
+    [categories, rootCategoryId],
+  )
+
+  const specializationParentCategoryId = useMemo(() => {
+    if (categoryId.trim()) return categoryId.trim()
+    if (rootCategoryId && categoryMidsList.length === 0) return rootCategoryId
+    return ""
+  }, [categoryId, rootCategoryId, categoryMidsList.length])
 
   const todayIso = useMemo(() => {
     const d = new Date()
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
   }, [])
 
-  const categoryNameKa = useMemo(() => categories.find((c) => c.id === categoryId)?.name_ka ?? "არ არის არჩეული", [categories, categoryId])
+  const rootCategoryNameKa = useMemo(
+    () => categories.find((c) => c.id === rootCategoryId)?.name_ka ?? "არ არის არჩეული",
+    [categories, rootCategoryId],
+  )
+  const midCategoryNameKa = useMemo(() => {
+    if (categoryMidsList.length === 0) return "—"
+    return categories.find((c) => c.id === categoryId)?.name_ka ?? "არ არის არჩეული"
+  }, [categories, categoryId, categoryMidsList.length])
 
   const subcategoryNameKa = useMemo(
     () => subcategories.find((s) => s.id === subcategoryId)?.name_ka ?? "არ არის არჩეული",
@@ -364,8 +435,10 @@ export default function PostJobPage() {
       e.title = "სათაური არ უნდა აღემატებოდეს 100 სიმბოლოს."
     }
 
-    if (!categoryId) {
-      e.categoryId = "კატეგორია სავალდებულოა."
+    if (!rootCategoryId) {
+      e.categoryId = "category სავალდებულოა."
+    } else if (categoryMidsList.length > 0 && !categoryId) {
+      e.categoryId = "subcategory სავალდებულოა."
     }
 
     if (!description.trim()) {
@@ -577,9 +650,10 @@ export default function PostJobPage() {
               <p className="break-words whitespace-pre-wrap text-sm text-slate-600 [overflow-wrap:anywhere]">{description.trim()}</p>
 
               <div className="flex flex-wrap gap-2 text-xs">
-                <span className="rounded-full bg-white px-3 py-1 text-slate-700">კატეგორია: {categoryNameKa}</span>
+                <span className="rounded-full bg-white px-3 py-1 text-slate-700">category: {rootCategoryNameKa}</span>
+                <span className="rounded-full bg-white px-3 py-1 text-slate-700">subcategory: {midCategoryNameKa}</span>
                 {subcategoryId ? (
-                  <span className="rounded-full bg-white px-3 py-1 text-slate-700">ქვეკატეგორია: {subcategoryNameKa}</span>
+                  <span className="rounded-full bg-white px-3 py-1 text-slate-700">სპეციალიზაცია: {subcategoryNameKa}</span>
                 ) : null}
                 <span className="rounded-full bg-white px-3 py-1 text-slate-700">
                   ბიუჯეტი: {budgetMin} - {budgetMax} ₾ ({BUDGET_TYPE_LABELS[budgetType] ?? budgetType})
@@ -657,38 +731,78 @@ export default function PostJobPage() {
                   {fieldErrors.title ? <p className="mt-1 text-sm text-red-600">{fieldErrors.title}</p> : null}
                 </label>
 
-                <label className="block">
-                  <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">
-                    კატეგორია <span className="text-red-500">*</span>
-                  </span>
-                  <select
-                    id="post-job-field-categoryId"
-                    value={categoryId}
-                    onChange={(e) => {
-                      setCategoryId(e.target.value)
-                      setSubcategoryId("")
-                    }}
-                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#0088FF] ring-[#0088FF]/35 focus:ring-2"
-                  >
-                    <option value="">აირჩიე კატეგორია</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name_ka}
+                <div id="post-job-field-categoryId" className="space-y-4">
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">
+                      category <span className="text-red-500">*</span>
+                    </span>
+                    <select
+                      value={rootCategoryId}
+                      onChange={(e) => {
+                        const nextRoot = e.target.value
+                        setRootCategoryId(nextRoot)
+                        setSubcategoryId("")
+                        const mids = nextRoot ? categoryChildrenOf(categories as CategoryBranchRow[], nextRoot) : []
+                        if (!nextRoot) {
+                          setCategoryId("")
+                        } else if (mids.length === 0) {
+                          setCategoryId(nextRoot)
+                        } else {
+                          setCategoryId("")
+                        }
+                      }}
+                      className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#0088FF] ring-[#0088FF]/35 focus:ring-2"
+                    >
+                      <option value="">აირჩიე category</option>
+                      {categoryRootsList.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name_ka}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">
+                      subcategory {categoryMidsList.length > 0 ? <span className="text-red-500">*</span> : null}
+                    </span>
+                    <select
+                      value={categoryId}
+                      disabled={!rootCategoryId || categoryMidsList.length === 0}
+                      onChange={(e) => {
+                        setCategoryId(e.target.value)
+                        setSubcategoryId("")
+                      }}
+                      className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#0088FF] ring-[#0088FF]/35 focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100"
+                    >
+                      <option value="">
+                        {!rootCategoryId
+                          ? "ჯერ აირჩიე category"
+                          : categoryMidsList.length === 0
+                            ? "ამ category-სთვის subcategory არ არის"
+                            : "აირჩიე subcategory"}
                       </option>
-                    ))}
-                  </select>
-                  {fieldErrors.categoryId ? <p className="mt-1 text-sm text-red-600">{fieldErrors.categoryId}</p> : null}
-                </label>
+                      {categoryMidsList.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name_ka}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {fieldErrors.categoryId ? <p className="text-sm text-red-600">{fieldErrors.categoryId}</p> : null}
+                </div>
 
                 <label className="block">
-                  <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">ქვეკატეგორია</span>
+                  <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">სპეციალიზაცია</span>
                   <select
                     value={subcategoryId}
                     onChange={(e) => setSubcategoryId(e.target.value)}
-                    disabled={!categoryId}
+                    disabled={!specializationParentCategoryId}
                     className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#0088FF] ring-[#0088FF]/35 focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100"
                   >
-                    <option value="">აირჩიე ქვეკატეგორია</option>
+                    <option value="">
+                      {specializationParentCategoryId ? "აირჩიე სპეციალიზაცია" : "ჯერ აირჩიე subcategory ან category"}
+                    </option>
                     {subcategories.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name_ka}

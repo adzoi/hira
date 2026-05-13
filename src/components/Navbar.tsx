@@ -15,7 +15,7 @@ import { supabase } from "../lib/supabase"
 const navLinks = [
   { label: "მთავარი", to: "/" },
   { label: "ფრილანსერები", to: "/browse" },
-  { label: "ლისტინგები", to: "/listings" },
+  { label: "განცხადებები", to: "/listings" },
   { label: "სამუშაოები", to: "/jobs" },
   { label: "დამქირავებლები", to: "/hirers" },
 ]
@@ -385,7 +385,7 @@ export default function Navbar() {
                     : "border-[#B3DEFF] bg-[#E8F4FF] text-[#0088FF] hover:border-[#80C8FF] hover:bg-[#D4EEFF]"
                 }`}
               >
-                დაშბორდი
+                მართვის პანელი
               </Link>
               <Link
                 to={postListingOrJob.to}
@@ -604,7 +604,7 @@ export default function Navbar() {
                 ) : null}
               </button>
               <Link to="/dashboard" onClick={() => setMobileMenuOpen(false)} className="rounded-md px-3 py-3 text-sm font-semibold text-[#1B2B4B]">
-                დაშბორდი
+                მართვის პანელი
               </Link>
               <Link
                 to={postListingOrJob.to}

@@ -12,6 +12,11 @@ import { parseGitHubField, parseLinkedInField, parseOptionalWebUrl } from "../li
 import { avatarImageUrl, avatarPublicUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 
+/** Skills without a valid mid-level category_id (picker bucket). */
+const SKILL_PICKER_UNCATEGORIZED = "__uncategorized__"
+
+type SkillCategoryRow = { id: string; name_ka: string; parent_id: string | null }
+
 function formatSaveError(err: unknown): string {
   if (err instanceof Error) return err.message
   if (typeof err === "object" && err !== null) {
@@ -100,10 +105,10 @@ export default function ProfilePage() {
   const [serviceListings, setServiceListings] = useState<ServiceListingForm[]>([])
   const [initialServiceIds, setInitialServiceIds] = useState<string[]>([])
   const [skillsCatalog, setSkillsCatalog] = useState<Array<{ id: string; name: string; category_id: string | null }>>([])
-  const [categoriesMap, setCategoriesMap] = useState<Record<string, string>>({})
+  const [skillCategories, setSkillCategories] = useState<SkillCategoryRow[]>([])
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
-  /** Georgian category label key in groupedSkills (matches onboarding). */
-  const [skillFocusCategory, setSkillFocusCategory] = useState("")
+  /** Mid-level marketplace category id, or SKILL_PICKER_UNCATEGORIZED. */
+  const [skillFocusCategoryId, setSkillFocusCategoryId] = useState("")
   const [experiences, setExperiences] = useState<ExperienceForm[]>([])
   const [educations, setEducations] = useState<EducationForm[]>([])
 
@@ -125,16 +130,34 @@ export default function ProfilePage() {
   const [emailAccordionOpen, setEmailAccordionOpen] = useState(false)
   const [passwordAccordionOpen, setPasswordAccordionOpen] = useState(false)
 
-  const groupedSkills = useMemo(
+  const skillPickerMidCategories = useMemo(
     () =>
-      skillsCatalog.reduce<Record<string, Array<{ id: string; name: string }>>>((acc, skill) => {
-        const key = skill.category_id ? categoriesMap[skill.category_id] ?? "სხვა" : "სხვა"
-        if (!acc[key]) acc[key] = []
-        acc[key].push({ id: skill.id, name: skill.name })
-        return acc
-      }, {}),
-    [skillsCatalog, categoriesMap],
+      skillCategories
+        .filter((c) => Boolean(c.parent_id))
+        .sort((a, b) => a.name_ka.localeCompare(b.name_ka, "ka")),
+    [skillCategories],
   )
+
+  const skillsByCategoryId = useMemo(() => {
+    const known = new Set(skillCategories.map((c) => c.id))
+    const m = new Map<string, Array<{ id: string; name: string }>>()
+    for (const sk of skillsCatalog) {
+      const cid = sk.category_id && known.has(sk.category_id) ? sk.category_id : SKILL_PICKER_UNCATEGORIZED
+      const list = m.get(cid) ?? []
+      list.push({ id: sk.id, name: sk.name })
+      m.set(cid, list)
+    }
+    for (const [, list] of m) list.sort((a, b) => a.name.localeCompare(b.name))
+    return m
+  }, [skillsCatalog, skillCategories])
+
+  const uncategorizedSkillCount = skillsByCategoryId.get(SKILL_PICKER_UNCATEGORIZED)?.length ?? 0
+
+  const skillFocusCategoryLabel = useMemo(() => {
+    if (!skillFocusCategoryId) return ""
+    if (skillFocusCategoryId === SKILL_PICKER_UNCATEGORIZED) return "სხვა"
+    return skillCategories.find((c) => c.id === skillFocusCategoryId)?.name_ka ?? "კატეგორია"
+  }, [skillFocusCategoryId, skillCategories])
 
   const skillNameById = useMemo(() => {
     const m = new Map<string, string>()
@@ -229,7 +252,11 @@ export default function ProfilePage() {
                 .order("end_date", { ascending: false }),
               supabase.from("freelancer_skills").select("skill_id").eq("freelancer_profile_id", fp.id),
               supabase.from("skills").select("id,name,category_id").eq("is_approved", true).order("name"),
-              supabase.from("categories").select("id,name_ka"),
+              supabase
+                .from("categories")
+                .select("id,name_ka,parent_id")
+                .eq("is_active", true)
+                .order("sort_order", { ascending: true }),
             ])
 
             if (servicesError) throw servicesError
@@ -271,15 +298,13 @@ export default function ProfilePage() {
             )
             setSelectedSkillIds((skillRows ?? []).map((row) => row.skill_id).filter(Boolean))
             setSkillsCatalog((allSkillsRows ?? []) as Array<{ id: string; name: string; category_id: string | null }>)
-            const map: Record<string, string> = {}
-            for (const c of categoriesData ?? []) map[c.id] = c.name_ka
-            setCategoriesMap(map)
+            setSkillCategories((categoriesData ?? []) as SkillCategoryRow[])
           } else {
             setServiceListings([])
             setInitialServiceIds([])
             setSelectedSkillIds([])
             setSkillsCatalog([])
-            setCategoriesMap({})
+            setSkillCategories([])
             setExperiences([])
             setEducations([])
           }
@@ -356,8 +381,8 @@ export default function ProfilePage() {
       setAcceptingNewWork(next)
       setSuccess(
         next
-          ? "მითითებულია, რომ ხელმისაწვდომი ხარ ახალი სამუშაოებისთვის."
-          : "მითითებულია, რომ დროებით ხელმიუწვდომელი ხარ — ეს ჩანს ბაზარზე; დამქირავებლებს შეთავაზების გაგზავნა მაინც შეუძლიათ.",
+          ? "ხელმისაწვდომი"
+          : "დროებით ხელმიუწვდომელი",
       )
     } catch (e) {
       setError(formatSaveError(e))
@@ -565,7 +590,7 @@ export default function ProfilePage() {
           .filter((item) => item.title || item.organization || item.startDate || item.endDate || item.description)
 
         if (normalizedExperience.length > 10) {
-          throw new Error("გამოცდილების მაქსიმუმ 10 ჩანაწერი შეგიძლია დაამატო.")
+          throw new Error("შესაძლებელია მაქსიმუმ 10 გამოცდილების დამატება.")
         }
 
         for (let i = 0; i < normalizedExperience.length; i += 1) {
@@ -607,7 +632,7 @@ export default function ProfilePage() {
           .filter((item) => item.institution || item.degreeLevel || item.fieldOfStudy || item.endDate)
 
         if (normalizedEducation.length > 10) {
-          throw new Error("განათლების მაქსიმუმ 10 ჩანაწერი შეგიძლია დაამატო.")
+          throw new Error("შესაძლებელია მაქსიმუმ 10 განათლების დამატება.")
         }
         for (let i = 0; i < normalizedEducation.length; i += 1) {
           const item = normalizedEducation[i]
@@ -754,14 +779,14 @@ export default function ProfilePage() {
       return
     }
     if (t.toLowerCase() === accountEmail.trim().toLowerCase()) {
-      setAccountErr("ახალი ელფოსტა უნდა განსხვავდებოდეს ახლანდელი მისამართისგან.")
+      setAccountErr("ახალი ელფოსტა უნდა განსხვავდებოდეს მიმდინარე ელფოსტის მისამართისგან.")
       return
     }
     setEmailBusy(true)
     try {
       const { error: upErr } = await supabase.auth.updateUser({ email: t })
       if (upErr) throw upErr
-      setAccountMessage("დასტური გაიგზავნა ახალ ელფოსტაზე. გახსენით ბმული და დაადასტურეთ ცვლილება.")
+      setAccountMessage("დასტურის მეილი გაიგზავნა ახალ ელფოსტაზე. გახსენით ბმული და დაადასტურეთ ცვლილება.")
       setNewEmail("")
     } catch (err) {
       setAccountErr(formatSaveError(err))
@@ -775,15 +800,15 @@ export default function ProfilePage() {
     setAccountErr("")
     setAccountMessage("")
     if (!currentPasswordPw || !newPassword) {
-      setAccountErr("შეიყვანეთ ახლანდელი და ახალი პაროლი.")
+      setAccountErr("შეიყვანეთ მიმდინარე და ახალი პაროლი.")
       return
     }
     if (newPassword.length < 6) {
-      setAccountErr("ახალი პაროლი უნდა იყოს მინიმუმ 6 სიმბოლო.")
+      setAccountErr("ახალი პაროლი უნდა შედგებოდეს მინიმუმ 6 სიმბოლოსგან.")
       return
     }
     if (newPassword !== confirmNewPassword) {
-      setAccountErr("ახალი პაროლის გამეორება არ ემთხვევა.")
+      setAccountErr("პაროლი არ ემთხვევა.")
       return
     }
     setPasswordBusy(true)
@@ -794,7 +819,7 @@ export default function ProfilePage() {
         password: currentPasswordPw,
       })
       if (signErr) {
-        setAccountErr("ახლანდელი პაროლი არასწორია.")
+        setAccountErr("პაროლი არასწორია.")
         return
       }
       const { error: pwErr } = await supabase.auth.updateUser({ password: newPassword })
@@ -887,31 +912,27 @@ export default function ProfilePage() {
           <div className="space-y-5">
             <div>
               <label className="mb-1 block text-base font-semibold text-gray-900">
-                სახელი და გვარი <span className="text-[#EF4444]">*</span>
+                სახელი <span className="text-[#EF4444]">*</span>
               </label>
               <input className="h-11 w-full rounded-lg border border-slate-300 px-3" value={fullName} onChange={(e)=>setFullName(e.target.value)} />
             </div>
             <div>
-              <label className="mb-1 block text-base font-semibold text-gray-900">ქალაქი / ლოკაცია</label>
+              <label className="mb-1 block text-base font-semibold text-gray-900">ლოკაცია</label>
               <LocationFilterSelect
                 value={city}
                 onChange={setCity}
                 variant="form"
                 className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
               />
-              <p className="mt-1 text-xs text-slate-500">დისტანციური ან შერეული ფორმატიც შეგიძლიათ აირჩიოთ.</p>
             </div>
             <div>
-              <label className="mb-1 block text-base font-semibold text-gray-900">ტელეფონის ნომერი</label>
+              <label className="mb-1 block text-base font-semibold text-gray-900">ნომერი</label>
               <input className="h-11 w-full rounded-lg border border-slate-300 px-3" value={phone} onChange={(e)=>setPhone(e.target.value)} />
             </div>
           </div>
 
           <section className="mt-8 rounded-xl border border-slate-200 bg-slate-50 p-6">
             <h2 className="text-lg font-semibold text-[#0088FF]">ელფოსტა და პაროლი</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              ანგარიშის შესვლის ელფოსტასა და პაროლს ცვლი აქ. პროფილის დასამახსოვრებლად ქვემოთ ისევ დააჭირე „შენახვა“, თუ სხვა ველებიც შეცვლილი გაქვს.
-            </p>
             <p className="mt-1 text-sm text-[#1B2B4B]">
               <span className="font-medium">მიმდინარე ელფოსტა:</span> {accountEmail || "—"}
             </p>
@@ -978,7 +999,7 @@ export default function ProfilePage() {
             {passwordAccordionOpen ? (
               <div className="mt-3 space-y-3 rounded-lg border border-slate-100 bg-white p-4">
                 <label className="block">
-                  <span className="mb-1 block text-base font-semibold text-gray-900">ახლანდელი პაროლი</span>
+                  <span className="mb-1 block text-base font-semibold text-gray-900">მიმდინარე პაროლი</span>
                   <input
                     type="password"
                     autoComplete="current-password"
@@ -1006,7 +1027,7 @@ export default function ProfilePage() {
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-base font-semibold text-gray-900">ახალი პაროლის გამეორება</span>
+                  <span className="mb-1 block text-base font-semibold text-gray-900">გაიმეორე პაროლი</span>
                   <input
                     type="password"
                     autoComplete="new-password"
@@ -1037,11 +1058,7 @@ export default function ProfilePage() {
                 <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-base font-semibold text-gray-900">ხელმისაწვდომობა ახალი სამუშაოზე</p>
-                      <p className="mt-1 text-xs text-slate-600">
-                        გამორთე, თუ დროებით დაკავებული ხარ — ეს ჩანს ფრილანსერებისა და ლისტინგების გვერდებზე. დამქირავებლებს შეთავაზების
-                        გაგზავნა მაინც შეუძლიათ.
-                      </p>
+                      <p className="text-base font-semibold text-gray-900">სტატუსი</p>
                     </div>
                     <button
                       type="button"
@@ -1062,7 +1079,7 @@ export default function ProfilePage() {
                     </button>
                   </div>
                   <p className="mt-2 text-xs font-medium text-slate-700">
-                    {acceptingNewWork ? "სტატუსი: ხელმისაწვდომი ხარ ახალი სამუშაოებისთვის." : "სტატუსი: დროებით ხელმიუწვდომელი ხარ ახალი სამუშაოებისთვის."}
+                    {acceptingNewWork ? "ხელმისაწვდომი." : "დროებით მიუწვდომელი."}
                   </p>
                 </div>
               ) : null}
@@ -1071,7 +1088,7 @@ export default function ProfilePage() {
                 <input className="h-11 w-full rounded-lg border border-slate-300 px-3" placeholder="React Developer, Graphic Designer" value={professionalTitle} onChange={(e)=>setProfessionalTitle(e.target.value)} />
               </div>
               <div>
-                <label className="mb-1 block text-base font-semibold text-gray-900">ბიოგრაფია</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">ბიო</label>
                 <textarea className="w-full rounded-lg border border-slate-300 px-3 py-2" rows={4} value={bio} onChange={(e)=>setBio(e.target.value)} />
                 <p className="mt-1 text-right text-xs text-slate-500">{bio.length}/2000</p>
               </div>
@@ -1131,7 +1148,6 @@ export default function ProfilePage() {
                     </ul>
                   ) : null}
                 </div>
-                <p className="mt-1 text-xs text-slate-500">დააჭირე „+ ენა“ და აირჩიე სიიდან — სია იშლება ქვემოთ.</p>
               </div>
               <div>
                 <label className="mb-1 block text-base font-semibold text-gray-900">LinkedIn პროფილი</label>
@@ -1145,7 +1161,7 @@ export default function ProfilePage() {
                       if (on) setLinkedinUrl("")
                     }}
                   />
-                  არ მაქვს LinkedIn პროფილი
+                  არ მაქვს
                 </label>
                 <input
                   type="url"
@@ -1156,9 +1172,6 @@ export default function ProfilePage() {
                   value={linkedinUrl}
                   onChange={(e) => setLinkedinUrl(e.target.value)}
                 />
-                <p className="mt-1 text-xs text-slate-500">
-                  {noLinkedinProfile ? "ბმული არ შეინახება." : "მხოლოდ linkedin.com ბმული (in/company/school)."}{" "}
-                </p>
               </div>
               <div>
                 <label className="mb-1 block text-base font-semibold text-gray-900">GitHub პროფილი</label>
@@ -1172,7 +1185,7 @@ export default function ProfilePage() {
                       if (on) setGithubUrl("")
                     }}
                   />
-                  არ მაქვს GitHub პროფილი
+                  არ მაქვს
                 </label>
                 <input
                   type="url"
@@ -1183,12 +1196,9 @@ export default function ProfilePage() {
                   value={githubUrl}
                   onChange={(e) => setGithubUrl(e.target.value)}
                 />
-                <p className="mt-1 text-xs text-slate-500">
-                  {noGithubProfile ? "ბმული არ შეინახება." : "მხოლოდ github.com."}{" "}
-                </p>
               </div>
               <div>
-                <label className="mb-1 block text-base font-semibold text-gray-900">პორტფოლიო ვებსაიტი</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">პორტფოლიო</label>
                 <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm text-slate-700">
                   <input
                     type="checkbox"
@@ -1199,7 +1209,7 @@ export default function ProfilePage() {
                       if (on) setPortfolioUrl("")
                     }}
                   />
-                  არ მაქვს პორტფოლიოს ვებსაიტი
+                  არ მაქვს
                 </label>
                 <input
                   type="url"
@@ -1210,9 +1220,6 @@ export default function ProfilePage() {
                   value={portfolioUrl}
                   onChange={(e) => setPortfolioUrl(e.target.value)}
                 />
-                <p className="mt-1 text-xs text-slate-500">
-                  {noPortfolioWebsite ? "ბმული არ შეინახება." : "ნებისმიერი სწორი https ბმული."}
-                </p>
               </div>
               <div className="space-y-3">
                 <label className="mb-1 block text-base font-semibold text-gray-900">უნარები (მინ. 3)</label>
@@ -1228,25 +1235,35 @@ export default function ProfilePage() {
                   <select
                     id="profile-skill-category"
                     className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#0088FF] focus:ring-2 focus:ring-[#0088FF]/25"
-                    value={skillFocusCategory}
-                    onChange={(e) => setSkillFocusCategory(e.target.value)}
+                    value={skillFocusCategoryId}
+                    onChange={(e) => setSkillFocusCategoryId(e.target.value)}
                   >
                     <option value="">აირჩიე კატეგორია…</option>
-                    {Object.keys(groupedSkills).map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
+                    {skillPickerMidCategories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name_ka}
                       </option>
                     ))}
+                    {uncategorizedSkillCount > 0 ? (
+                      <option value={SKILL_PICKER_UNCATEGORIZED}>სხვა</option>
+                    ) : null}
                   </select>
                 </div>
 
-                {skillFocusCategory && groupedSkills[skillFocusCategory] ? (
-                  <div className="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
-                    <p className="mb-2 text-sm font-semibold text-[#0088FF]">{skillFocusCategory}</p>
-                    {(() => {
-                      const list = groupedSkills[skillFocusCategory]!
-                      const selectedInCategory = list.filter((s) => selectedSkillIds.includes(s.id))
+                {skillFocusCategoryId ? (
+                  (() => {
+                    const list = skillsByCategoryId.get(skillFocusCategoryId) ?? []
+                    if (list.length === 0) {
                       return (
+                        <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-3 py-3 text-xs text-slate-500">
+                          ამ კატეგორიაში დამტკიცებული უნარები ჯერ არ არის.
+                        </p>
+                      )
+                    }
+                    const selectedInCategory = list.filter((s) => selectedSkillIds.includes(s.id))
+                    return (
+                      <div className="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
+                        <p className="mb-2 text-sm font-semibold text-[#0088FF]">{skillFocusCategoryLabel}</p>
                         <>
                           {selectedInCategory.length > 0 ? (
                             <div className="mb-2 flex flex-wrap gap-1.5">
@@ -1268,11 +1285,11 @@ export default function ProfilePage() {
                             <p className="mb-2 text-xs text-slate-500">ამ კატეგორიიდან ჯერ არაფერი არ არის არჩეული.</p>
                           )}
                           <label className="sr-only" htmlFor="profile-skill-add-active">
-                            უნარის დამატება — {skillFocusCategory}
+                            უნარის დამატება — {skillFocusCategoryLabel}
                           </label>
                           <select
                             id="profile-skill-add-active"
-                            key={`profile-skill-dd-${skillFocusCategory}-${selectedInCategory.map((s) => s.id).join("-")}`}
+                            key={`profile-skill-dd-${skillFocusCategoryId}-${selectedInCategory.map((s) => s.id).join("-")}`}
                             className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#0088FF] focus:ring-2 focus:ring-[#0088FF]/25"
                             defaultValue=""
                             onChange={(e) => {
@@ -1291,9 +1308,9 @@ export default function ProfilePage() {
                             ))}
                           </select>
                         </>
-                      )
-                    })()}
-                  </div>
+                      </div>
+                    )
+                  })()
                 ) : (
                   <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-3 py-3 text-xs text-slate-500">
                     კატეგორიის ასარჩევად გამოიყენე ზემოთ სია — აქ გამოჩნდება შესაბამისი ტეგები.

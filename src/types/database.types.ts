@@ -17,6 +17,7 @@ export interface Database {
           is_active: boolean
           name_en: string
           name_ka: string
+          parent_id: string | null
           slug: string
           sort_order: number
         }
@@ -27,6 +28,7 @@ export interface Database {
           is_active?: boolean
           name_en: string
           name_ka: string
+          parent_id?: string | null
           slug: string
           sort_order?: number
         }
@@ -37,6 +39,7 @@ export interface Database {
           is_active?: boolean
           name_en?: string
           name_ka?: string
+          parent_id?: string | null
           slug?: string
           sort_order?: number
         }
@@ -463,7 +466,7 @@ export interface Database {
           budget_max: number | null
           budget_min: number | null
           budget_type: string
-          category_id: string
+          category_id: string | null
           contact_preference: string
           created_at: string
           description: string
@@ -491,7 +494,7 @@ export interface Database {
           budget_max?: number | null
           budget_min?: number | null
           budget_type: string
-          category_id: string
+          category_id?: string | null
           contact_preference: string
           created_at?: string
           description: string

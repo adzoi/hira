@@ -348,17 +348,12 @@ function HomePage() {
       <section className="bg-[#0088FF]">
         <div className="mx-auto grid w-full max-w-[1200px] items-stretch gap-8 px-4 py-10 md:px-6 lg:grid-cols-2 lg:py-16">
           <div className="flex flex-col justify-center">
-            <p className="text-sm font-semibold uppercase tracking-widest text-[#F59E0B]">
-              იპოვე 
-            </p>
             <h1 className="mt-3 text-[28px] font-extrabold leading-tight text-white lg:text-[48px]">
               საუკეთესო
               <br />
               ფრილანსერები
             </h1>
-            <p className="mt-4 max-w-lg text-base leading-7 text-slate-200">
-              ითანამშრომლე გამოცდილ პროფესიონალებთან უსაფრთხო, სწრაფ და მოქნილ პლატფორმაზე.
-            </p>
+
 
             <div className="mt-8 flex flex-col gap-2 rounded-xl bg-white p-3 shadow-lg sm:flex-row sm:items-center">
               <input
@@ -368,7 +363,7 @@ function HomePage() {
                 onKeyDown={(event) => {
                   if (event.key === "Enter") handleSearch()
                 }}
-                placeholder="რომელ უნარს ეძებ?"
+                placeholder="რას ეძებ?"
                 className="h-10 min-w-0 flex-1 rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#0088FF]"
               />
               <button

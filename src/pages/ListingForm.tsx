@@ -3,8 +3,15 @@ import { Link, useNavigate, useParams } from "react-router-dom"
 import Navbar from "../components/Navbar"
 import VIPUpgrade from "../components/VIPUpgrade"
 import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
-import { isSupabaseConfigured, supabase } from "../lib/supabase"
+import { formatSupabaseClientError, isSupabaseConfigured, supabase } from "../lib/supabase"
 import { serviceImageThumbnailUrl } from "../lib/storageImageUrl.ts"
+import {
+  categoryChildrenOf,
+  categoryIdsWithChildren,
+  categoryRoots,
+  rootIdContainingCategory,
+  type CategoryBranchRow,
+} from "../lib/marketplaceCategoryTree.ts"
 
 type ListingMeta = {
   categoryId: string | null
@@ -110,7 +117,7 @@ export default function ListingFormPage() {
   const [error, setError] = useState("")
 
   const [freelancerProfileId, setFreelancerProfileId] = useState("")
-  const [categories, setCategories] = useState<Array<{ id: string; name_ka: string }>>([])
+  const [categories, setCategories] = useState<CategoryBranchRow[]>([])
   const [availableTags, setAvailableTags] = useState<TagOption[]>([])
 
   const [title, setTitle] = useState("")
@@ -118,7 +125,9 @@ export default function ListingFormPage() {
   const [price, setPrice] = useState("")
   const [deliveryDays, setDeliveryDays] = useState("3")
   const [isActive, setIsActive] = useState(true)
+  /** Mid-level category (e.g. Web Development); stored in listing meta as `categoryId`. */
   const [categoryId, setCategoryId] = useState("")
+  const [rootCategoryId, setRootCategoryId] = useState("")
   const [subcategoryId, setSubcategoryId] = useState("")
   const [subcategories, setSubcategories] = useState<SubcategoryRow[]>([])
   const [tags, setTags] = useState<string[]>([])
@@ -148,31 +157,47 @@ export default function ListingFormPage() {
           return
         }
 
-        const [{ data: fp, error: fpError }, { data: categoryRows, error: categoryError }, { data: skillRows, error: skillError }] = await Promise.all([
+        const [{ data: fp, error: fpError }, { data: categoryRows, error: categoryError }] = await Promise.all([
           supabase.from("freelancer_profiles").select("id").eq("user_id", user.id).maybeSingle(),
-          supabase.from("categories").select("id,name_ka").eq("is_active", true).order("sort_order"),
-          supabase.from("skills").select("name,category_id").eq("is_approved", true).order("name"),
+          supabase.from("categories").select("id,name_ka,parent_id").eq("is_active", true).order("sort_order"),
         ])
 
         if (fpError || !fp) throw new Error("ფრილანსერის პროფილი ვერ მოიძებნა.")
         if (categoryError) throw categoryError
-        if (skillError) throw skillError
+
+        const fullCats = (categoryRows ?? []).map((row: { id?: string; name_ka?: string; parent_id?: string | null }) => ({
+          id: String(row.id ?? ""),
+          name_ka: String(row.name_ka ?? ""),
+          parent_id: row.parent_id ?? null,
+        })) as CategoryBranchRow[]
 
         setFreelancerProfileId(fp.id)
-        setCategories((categoryRows ?? []) as Array<{ id: string; name_ka: string }>)
-        setAvailableTags(
-          Array.from(
-            new Map(
-              (skillRows ?? [])
-                .map((row: any) => ({
-                  name: String(row.name ?? "").trim(),
-                  categoryId: row.category_id ?? null,
-                }))
-                .filter((row) => row.name)
-                .map((row) => [`${row.name}::${row.categoryId ?? "none"}`, row]),
-            ).values(),
-          ),
-        )
+        setCategories(fullCats)
+
+        const { data: skillRows, error: skillError } = await supabase
+          .from("skills")
+          .select("name,category_id")
+          .eq("is_approved", true)
+          .order("name")
+
+        if (skillError) {
+          if (import.meta.env.DEV) console.warn("[ListingForm] skills catalog:", skillError)
+          setAvailableTags([])
+        } else {
+          setAvailableTags(
+            Array.from(
+              new Map(
+                (skillRows ?? [])
+                  .map((row: { name?: string | null; category_id?: string | null }) => ({
+                    name: String(row.name ?? "").trim(),
+                    categoryId: row.category_id ?? null,
+                  }))
+                  .filter((row) => row.name)
+                  .map((row) => [`${row.name}::${row.categoryId ?? "none"}`, row]),
+              ).values(),
+            ),
+          )
+        }
 
         if (isEdit && id) {
           const { data: listing, error: listingError } = await supabase
@@ -189,13 +214,38 @@ export default function ListingFormPage() {
           setPrice(String(listing.price ?? 0))
           setDeliveryDays(String(listing.delivery_days ?? 3))
           setIsActive(listing.is_active ?? true)
-          setCategoryId(parsed.meta.categoryId ?? "")
-          setSubcategoryId(parsed.meta.subcategoryId ?? "")
+
+          let resolvedMid = parsed.meta.categoryId ?? ""
+          const parsedSub = parsed.meta.subcategoryId ?? ""
+          const byId = new Map(fullCats.map((c) => [c.id, c]))
+          if (resolvedMid && parsedSub) {
+            const initialNode = byId.get(resolvedMid)
+            if (initialNode && initialNode.parent_id == null) {
+              const { data: subRow } = await supabase.from("subcategories").select("category_id").eq("id", parsedSub).maybeSingle()
+              if (subRow?.category_id) resolvedMid = subRow.category_id
+            }
+          }
+          const hasKids = categoryIdsWithChildren(fullCats)
+          let resolvedRoot = ""
+          if (resolvedMid) {
+            const node = byId.get(resolvedMid)
+            if (node?.parent_id) {
+              resolvedRoot = rootIdContainingCategory(fullCats, resolvedMid)
+            } else if (hasKids.has(resolvedMid)) {
+              resolvedRoot = resolvedMid
+              resolvedMid = ""
+            } else {
+              resolvedRoot = resolvedMid
+            }
+          }
+          setRootCategoryId(resolvedRoot)
+          setCategoryId(resolvedMid)
+          setSubcategoryId(parsedSub)
           setTags(parsed.meta.tags)
           setExistingImageUrls(Array.isArray((listing as { image_urls?: unknown }).image_urls) ? ((listing as { image_urls: unknown[] }).image_urls.map((v) => String(v)).filter(Boolean).slice(0, MAX_LISTING_IMAGES)) : [])
         }
       } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : "ჩატვირთვა ვერ მოხერხდა.")
+        setError(formatSupabaseClientError(loadError, "ჩატვირთვა ვერ მოხერხდა."))
       } finally {
         setLoading(false)
       }
@@ -204,37 +254,55 @@ export default function ListingFormPage() {
     load()
   }, [id, isEdit, navigate])
 
+  const categoryRootsList = useMemo(() => categoryRoots(categories), [categories])
+  const categoryMidsList = useMemo(
+    () => (rootCategoryId ? categoryChildrenOf(categories, rootCategoryId) : []),
+    [categories, rootCategoryId],
+  )
+
+  /** DB `subcategories.category_id`: mid row if mids exist, else standalone root. */
+  const specializationParentCategoryId = useMemo(() => {
+    if (categoryId.trim()) return categoryId.trim()
+    if (rootCategoryId && categoryMidsList.length === 0) return rootCategoryId
+    return ""
+  }, [categoryId, rootCategoryId, categoryMidsList.length])
+
+  const persistedListingCategoryId = useMemo(
+    () => categoryId.trim() || (rootCategoryId && categoryMidsList.length === 0 ? rootCategoryId.trim() : ""),
+    [categoryId, rootCategoryId, categoryMidsList.length],
+  )
+
   const categoryFilteredTags = useMemo(
-    () => availableTags.filter((tag) => tag.categoryId === categoryId),
-    [availableTags, categoryId],
+    () => availableTags.filter((tag) => tag.categoryId === specializationParentCategoryId),
+    [availableTags, specializationParentCategoryId],
   )
 
   useEffect(() => {
     const loadSubs = async () => {
-      if (!isSupabaseConfigured || !supabase || !categoryId) {
+      if (!isSupabaseConfigured || !supabase || !specializationParentCategoryId) {
         setSubcategories([])
         return
       }
       const { data, error: subErr } = await supabase
         .from("subcategories")
         .select("id,name_ka,category_id,is_active")
-        .eq("category_id", categoryId)
+        .eq("category_id", specializationParentCategoryId)
         .eq("is_active", true)
         .order("name_ka")
       if (subErr) return
       setSubcategories((data ?? []) as SubcategoryRow[])
     }
     void loadSubs()
-  }, [categoryId])
+  }, [specializationParentCategoryId])
 
   useEffect(() => {
-    if (!categoryId) {
+    if (!specializationParentCategoryId) {
       setTags([])
       return
     }
     const allowed = new Set(categoryFilteredTags.map((tag) => tag.name))
     setTags((prev) => prev.filter((tag) => allowed.has(tag)))
-  }, [categoryId, categoryFilteredTags])
+  }, [specializationParentCategoryId, categoryFilteredTags])
 
   const toggleTag = (tag: string) => {
     setTags((prev) => (prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag]))
@@ -304,7 +372,7 @@ export default function ListingFormPage() {
       return
     }
     if (subcategoryId.trim() && !subcategories.some((s) => s.id === subcategoryId.trim())) {
-      setError("აირჩიე ქვეკატეგორია სიიდან ან გასუფთავე.")
+      setError("აირჩიე სპეციალიზაცია სიიდან ან გასუფთავე.")
       return
     }
 
@@ -321,7 +389,7 @@ export default function ListingFormPage() {
         freelancer_profile_id: freelancerProfileId,
         title: title.trim(),
         description: buildListingDescription(description, {
-          categoryId: categoryId || null,
+          categoryId: persistedListingCategoryId || null,
           subcategoryId: subcategoryId.trim() || null,
           tags,
         }),
@@ -343,14 +411,14 @@ export default function ListingFormPage() {
           .from("services")
           .select("id", { count: "exact", head: true })
           .eq("freelancer_profile_id", freelancerProfileId)
-        if ((count ?? 0) >= 3) throw new Error("მაქსიმუმ 3 ლისტინგი შეგიძლია გქონდეს.")
+        if ((count ?? 0) >= 3) throw new Error("შესაძლებელია მაქსიმუმ 3 განცხადების დამატება.")
 
         const { data: inserted, error: insertError } = await supabase.from("services").insert(payload).select("id").single()
-        if (insertError || !inserted) throw insertError ?? new Error("ლისტინგი ვერ შეიქმნა.")
+        if (insertError || !inserted) throw insertError ?? new Error("განცხადება ვერ შეიქმნა.")
         listingId = inserted.id
       }
 
-      if (!listingId) throw new Error("ლისტინგის ID ვერ მოიძებნა.")
+      if (!listingId) throw new Error("განცხადების ID ვერ მოიძებნა.")
 
       let uploadedImagePaths: string[] = []
       if (newImageFiles.length > 0) {
@@ -384,7 +452,7 @@ export default function ListingFormPage() {
 
       navigate("/dashboard", {
         replace: true,
-        state: { successMessage: isEdit ? "ლისტინგი განახლდა." : "ლისტინგი დაემატა." },
+        state: { successMessage: isEdit ? "განცხადება განახლდა." : "განცხადება დაემატა." },
       })
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "შენახვა ვერ მოხერხდა.")
@@ -409,10 +477,10 @@ export default function ListingFormPage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-6">
           <div className="mb-5 flex items-center justify-between">
             <h1 className={`text-2xl font-bold ${isEdit ? "text-[#1B2B4B]" : "text-[#0088FF]"}`}>
-              {isEdit ? "ლისტინგის რედაქტირება" : "ახალი ლისტინგის დამატება"}
+              {isEdit ? "განცხადების რედაქტირება" : "ახალი განცხადების დამატება"}
             </h1>
             <Link to="/dashboard" className="text-sm font-semibold text-[#D4A843] hover:underline">
-              უკან დაშბორდზე
+              უკან მართვის პანელზე
             </Link>
           </div>
 
@@ -428,17 +496,26 @@ export default function ListingFormPage() {
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">კატეგორია</span>
+              <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">category</span>
               <select
-                value={categoryId}
+                value={rootCategoryId}
                 onChange={(event) => {
-                  setCategoryId(event.target.value)
+                  const nextRoot = event.target.value
+                  setRootCategoryId(nextRoot)
                   setSubcategoryId("")
+                  const mids = nextRoot ? categoryChildrenOf(categories, nextRoot) : []
+                  if (!nextRoot) {
+                    setCategoryId("")
+                  } else if (mids.length === 0) {
+                    setCategoryId(nextRoot)
+                  } else {
+                    setCategoryId("")
+                  }
                 }}
                 className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm"
               >
                 <option value="">აირჩიე კატეგორია</option>
-                {categories.map((category) => (
+                {categoryRootsList.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name_ka}
                   </option>
@@ -449,12 +526,40 @@ export default function ListingFormPage() {
             <label className="block">
               <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">ქვეკატეგორია</span>
               <select
+                value={categoryId}
+                disabled={!rootCategoryId || categoryMidsList.length === 0}
+                onChange={(event) => {
+                  setCategoryId(event.target.value)
+                  setSubcategoryId("")
+                }}
+                className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm disabled:cursor-not-allowed disabled:bg-slate-100"
+              >
+                <option value="">
+                  {!rootCategoryId
+                    ? "ჯერ აირჩიე კატეგორია"
+                    : categoryMidsList.length === 0
+                      ? "ამ კატეგორიისთვის ქვეკატეგორია არ არის"
+                      : "აირჩიე subcategory"}
+                </option>
+                {categoryMidsList.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name_ka}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">სპეციალიზაცია</span>
+              <select
                 value={subcategoryId}
-                disabled={!categoryId}
+                disabled={!specializationParentCategoryId}
                 onChange={(event) => setSubcategoryId(event.target.value)}
                 className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm disabled:cursor-not-allowed disabled:bg-slate-100"
               >
-                <option value="">{categoryId ? "აირჩიე ქვეკატეგორია (არასავალდებულო)" : "ჯერ აირჩიე კატეგორია"}</option>
+                <option value="">
+                  {specializationParentCategoryId ? "აირჩიე (არასავალდებულო)" : "ჯერ აირჩიე ქვეკატეგორია ან კატეგორია"}
+                </option>
                 {subcategories.map((sub) => (
                   <option key={sub.id} value={sub.id}>
                     {sub.name_ka}
@@ -464,10 +569,9 @@ export default function ListingFormPage() {
             </label>
 
             <div>
-              <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">ტეგები</p>
-              {!categoryId ? (
+              <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">თეგები</p>
+              {!specializationParentCategoryId ? (
                 <p className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                  ჯერ აირჩიე კატეგორია და შემდეგ გამოჩნდება შესაბამისი ტეგები.
                 </p>
               ) : (
                 <>
@@ -488,7 +592,7 @@ export default function ListingFormPage() {
                     ))}
                   </div>
                   <p className="mt-2 text-xs text-slate-500">
-                    კატეგორიაზე მორგებული ტეგები. არჩეული: {tags.length}
+                    კატეგორიაზე მორგებული თეგები. არჩეული: {tags.length}
                   </p>
                 </>
               )}
@@ -501,7 +605,7 @@ export default function ListingFormPage() {
                 onChange={(event) => setDescription(event.target.value)}
                 rows={5}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                placeholder="დეტალური აღწერა, რას აკეთებ ამ ლისტინგში"
+                placeholder="აღწერე რას სთავაზობ დამსაქმებელს"
               />
             </label>
 
@@ -543,7 +647,7 @@ export default function ListingFormPage() {
                   className="block w-full text-xs text-slate-700 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-[#0088FF] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white file:transition-colors file:duration-150 file:hover:bg-[#006ACC]"
                 />
                 <p className="mt-2 text-xs text-slate-500">
-                  PNG/JPG/WEBP. თითო ფაილი მაქს 10MB, ავტომატურად მცირდება ზომაში.
+                  PNG/JPG/WEBP. თითო ფაილი მაქს 10MB.
                 </p>
 
                 {existingImageUrls.length + newImageFiles.length > 0 ? (

@@ -9,6 +9,7 @@ import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { formatCityForDisplay, matchesLocationFilter } from "../lib/marketplaceFilters.ts"
+import { catalogToolbarCategories, type CategoryBranchRow } from "../lib/marketplaceCategoryTree.ts"
 import FreelancerAvailabilityIndicator from "../components/FreelancerAvailabilityIndicator.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
@@ -35,7 +36,7 @@ type FreelancerCardItem = {
   services: Array<{ price: number; description: string | null }>
 }
 
-type CategoryItem = { id: string; name_ka: string }
+type CategoryItem = { id: string; name_ka: string; parent_id: string | null }
 type SkillItem = { id: string; name: string; category_id: string | null }
 
 const mockFreelancers: FreelancerCardItem[] = [
@@ -287,6 +288,7 @@ export default function BrowsePage() {
   const [freelancersLoadingMore, setFreelancersLoadingMore] = useState(false)
   const [freelancers, setFreelancers] = useState<FreelancerCardItem[]>([])
   const [categories, setCategories] = useState<CategoryItem[]>([])
+  const catalogFilterCategories = useMemo(() => catalogToolbarCategories(categories as CategoryBranchRow[]), [categories])
   const [skills, setSkills] = useState<SkillItem[]>([])
   const [sortBy, setSortBy] = useState<SortOption>("rating")
 
@@ -432,12 +434,18 @@ export default function BrowsePage() {
       }
       try {
         const [categoriesRes, skillsRes] = await Promise.all([
-          supabase.from("categories").select("id,name_ka").eq("is_active", true).order("sort_order").limit(120),
+          supabase.from("categories").select("id,name_ka,parent_id").eq("is_active", true).order("sort_order").limit(120),
           supabase.from("skills").select("id,name,category_id").eq("is_approved", true).order("name").limit(120),
         ])
         if (categoriesRes.error) throw categoriesRes.error
         if (skillsRes.error) throw skillsRes.error
-        setCategories((categoriesRes.data ?? []) as CategoryItem[])
+        setCategories(
+          (categoriesRes.data ?? []).map((row: { id?: string; name_ka?: string; parent_id?: string | null }) => ({
+            id: String(row.id ?? ""),
+            name_ka: String(row.name_ka ?? ""),
+            parent_id: row.parent_id ?? null,
+          })),
+        )
         setSkills((skillsRes.data ?? []) as SkillItem[])
       } catch (catalogErr) {
         if (import.meta.env.DEV) console.warn("[Browse] catalog load:", catalogErr)
@@ -675,7 +683,7 @@ export default function BrowsePage() {
                   aria-label="კატეგორია"
                 >
                   <option value="">ყველა კატეგორია</option>
-                  {categories.map((category) => (
+                  {catalogFilterCategories.map((category) => (
                     <option key={category.id} value={category.id}>
                       {category.name_ka}
                     </option>
