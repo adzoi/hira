@@ -550,14 +550,15 @@ export default function JobsPage() {
 
         if (!append) {
           if (!supabase) return
-          const subRows = await fetchAllRowsByRange((from, to) =>
-            supabase
+          const subRows = await fetchAllRowsByRange((from, to) => {
+            if (!supabase) return
+            return supabase
               .from("subcategories")
               .select("id,name_ka,category_id")
               .eq("is_active", true)
               .order("name_ka")
-              .range(from, to),
-          )
+              .range(from, to)
+          })
           setSubcategoryNamesById(
             new Map(
               subRows.map((r) => {
