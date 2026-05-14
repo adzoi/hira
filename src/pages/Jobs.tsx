@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { unstable_batchedUpdates } from "react-dom"
 import { Link } from "react-router-dom"
 import Navbar from "../components/Navbar.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
@@ -290,6 +291,7 @@ export default function JobsPage() {
   const [jobsTotal, setJobsTotal] = useState(0)
   const [jobsNextOffset, setJobsNextOffset] = useState(0)
   const jobsNextOffsetRef = useRef(0)
+  const subcategoriesFetchedRef = useRef(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [jobs, setJobs] = useState<JobItem[]>([])
   const [categories, setCategories] = useState<CategoryItem[]>([])
@@ -470,13 +472,15 @@ export default function JobsPage() {
   const fetchJobsPage = useCallback(
     async (append: boolean) => {
       if (!isSupabaseConfigured || !supabase) {
-        setJobs(mockJobs)
-        setCategories([])
-        setSubcategoryParentById(new Map())
-        setSubcategoryNamesById(new Map())
-        setJobsTotal(mockJobs.length)
-        jobsNextOffsetRef.current = mockJobs.length
-        setJobsNextOffset(mockJobs.length)
+        unstable_batchedUpdates(() => {
+          setJobs(mockJobs)
+          setCategories([])
+          setSubcategoryParentById(new Map())
+          setSubcategoryNamesById(new Map())
+          setJobsTotal(mockJobs.length)
+          jobsNextOffsetRef.current = mockJobs.length
+          setJobsNextOffset(mockJobs.length)
+        })
         setLoading(false)
         setLoadingMore(false)
         return
@@ -513,45 +517,51 @@ export default function JobsPage() {
         const total = Number(totalRaw)
         const safeTotal = Number.isFinite(total) ? total : 0
 
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, 0)
+        })
         const mappedJobs = mapRpcRowsToJobs(jobRows)
 
-        if (!append) {
-          setJobs(mappedJobs.length > 0 ? mappedJobs : mockJobs)
-          jobsNextOffsetRef.current = JOBS_PAGE_SIZE
-          setJobsNextOffset(JOBS_PAGE_SIZE)
-        } else {
-          setJobs((prev) => {
-            const seen = new Set(prev.map((j) => j.id))
-            const merged = [...prev]
-            for (const j of mappedJobs) {
-              if (!seen.has(j.id)) {
-                seen.add(j.id)
-                merged.push(j)
+        unstable_batchedUpdates(() => {
+          if (!append) {
+            setJobs(mappedJobs.length > 0 ? mappedJobs : mockJobs)
+            jobsNextOffsetRef.current = JOBS_PAGE_SIZE
+            setJobsNextOffset(JOBS_PAGE_SIZE)
+          } else {
+            setJobs((prev) => {
+              const seen = new Set(prev.map((j) => j.id))
+              const merged = [...prev]
+              for (const j of mappedJobs) {
+                if (!seen.has(j.id)) {
+                  seen.add(j.id)
+                  merged.push(j)
+                }
               }
-            }
-            return merged
-          })
-          jobsNextOffsetRef.current += JOBS_PAGE_SIZE
-          setJobsNextOffset(jobsNextOffsetRef.current)
-        }
+              return merged
+            })
+            jobsNextOffsetRef.current += JOBS_PAGE_SIZE
+            setJobsNextOffset(jobsNextOffsetRef.current)
+          }
 
-        setJobsTotal(safeTotal)
+          setJobsTotal(safeTotal)
 
-        setCategories(
-          categoryRows.map((c) => {
-            const row = c as Record<string, unknown>
-            return {
-              id: String(row.id ?? ""),
-              name_ka: String(row.name_ka ?? ""),
-              parent_id: (row.parent_id as string | null | undefined) ?? null,
-            }
-          }) as CategoryItem[],
-        )
+          setCategories(
+            categoryRows.map((c) => {
+              const row = c as Record<string, unknown>
+              return {
+                id: String(row.id ?? ""),
+                name_ka: String(row.name_ka ?? ""),
+                parent_id: (row.parent_id as string | null | undefined) ?? null,
+              }
+            }) as CategoryItem[],
+          )
+        })
 
-        if (!append) {
+        if (!append && !subcategoriesFetchedRef.current) {
+          subcategoriesFetchedRef.current = true
           if (!supabase) return
           const subRows = await fetchAllRowsByRange((from, to) => {
-            if (!supabase) return;
+            if (!supabase) return
             return supabase
               .from("subcategories")
               .select("id,name_ka,category_id")
@@ -559,22 +569,24 @@ export default function JobsPage() {
               .order("name_ka")
               .range(from, to)
           })
-          setSubcategoryNamesById(
-            new Map(
-              subRows.map((r) => {
-                const row = r as { id?: string; name_ka?: string }
-                return [String(row.id ?? ""), String(row.name_ka ?? "")] as const
-              }),
-            ),
-          )
-          setSubcategoryParentById(
-            new Map(
-              subRows.map((r) => {
-                const row = r as { id?: string; category_id?: string | null }
-                return [String(row.id ?? ""), String(row.category_id ?? "")] as const
-              }),
-            ),
-          )
+          unstable_batchedUpdates(() => {
+            setSubcategoryNamesById(
+              new Map(
+                subRows.map((r) => {
+                  const row = r as { id?: string; name_ka?: string }
+                  return [String(row.id ?? ""), String(row.name_ka ?? "")] as const
+                }),
+              ),
+            )
+            setSubcategoryParentById(
+              new Map(
+                subRows.map((r) => {
+                  const row = r as { id?: string; category_id?: string | null }
+                  return [String(row.id ?? ""), String(row.category_id ?? "")] as const
+                }),
+              ),
+            )
+          })
         }
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : "მონაცემები ვერ ჩაიტვირთა.")
@@ -586,18 +598,23 @@ export default function JobsPage() {
     [serverCategoryForFetch],
   )
 
+  const fetchJobsPageRef = useRef(fetchJobsPage)
+  useEffect(() => {
+    fetchJobsPageRef.current = fetchJobsPage
+  }, [fetchJobsPage])
+
   // Edge function only receives category + page; budget/location/skill filters run client-side on `filteredJobs`.
   // Do not list applied* array state here — new array references each render would refetch endlessly.
   useEffect(() => {
-    void fetchJobsPage(false)
-  }, [serverCategoryForFetch, fetchJobsPage])
+    void fetchJobsPageRef.current(false)
+  }, [serverCategoryForFetch])
 
   const reloadJobsFirstPage = () => {
-    void fetchJobsPage(false)
+    void fetchJobsPageRef.current(false)
   }
 
   const loadMoreJobs = () => {
-    void fetchJobsPage(true)
+    void fetchJobsPageRef.current(true)
   }
 
   const jobsHasMore = jobsNextOffset < jobsTotal
@@ -631,7 +648,8 @@ export default function JobsPage() {
     return Object.values(count)
       .sort((a, b) => b.n - a.n)
       .slice(0, 15)
-  }, [jobs])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recompute when loaded count changes, not every jobs identity
+  }, [jobs.length])
 
   const toggleDraftBudget = (key: BudgetType) => {
     setDraftBudgetTypes((prev) => (prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]))
