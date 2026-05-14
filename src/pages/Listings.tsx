@@ -578,6 +578,7 @@ export default function ListingsPage() {
           }),
         )
         if (!append) {
+          if (!supabase) return
           const subRows = await fetchAllRowsByRange((from, to) =>
             supabase
               .from("subcategories")

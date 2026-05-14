@@ -314,11 +314,12 @@ export default function HirersPage() {
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return
+    const sb = supabase
     let cancelled = false
     const run = async () => {
       try {
         const rows = await fetchAllRowsByRange((from, to) =>
-          supabase
+          sb
             .from("hirer_profiles")
             .select("industry")
             .not("industry", "is", null)

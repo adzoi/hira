@@ -549,6 +549,7 @@ export default function JobsPage() {
         )
 
         if (!append) {
+          if (!supabase) return
           const subRows = await fetchAllRowsByRange((from, to) =>
             supabase
               .from("subcategories")

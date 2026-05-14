@@ -454,9 +454,11 @@ export default function BrowsePage() {
         return
       }
       try {
+        if (!supabase) return
+        const sb = supabase
         const [categoryRows, skillRows] = await Promise.all([
           fetchAllRowsByRange((from, to) =>
-            supabase
+            sb
               .from("categories")
               .select("id,name_ka,parent_id")
               .eq("is_active", true)
@@ -464,11 +466,11 @@ export default function BrowsePage() {
               .range(from, to),
           ),
           fetchAllRowsByRange((from, to) =>
-            supabase.from("skills").select("id,name,category_id").eq("is_approved", true).order("name").range(from, to),
+            sb.from("skills").select("id,name,category_id").eq("is_approved", true).order("name").range(from, to),
           ),
         ])
         setCategories(
-          categoryRows.map((row: { id?: string; name_ka?: string; parent_id?: string | null }) => ({
+          (categoryRows as { id?: string; name_ka?: string; parent_id?: string | null }[]).map((row) => ({
             id: String(row.id ?? ""),
             name_ka: String(row.name_ka ?? ""),
             parent_id: row.parent_id ?? null,

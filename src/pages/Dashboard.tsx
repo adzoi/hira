@@ -1567,6 +1567,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase || loading || !profile?.id) return
+    const sb = supabase
 
     let debounceTimer: ReturnType<typeof setTimeout> | undefined
     const debounceMs = 400
@@ -1584,11 +1585,11 @@ export default function DashboardPage() {
       }, debounceMs)
     }
 
-    const channel = subscribeToDashboardMessaging(supabase, profile.id, scheduleRefresh)
+    const channel = subscribeToDashboardMessaging(sb, profile.id, scheduleRefresh)
 
     return () => {
       clearTimeout(debounceTimer)
-      void supabase.removeChannel(channel)
+      void sb.removeChannel(channel)
     }
   }, [
     loading,
