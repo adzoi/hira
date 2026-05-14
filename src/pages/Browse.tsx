@@ -7,6 +7,7 @@ import SkeletonCard from "../components/ui/SkeletonCard.tsx"
 import { mergeFreelancerCompletedWorkCounts } from "../lib/freelancerCompletedWorkCounts.ts"
 import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
+import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { formatCityForDisplay, matchesLocationFilter } from "../lib/marketplaceFilters.ts"
 import {
@@ -453,20 +454,27 @@ export default function BrowsePage() {
         return
       }
       try {
-        const [categoriesRes, skillsRes] = await Promise.all([
-          supabase.from("categories").select("id,name_ka,parent_id").eq("is_active", true).order("sort_order").limit(120),
-          supabase.from("skills").select("id,name,category_id").eq("is_approved", true).order("name").limit(120),
+        const [categoryRows, skillRows] = await Promise.all([
+          fetchAllRowsByRange((from, to) =>
+            supabase
+              .from("categories")
+              .select("id,name_ka,parent_id")
+              .eq("is_active", true)
+              .order("sort_order")
+              .range(from, to),
+          ),
+          fetchAllRowsByRange((from, to) =>
+            supabase.from("skills").select("id,name,category_id").eq("is_approved", true).order("name").range(from, to),
+          ),
         ])
-        if (categoriesRes.error) throw categoriesRes.error
-        if (skillsRes.error) throw skillsRes.error
         setCategories(
-          (categoriesRes.data ?? []).map((row: { id?: string; name_ka?: string; parent_id?: string | null }) => ({
+          categoryRows.map((row: { id?: string; name_ka?: string; parent_id?: string | null }) => ({
             id: String(row.id ?? ""),
             name_ka: String(row.name_ka ?? ""),
             parent_id: row.parent_id ?? null,
           })),
         )
-        setSkills((skillsRes.data ?? []) as SkillItem[])
+        setSkills(skillRows as SkillItem[])
       } catch (catalogErr) {
         if (import.meta.env.DEV) console.warn("[Browse] catalog load:", catalogErr)
       }
@@ -852,7 +860,7 @@ export default function BrowsePage() {
                           </div>
 
                           <label className="block pb-1">
-                            <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">ლოკაცია / ქალაქი</span>
+                            <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">ლოკაცია</span>
                             <LocationFilterSelect
                               value={draftLocationFilter}
                               onChange={setDraftLocationFilter}
@@ -933,7 +941,7 @@ export default function BrowsePage() {
           ) : (
             <>
               <div className="mb-4 flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-slate-600">შედეგი {sortedFreelancers.length} ფრილანსერი</p>
+                <p className="text-sm font-medium text-slate-600">მოიძებნა {sortedFreelancers.length} ფრილანსერი</p>
               </div>
 
               {sortedFreelancers.length === 0 ? (

@@ -1,4 +1,3 @@
-import type { SupabaseClient } from "@supabase/supabase-js"
 import { isSupabaseConfigured, supabase } from "./supabase"
 import { jobVacancyStats } from "./jobVacancies.ts"
 import { jobVipIsActive } from "./vipJobTiers.ts"
@@ -52,8 +51,6 @@ export type HomeJobListingItem = {
   vipFeatured: boolean
   vacancies: number
   acceptedCount: number
-  /** Present for live feed rows — used to resolve hirer rating from reviews. */
-  hirerProfileId?: string | null
 }
 
 export type HomeFeedItem = HomeFreelancerServiceItem | HomeJobListingItem
@@ -170,7 +167,7 @@ function normalizeSkillNames(raw: unknown, max: number): string[] {
   return out
 }
 
-/** Prefer explicit RPC/join keys; `average_rating_given` alone is often unset — overwritten via reviews when possible. */
+/** Prefer RPC `hirer_average_rating` (reviews avg, then hirer_profiles fallback); other keys stay for compatibility. */
 function hirerRatingFromJobRow(row: Record<string, unknown>): number | null {
   const keys = ["hirer_average_rating", "average_rating_received", "average_rating", "average_rating_given"] as const
   for (const key of keys) {
@@ -180,52 +177,6 @@ function hirerRatingFromJobRow(row: Record<string, unknown>): number | null {
     if (Number.isFinite(n) && n > 0) return n
   }
   return null
-}
-
-async function applyHirerRatingsFromReviews(client: SupabaseClient, jobs: HomeJobListingItem[]) {
-  const hpIds = [...new Set(jobs.map((j) => j.hirerProfileId).filter((id): id is string => Boolean(id)))]
-  if (hpIds.length === 0) return
-
-  const { data: hpRows, error: hpErr } = await client.from("hirer_profiles").select("id, user_id").in("id", hpIds)
-  if (hpErr || !hpRows?.length) return
-
-  const userIdByHpId = new Map<string, string>()
-  const userIds: string[] = []
-  for (const r of hpRows) {
-    const id = String(r.id)
-    const uid = String(r.user_id)
-    userIdByHpId.set(id, uid)
-    userIds.push(uid)
-  }
-  if (userIds.length === 0) return
-
-  const { data: revRows, error: revErr } = await client
-    .from("reviews")
-    .select("reviewee_id, rating_overall")
-    .in("reviewee_id", userIds)
-
-  if (revErr || !revRows?.length) return
-
-  const sumByUser = new Map<string, number>()
-  const countByUser = new Map<string, number>()
-  for (const rv of revRows) {
-    const uid = String(rv.reviewee_id)
-    const rating = Number(rv.rating_overall)
-    if (!Number.isFinite(rating) || rating <= 0) continue
-    sumByUser.set(uid, (sumByUser.get(uid) ?? 0) + rating)
-    countByUser.set(uid, (countByUser.get(uid) ?? 0) + 1)
-  }
-
-  for (const job of jobs) {
-    const hpId = job.hirerProfileId
-    if (!hpId) continue
-    const uid = userIdByHpId.get(hpId)
-    if (!uid) continue
-    const c = countByUser.get(uid) ?? 0
-    if (c === 0) continue
-    const avg = (sumByUser.get(uid) ?? 0) / c
-    if (Number.isFinite(avg)) job.hirerAverageRating = avg
-  }
 }
 
 function serviceVipFeatured(row: Record<string, unknown>): boolean {
@@ -306,7 +257,6 @@ export async function loadHomeFeed(): Promise<HomeFeedItem[]> {
     const skillNames = normalizeSkillNames(row.skill_names, 12)
 
     const rowRating = hirerRatingFromJobRow(row)
-    const hirerProfileId = row.hirer_profile_id != null ? String(row.hirer_profile_id) : null
 
     return {
       kind: "hirer_job" as const,
@@ -331,7 +281,6 @@ export async function loadHomeFeed(): Promise<HomeFeedItem[]> {
       viewsCount: Number(row.views_count ?? 0),
       skillNames,
       hirerAverageRating: rowRating ?? 0,
-      hirerProfileId,
       vipFeatured: jobVipIsActive(Boolean(row.is_vip), row.vip_expires_at != null ? String(row.vip_expires_at) : null),
       vacancies: vac.vacancies,
       acceptedCount: vac.acceptedCount,
@@ -343,13 +292,6 @@ export async function loadHomeFeed(): Promise<HomeFeedItem[]> {
     if (v !== 0) return v
     return +new Date(b.createdAt) - +new Date(a.createdAt)
   })
-
-  if (supabase && jobItems.length > 0) {
-    await applyHirerRatingsFromReviews(supabase, jobItems)
-  }
-  for (const j of jobItems) {
-    delete j.hirerProfileId
-  }
 
   const merged = [...freelancerItems, ...jobItems]
   merged.sort((a, b) => {

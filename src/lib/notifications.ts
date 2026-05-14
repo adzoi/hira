@@ -14,10 +14,12 @@ export type AppNotification = {
 }
 
 function mapRow(row: Record<string, unknown>): AppNotification {
+  const rawTitle = String(row.title ?? "")
+  const title = rawTitle === "ახალი ინქირი" ? "ახალი შეტყობინება" : rawTitle
   return {
     id: String(row.id ?? ""),
     type: String(row.type ?? ""),
-    title: String(row.title ?? ""),
+    title,
     body: row.body != null ? String(row.body) : null,
     link: row.link != null ? String(row.link) : null,
     is_read: Boolean(row.is_read),
@@ -69,11 +71,18 @@ export async function markAllAsRead(client: SupabaseClient): Promise<void> {
   if (error) throw error
 }
 
+export type NotificationRealtimeHandlers = {
+  onInsert: (n: AppNotification) => void
+  onUpdate: (n: AppNotification) => void
+  onDelete: (id: string) => void
+}
+
 export function subscribeToNotifications(
   client: SupabaseClient,
   userId: string,
-  onNew: (n: AppNotification) => void,
+  handlers: NotificationRealtimeHandlers,
 ): RealtimeChannel {
+  const filter = `user_id=eq.${userId}`
   return client
     .channel(`notifications:${userId}`)
     .on(
@@ -82,12 +91,41 @@ export function subscribeToNotifications(
         event: "INSERT",
         schema: "public",
         table: "notifications",
-        filter: `user_id=eq.${userId}`,
+        filter,
       },
       (payload) => {
         const row = payload.new as Record<string, unknown>
         if (!row?.id) return
-        onNew(mapRow(row))
+        handlers.onInsert(mapRow(row))
+      },
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "notifications",
+        filter,
+      },
+      (payload) => {
+        const row = payload.new as Record<string, unknown>
+        if (!row?.id) return
+        handlers.onUpdate(mapRow(row))
+      },
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "DELETE",
+        schema: "public",
+        table: "notifications",
+        filter,
+      },
+      (payload) => {
+        const row = payload.old as Record<string, unknown>
+        const id = row?.id != null ? String(row.id) : ""
+        if (!id) return
+        handlers.onDelete(id)
       },
     )
     .subscribe()

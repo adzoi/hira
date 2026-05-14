@@ -10,6 +10,7 @@ import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
 import { useToast } from "../components/ui/ToastProvider.tsx"
 import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
+import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { mergeFreelancerCompletedWorkCounts } from "../lib/freelancerCompletedWorkCounts.ts"
 import { formatCityForDisplay, matchesLocationFilter } from "../lib/marketplaceFilters.ts"
@@ -577,10 +578,17 @@ export default function ListingsPage() {
           }),
         )
         if (!append) {
-          const { data: subRows } = await supabase.from("subcategories").select("id,name_ka,category_id").eq("is_active", true)
+          const subRows = await fetchAllRowsByRange((from, to) =>
+            supabase
+              .from("subcategories")
+              .select("id,name_ka,category_id")
+              .eq("is_active", true)
+              .order("name_ka")
+              .range(from, to),
+          )
           setSubcategoryNamesById(
             new Map(
-              (subRows ?? []).map((r) => {
+              subRows.map((r) => {
                 const row = r as { id?: string; name_ka?: string }
                 return [String(row.id ?? ""), String(row.name_ka ?? "")] as const
               }),
@@ -588,7 +596,7 @@ export default function ListingsPage() {
           )
           setSubcategoryParentById(
             new Map(
-              (subRows ?? []).map((r) => {
+              subRows.map((r) => {
                 const row = r as { id?: string; category_id?: string | null }
                 return [String(row.id ?? ""), String(row.category_id ?? "")] as const
               }),
@@ -1283,6 +1291,11 @@ export default function ListingsPage() {
                         <div className="flex shrink-0 flex-nowrap gap-2 pt-3">
                           {viewerType === "hirer" && viewerFreelancerProfileId !== item.freelancerProfileId ? (
                             <>
+                              <SaveBookmarkButton
+                                variant="icon"
+                                resourceType="freelancer"
+                                resourceId={item.freelancerProfileId}
+                              />
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -1293,11 +1306,6 @@ export default function ListingsPage() {
                               >
                                 შეთავაზება
                               </button>
-                              <SaveBookmarkButton
-                                variant="icon"
-                                resourceType="freelancer"
-                                resourceId={item.freelancerProfileId}
-                              />
                               <Link
                                 to={`/freelancer/${item.freelancerSlug}`}
                                 className="inline-flex h-11 min-w-0 flex-1 items-center justify-center rounded-lg bg-[#0088FF] px-2 text-sm font-semibold text-white transition hover:bg-[#006ACC]"

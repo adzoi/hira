@@ -381,13 +381,13 @@ export default function JobDetailPage() {
     setSubmitSuccess("")
 
     if (coverLetter.trim().length > 0 && coverLetter.trim().length < 50) {
-      setSubmitError("კომენტარი მინიმუმ 50 სიმბოლო უნდა იყოს ან დატოვე ცარიელი.")
+      setSubmitError("კომენტარი უნდა შედგებოდეს მინიმუმ 50 სიმბოლოსგან.")
       return
     }
 
     const vs = jobVacancyStats(job.vacancies, job.accepted_count)
     if (job.status !== "open" || vs.isFull) {
-      setSubmitError("ამ განცხადებაზე ახალი განცხადება აღარ არის შესაძლებელი.")
+      setSubmitError("ამ განცხადებაზე ახალი შეთავაზების გაგზავნა შეუძლებელია.")
       return
     }
 
@@ -480,9 +480,12 @@ export default function JobDetailPage() {
         <div className="grid gap-6 lg:grid-cols-[1.8fr,1fr]">
           <section className="space-y-6">
             <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h1 className="text-3xl font-bold text-[#1B2B4B]">{job.title}</h1>
-                <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <h1 className="min-w-0 flex-1 text-3xl font-bold text-[#1B2B4B]">{job.title}</h1>
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  {!isJobOwner ? (
+                    <SaveBookmarkButton variant="icon" resourceType="job" resourceId={job.id} />
+                  ) : null}
                   {job.vipActive ? (
                     <span className="rounded-full bg-[#D4A843] px-3 py-1 text-xs font-bold uppercase tracking-wide text-[#1B2B4B]">
                       VIP · Featured
@@ -571,7 +574,7 @@ export default function JobDetailPage() {
                 </div>
               ) : job.status !== "open" || (vacancySnap?.isFull ?? false) ? (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                  ამ განცხადებაზე განცხადება ახლა აღარ იღებს — ყველა ადგილი შევსებულია ან განცხადება დაიხურა.
+                  ამ განცხადებაზე ახალი შეთავაზების გაგზავნა შეუძლებელია - ყველა ადგილი შევსებულია ან განცხადება დაიხურა.
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -634,11 +637,10 @@ export default function JobDetailPage() {
                     <p className="text-xs text-slate-500">წევრი: {formatDate(job.hirer_member_since)}</p>
                   </div>
                 </div>
-                <SaveBookmarkButton resourceType="job" resourceId={job.id} className="w-full" />
               </div>
               <p className="mt-3 text-sm text-slate-600">განთავსებული განცხადებები: {job.hirer_jobs_posted_count}</p>
               <button type="button" onClick={copyContact} className="mt-3 inline-flex h-10 items-center rounded-lg border border-slate-300 px-3 text-sm font-semibold text-[#1B2B4B]">
-                საკონტაქტოს კოპირება
+                საკონტაქტო ინფორმაციის კოპირება
               </button>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <SaveBookmarkButton variant="icon" resourceType="hirer" resourceId={job.hirer_profile_id} />

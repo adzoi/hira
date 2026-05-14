@@ -7,6 +7,7 @@ import VIPUpgrade from "../components/VIPUpgrade"
 import { countFollowers, countFollowing } from "../lib/follows.ts"
 import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { countFreelancerProfileVisits } from "../lib/profileVisits"
+import { subscribeToDashboardMessaging } from "../lib/dashboardMessagingRealtime.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import type { Database } from "../lib/database.types"
 import { jobVacancyStats } from "../lib/jobVacancies.ts"
@@ -1512,6 +1513,95 @@ export default function DashboardPage() {
       /* ignore */
     }
   }, [hirerProfile?.id, profile?.id, supabase])
+
+  const reloadFreelancerPendingJobOffers = useCallback(async () => {
+    if (!supabase || !freelancerProfile?.id) return
+    try {
+      const { data: pendingAppsRows, error: pendingAppsErr } = await supabaseAny
+        .from("job_applications")
+        .select(
+          `
+          id,
+          job_id,
+          created_at,
+          status,
+          cancel_requested_by,
+          jobs (
+            title,
+            hirer_profiles (
+              user_id,
+              company_name,
+              profiles:profiles!hirer_profiles_user_id_fkey ( full_name )
+            )
+          )
+        `,
+        )
+        .eq("freelancer_profile_id", freelancerProfile.id)
+        .eq("deleted_by_hirer", false)
+        .eq("deleted_by_freelancer", false)
+        .order("created_at", { ascending: false })
+      if (pendingAppsErr) throw pendingAppsErr
+
+      const mappedOffers = ((pendingAppsRows ?? []) as Array<Record<string, unknown>>).map((row) => {
+        const job = embedJoinRow(row.jobs as Record<string, unknown> | Record<string, unknown>[] | null)
+        const hp = embedJoinRow(job?.hirer_profiles as Record<string, unknown> | Record<string, unknown>[] | null)
+        const hpProfile = embedJoinRow(hp?.profiles as Record<string, unknown> | Record<string, unknown>[] | null)
+        const companyName = typeof hp?.company_name === "string" ? hp.company_name.trim() : ""
+        const fullName = typeof hpProfile?.full_name === "string" ? hpProfile.full_name.trim() : ""
+        return {
+          applicationId: String(row.id ?? ""),
+          jobId: String(row.job_id ?? ""),
+          createdAt: String(row.created_at ?? ""),
+          jobTitle: typeof job?.title === "string" && job.title.trim() ? job.title : "განცხადება",
+          hirerLabel: companyName || fullName || "დამქირავებელი",
+          hirerUserId: typeof hp?.user_id === "string" && hp.user_id.trim() ? hp.user_id : null,
+          status: String(row.status ?? "pending"),
+          cancelRequestedBy: (row.cancel_requested_by as CancelRequestedByRole) ?? null,
+        }
+      })
+      setFreelancerPendingJobOffers(mappedOffers.filter((item) => item.applicationId))
+    } catch (pendingErr) {
+      if (import.meta.env.DEV) console.warn("[dashboard] reloadFreelancerPendingJobOffers:", pendingErr)
+    }
+  }, [freelancerProfile?.id, supabase])
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase || loading || !profile?.id) return
+
+    let debounceTimer: ReturnType<typeof setTimeout> | undefined
+    const debounceMs = 400
+
+    const scheduleRefresh = () => {
+      clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => {
+        void (async () => {
+          if (profile.user_type === "freelancer" && freelancerProfile?.id) {
+            await Promise.all([reloadFreelancerListingInquiries(), reloadFreelancerPendingJobOffers()])
+          } else if (profile.user_type === "hirer" && hirerProfile?.id) {
+            await Promise.all([reloadHirerListingInquiries(), reloadHirerSection()])
+          }
+        })()
+      }, debounceMs)
+    }
+
+    const channel = subscribeToDashboardMessaging(supabase, profile.id, scheduleRefresh)
+
+    return () => {
+      clearTimeout(debounceTimer)
+      void supabase.removeChannel(channel)
+    }
+  }, [
+    loading,
+    profile?.id,
+    profile?.user_type,
+    freelancerProfile?.id,
+    hirerProfile?.id,
+    supabase,
+    reloadFreelancerListingInquiries,
+    reloadFreelancerPendingJobOffers,
+    reloadHirerListingInquiries,
+    reloadHirerSection,
+  ])
 
   const patchFreelancerListingInquiry = async (inquiryId: string, nextStatus: "accepted" | "declined" | "in_progress") => {
     if (!supabase) return

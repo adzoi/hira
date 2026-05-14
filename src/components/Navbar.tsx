@@ -201,11 +201,20 @@ export default function Navbar() {
   useEffect(() => {
     const client = supabase
     if (!client || !userId || !isAuthed) return
-    const channel = subscribeToNotifications(client, userId, (n) => {
-      setNotifications((prev) => {
-        const next = [n, ...prev.filter((x) => x.id !== n.id)]
-        return next.slice(0, 30)
-      })
+    const channel = subscribeToNotifications(client, userId, {
+      onInsert: (n) => {
+        setNotifications((prev) => {
+          const next = [n, ...prev.filter((x) => x.id !== n.id)]
+          return next.slice(0, 30)
+        })
+      },
+      onUpdate: (n) => {
+        setNotifications((prev) => prev.map((x) => (x.id === n.id ? n : x)))
+      },
+      onDelete: (id) => {
+        setNotifications((prev) => prev.filter((x) => x.id !== id))
+        setDetailNotification((prev) => (prev?.id === id ? null : prev))
+      },
     })
     return () => {
       client.removeChannel(channel)

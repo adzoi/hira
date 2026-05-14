@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import Navbar from "../components/Navbar.tsx"
 import EmptyState from "../components/ui/EmptyState.tsx"
@@ -6,6 +6,7 @@ import ErrorState from "../components/ui/ErrorState.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
+import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { formatCityForDisplay, matchesLocationFilter } from "../lib/marketplaceFilters.ts"
 
@@ -96,14 +97,20 @@ const mockHirers: HirerRow[] = [
   },
 ]
 
+const HIRERS_PAGE_SIZE = 24
+
 export default function HirersPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [hirers, setHirers] = useState<HirerRow[]>([])
+  const [hirerTotal, setHirerTotal] = useState(0)
+  const [hirerNextOffset, setHirerNextOffset] = useState(0)
+  const hirerNextOffsetRef = useRef(0)
+  const [hirersLoadingMore, setHirersLoadingMore] = useState(false)
+  const [industryOptions, setIndustryOptions] = useState<{ id: string; name_ka: string }[]>([])
   const [searchText, setSearchText] = useState("")
   const [categoryId, setCategoryId] = useState("")
   const [sortBy, setSortBy] = useState<SortOption>("jobs_desc")
-  const [visibleCount, setVisibleCount] = useState(24)
 
   const [advancedDropdownOpen, setAdvancedDropdownOpen] = useState(false)
   const advancedDropdownRef = useRef<HTMLDivElement>(null)
@@ -138,21 +145,39 @@ export default function HirersPage() {
     }
   }, [advancedDropdownOpen])
 
-  useEffect(() => {
-    const load = async () => {
-      if (!isSupabaseConfigured || !supabase) {
-        setHirers(mockHirers)
-        setLoading(false)
-        return
+  const fetchHirersPage = useCallback(async (append: boolean) => {
+    if (!isSupabaseConfigured || !supabase) {
+      const names = new Set<string>()
+      for (const h of mockHirers) {
+        const raw = h.industry?.trim()
+        if (raw) names.add(raw)
       }
+      setIndustryOptions(
+        [...names].sort((a, b) => a.localeCompare(b, "ka")).map((name) => ({ id: name, name_ka: name })),
+      )
+      setHirers(mockHirers)
+      setHirerTotal(mockHirers.length)
+      hirerNextOffsetRef.current = mockHirers.length
+      setHirerNextOffset(mockHirers.length)
+      setLoading(false)
+      setHirersLoadingMore(false)
+      return
+    }
 
+    if (!append) {
+      hirerNextOffsetRef.current = 0
+      setHirerNextOffset(0)
       setLoading(true)
-      setError("")
-      try {
-        const { data, error: qErr } = await supabase
-          .from("hirer_profiles")
-          .select(
-            `
+    } else {
+      setHirersLoadingMore(true)
+    }
+    setError("")
+    try {
+      const offset = append ? hirerNextOffsetRef.current : 0
+      const { data, error: qErr, count } = await supabase
+        .from("hirer_profiles")
+        .select(
+          `
             id,
             user_id,
             company_name,
@@ -168,119 +193,156 @@ export default function HirersPage() {
               city
             )
           `,
-          )
-          .order("jobs_posted_count", { ascending: false })
+          { count: "exact" },
+        )
+        .order("jobs_posted_count", { ascending: false })
+        .range(offset, offset + HIRERS_PAGE_SIZE - 1)
 
-        if (qErr) throw qErr
+      if (qErr) throw qErr
 
-        const mapped: HirerRow[] = (data ?? []).map((row: any) => {
-          const profile = row.profiles as null | {
-            full_name: string | null
-            avatar_url: string | null
-            city: string | null
+      const mapped: HirerRow[] = (data ?? []).map((row: any) => {
+        const profile = row.profiles as null | {
+          full_name: string | null
+          avatar_url: string | null
+          city: string | null
+        }
+        const company = row.company_name?.trim() || "დამქირავებელი"
+        return {
+          id: row.id as string,
+          ownerUserId: row.user_id as string,
+          companyName: company,
+          industry: row.industry ?? null,
+          description: row.description ?? null,
+          websiteUrl: row.website_url ?? null,
+          jobsPosted: Number(row.jobs_posted_count ?? 0),
+          completedJobs: Number(row.completed_jobs_count ?? 0),
+          averageRating: 0,
+          ratingCount: 0,
+          contactName: profile?.full_name?.trim() || "საკონტაქტო პირი",
+          avatarUrl: profile?.avatar_url ?? null,
+          city: profile?.city ?? null,
+          createdAt: row.created_at ?? new Date().toISOString(),
+        }
+      })
+
+      if (mapped.length > 0) {
+        const ids = mapped.map((h) => h.id)
+        const [{ data: cjRows, error: cjErr }, { data: siRows, error: siErr }] = await Promise.all([
+          supabase.from("completed_jobs").select("hirer_profile_id").in("hirer_profile_id", ids),
+          supabase
+            .from("service_inquiries")
+            .select("hirer_profile_id")
+            .eq("status", "completed")
+            .in("hirer_profile_id", ids),
+        ])
+        const ownerIds = Array.from(new Set(mapped.map((h) => h.ownerUserId).filter(Boolean)))
+        const ownerToHirerId = mapped.reduce<Record<string, string>>((acc, h) => {
+          if (h.ownerUserId) acc[h.ownerUserId] = h.id
+          return acc
+        }, {})
+        const { data: reviewRows, error: reviewErr } = await supabase
+          .from("reviews")
+          .select("reviewee_id, rating_overall")
+          .in("reviewee_id", ownerIds)
+
+        const countMap: Record<string, number> = Object.fromEntries(ids.map((id) => [id, 0]))
+        const ratingSumMap: Record<string, number> = Object.fromEntries(ids.map((id) => [id, 0]))
+        const ratingCountMap: Record<string, number> = Object.fromEntries(ids.map((id) => [id, 0]))
+
+        if (!cjErr && cjRows) {
+          for (const row of cjRows) {
+            const hp = row.hirer_profile_id
+            countMap[hp] = (countMap[hp] ?? 0) + 1
           }
-          const company = row.company_name?.trim() || "დამქირავებელი"
-          return {
-            id: row.id as string,
-            ownerUserId: row.user_id as string,
-            companyName: company,
-            industry: row.industry ?? null,
-            description: row.description ?? null,
-            websiteUrl: row.website_url ?? null,
-            jobsPosted: Number(row.jobs_posted_count ?? 0),
-            completedJobs: Number(row.completed_jobs_count ?? 0),
-            averageRating: 0,
-            ratingCount: 0,
-            contactName: profile?.full_name?.trim() || "საკონტაქტო პირი",
-            avatarUrl: profile?.avatar_url ?? null,
-            city: profile?.city ?? null,
-            createdAt: row.created_at ?? new Date().toISOString(),
-          }
-        })
-
-        if (mapped.length > 0) {
-          const ids = mapped.map((h) => h.id)
-          const [{ data: cjRows, error: cjErr }, { data: siRows, error: siErr }] = await Promise.all([
-            supabase.from("completed_jobs").select("hirer_profile_id").in("hirer_profile_id", ids),
-            supabase
-              .from("service_inquiries")
-              .select("hirer_profile_id")
-              .eq("status", "completed")
-              .in("hirer_profile_id", ids),
-          ])
-          const ownerIds = Array.from(new Set(mapped.map((h) => h.ownerUserId).filter(Boolean)))
-          const ownerToHirerId = mapped.reduce<Record<string, string>>((acc, h) => {
-            if (h.ownerUserId) acc[h.ownerUserId] = h.id
-            return acc
-          }, {})
-          const { data: reviewRows, error: reviewErr } = await supabase
-            .from("reviews")
-            .select("reviewee_id, rating_overall")
-            .in("reviewee_id", ownerIds)
-
-          const countMap: Record<string, number> = Object.fromEntries(ids.map((id) => [id, 0]))
-          const ratingSumMap: Record<string, number> = Object.fromEntries(ids.map((id) => [id, 0]))
-          const ratingCountMap: Record<string, number> = Object.fromEntries(ids.map((id) => [id, 0]))
-
-          if (!cjErr && cjRows) {
-            for (const row of cjRows) {
-              const hp = row.hirer_profile_id
-              countMap[hp] = (countMap[hp] ?? 0) + 1
-            }
-          } else {
-            for (const m of mapped) {
-              countMap[m.id] = Number(m.completedJobs ?? 0)
-            }
-          }
-
-          if (!siErr && siRows) {
-            for (const row of siRows) {
-              const hp = row.hirer_profile_id
-              countMap[hp] = (countMap[hp] ?? 0) + 1
-            }
-          }
-          if (!reviewErr && reviewRows) {
-            for (const row of reviewRows) {
-              const hp = ownerToHirerId[String(row.reviewee_id ?? "")]
-              const rating = Number(row.rating_overall ?? 0)
-              if (!hp || !Number.isFinite(rating) || rating <= 0) continue
-              ratingSumMap[hp] = (ratingSumMap[hp] ?? 0) + rating
-              ratingCountMap[hp] = (ratingCountMap[hp] ?? 0) + 1
-            }
-          }
-
-          for (const item of mapped) {
-            item.completedJobs = countMap[item.id] ?? 0
-            const reviewCount = ratingCountMap[item.id] ?? 0
-            item.ratingCount = reviewCount
-            item.averageRating = reviewCount > 0 ? (ratingSumMap[item.id] ?? 0) / reviewCount : 0
+        } else {
+          for (const m of mapped) {
+            countMap[m.id] = Number(m.completedJobs ?? 0)
           }
         }
 
-        setHirers(mapped)
-      } catch (e) {
-        const message =
-          e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : ""
-        setError(message || "დამქირავებლების ჩამონათვალის წაკითხვა ვერ მოხერხდა.")
-        setHirers([])
-      } finally {
-        setLoading(false)
-      }
-    }
+        if (!siErr && siRows) {
+          for (const row of siRows) {
+            const hp = row.hirer_profile_id
+            countMap[hp] = (countMap[hp] ?? 0) + 1
+          }
+        }
+        if (!reviewErr && reviewRows) {
+          for (const row of reviewRows) {
+            const hp = ownerToHirerId[String(row.reviewee_id ?? "")]
+            const rating = Number(row.rating_overall ?? 0)
+            if (!hp || !Number.isFinite(rating) || rating <= 0) continue
+            ratingSumMap[hp] = (ratingSumMap[hp] ?? 0) + rating
+            ratingCountMap[hp] = (ratingCountMap[hp] ?? 0) + 1
+          }
+        }
 
-    void load()
+        for (const item of mapped) {
+          item.completedJobs = countMap[item.id] ?? 0
+          const reviewCount = ratingCountMap[item.id] ?? 0
+          item.ratingCount = reviewCount
+          item.averageRating = reviewCount > 0 ? (ratingSumMap[item.id] ?? 0) / reviewCount : 0
+        }
+      }
+
+      const total = count ?? 0
+
+      if (!append) {
+        setHirers(mapped)
+        hirerNextOffsetRef.current = HIRERS_PAGE_SIZE
+        setHirerNextOffset(HIRERS_PAGE_SIZE)
+      } else {
+        setHirers((prev) => [...prev, ...mapped])
+        hirerNextOffsetRef.current += HIRERS_PAGE_SIZE
+        setHirerNextOffset(hirerNextOffsetRef.current)
+      }
+
+      setHirerTotal(total)
+    } catch (e) {
+      const message =
+        e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : ""
+      setError(message || "დამქირავებლების ჩამონათვალის წაკითხვა ვერ მოხერხდა.")
+      if (!append) setHirers([])
+    } finally {
+      setLoading(false)
+      setHirersLoadingMore(false)
+    }
   }, [])
 
-  const industryCategories = useMemo(() => {
-    const names = new Set<string>()
-    for (const h of hirers) {
-      const raw = h.industry?.trim()
-      if (raw) names.add(raw)
+  useEffect(() => {
+    void fetchHirersPage(false)
+  }, [fetchHirersPage])
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return
+    let cancelled = false
+    const run = async () => {
+      try {
+        const rows = await fetchAllRowsByRange((from, to) =>
+          supabase
+            .from("hirer_profiles")
+            .select("industry")
+            .not("industry", "is", null)
+            .order("industry", { ascending: true })
+            .range(from, to) as unknown,
+        )
+        if (cancelled) return
+        const names = new Set<string>()
+        for (const r of rows) {
+          const t = String((r as { industry?: string | null }).industry ?? "").trim()
+          if (t) names.add(t)
+        }
+        setIndustryOptions(
+          [...names].sort((a, b) => a.localeCompare(b, "ka")).map((name) => ({ id: name, name_ka: name })),
+        )
+      } catch {
+        /* industry filter is optional */
+      }
     }
-    return [...names]
-      .sort((a, b) => a.localeCompare(b, "ka"))
-      .map((name) => ({ id: name, name_ka: name }))
-  }, [hirers])
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const openAdvancedDropdown = () => {
     setDraftLocationFilter(locationFilter)
@@ -303,7 +365,6 @@ export default function HirersPage() {
     setDraftLocationFilter("")
     setAdvancedDropdownOpen(false)
     setSortBy("jobs_desc")
-    setVisibleCount(24)
   }
 
   const advancedFilterCount = locationFilter.trim() ? 1 : 0
@@ -344,7 +405,7 @@ export default function HirersPage() {
     return list.sort((a, b) => b.jobsPosted - a.jobsPosted)
   }, [filtered, sortBy])
 
-  const visible = sorted.slice(0, visibleCount)
+  const hirersHasMore = hirerNextOffset < hirerTotal
 
   if (loading) {
     return (
@@ -390,7 +451,7 @@ export default function HirersPage() {
                   aria-label="ინდუსტრია"
                 >
                   <option value="">ყველა ინდუსტრია</option>
-                  {industryCategories.map((cat) => (
+                  {industryOptions.map((cat) => (
                     <option key={cat.id} value={cat.id}>
                       {cat.name_ka}
                     </option>
@@ -523,7 +584,7 @@ export default function HirersPage() {
             <>
               {!error ? (
                 <ul className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {visible.map((h) => {
+                  {sorted.map((h) => {
                     const desc = (h.description ?? "").trim()
                     const snippet =
                       desc.length > 160 ? `${desc.slice(0, 160)}…` : desc || "კომპანიის შესახებ ტექსტი ხელმისაწვდომი იქნება პროფილიდან."
@@ -613,14 +674,15 @@ export default function HirersPage() {
                   })}
                 </ul>
               ) : null}
-              {!error && visible.length < sorted.length ? (
+              {!error && hirersHasMore ? (
                 <div className="mt-8 flex justify-center">
                   <button
                     type="button"
-                    onClick={() => setVisibleCount((c) => c + 24)}
-                    className="h-11 rounded-lg border border-[#0088FF] px-6 text-sm font-semibold text-[#0088FF] transition hover:bg-[#E8F4FF]"
+                    disabled={hirersLoadingMore}
+                    onClick={() => void fetchHirersPage(true)}
+                    className="h-11 rounded-lg border border-[#0088FF] px-6 text-sm font-semibold text-[#0088FF] transition hover:bg-[#E8F4FF] disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    მეტის ნახვა
+                    {hirersLoadingMore ? "იტვირთება…" : "მეტის ჩატვირთვა"}
                   </button>
                 </div>
               ) : null}

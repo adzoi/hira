@@ -18,7 +18,7 @@ const corsHeaders: Record<string, string> = {
 }
 
 const CACHE_TTL = 60
-const CACHE_KEY = "home:feed"
+const CACHE_KEY = "home:feed:v2"
 // 10 requests per 10 seconds per IP
 const RATE_LIMIT_REQUESTS = 10
 const RATE_LIMIT_WINDOW = "10 s"

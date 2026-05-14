@@ -322,7 +322,7 @@ export default function ListingFormPage() {
     if (incoming.length === 0) return
     const remaining = MAX_LISTING_IMAGES - existingImageUrls.length - newImageFiles.length
     if (remaining <= 0) {
-      setError(`მაქსიმუმ ${MAX_LISTING_IMAGES} სურათი შეგიძლია დაამატო.`)
+      setError(`შესაძლებელია მაქსიმუმ ${MAX_LISTING_IMAGES} ფოტოს დამატება.`)
       return
     }
 

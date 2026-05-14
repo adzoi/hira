@@ -7,6 +7,7 @@ import ErrorState from "../components/ui/ErrorState.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
 import MarketplaceCatalogToolbar from "../components/MarketplaceCatalogToolbar.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
+import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { jobVacancyStats } from "../lib/jobVacancies.ts"
 import { formatCityForDisplay, jobMatchesUnifiedLocation } from "../lib/marketplaceFilters.ts"
@@ -548,10 +549,17 @@ export default function JobsPage() {
         )
 
         if (!append) {
-          const { data: subRows } = await supabase.from("subcategories").select("id,name_ka,category_id").eq("is_active", true)
+          const subRows = await fetchAllRowsByRange((from, to) =>
+            supabase
+              .from("subcategories")
+              .select("id,name_ka,category_id")
+              .eq("is_active", true)
+              .order("name_ka")
+              .range(from, to),
+          )
           setSubcategoryNamesById(
             new Map(
-              (subRows ?? []).map((r) => {
+              subRows.map((r) => {
                 const row = r as { id?: string; name_ka?: string }
                 return [String(row.id ?? ""), String(row.name_ka ?? "")] as const
               }),
@@ -559,7 +567,7 @@ export default function JobsPage() {
           )
           setSubcategoryParentById(
             new Map(
-              (subRows ?? []).map((r) => {
+              subRows.map((r) => {
                 const row = r as { id?: string; category_id?: string | null }
                 return [String(row.id ?? ""), String(row.category_id ?? "")] as const
               }),
