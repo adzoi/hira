@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react"
 import { Link } from "react-router-dom"
 import Navbar from "../components/Navbar.tsx"
 import EmptyState from "../components/ui/EmptyState.tsx"
@@ -26,6 +26,25 @@ type HirerRow = {
   city: string | null
   createdAt: string
 }
+
+type RawHirerRow = {
+  id: string
+  user_id: string
+  company_name: string | null
+  description: string | null
+  industry: string | null
+  website_url: string | null
+  jobs_posted_count: number | null
+  completed_jobs_count: number | null
+  created_at: string
+  profiles: {
+    full_name: string | null
+    avatar_url: string | null
+    city: string | null
+  } | null
+}
+
+type IndustryOption = { id: string; name_ka: string }
 
 type SortOption = "jobs_desc" | "completed_desc" | "newest"
 
@@ -99,6 +118,35 @@ const mockHirers: HirerRow[] = [
 
 const HIRERS_PAGE_SIZE = 24
 
+async function fetchIndustryOptions(
+  setIndustryOptions: Dispatch<SetStateAction<IndustryOption[]>>,
+  isCancelled?: () => boolean,
+) {
+  if (!isSupabaseConfigured || !supabase) return
+  const sb = supabase
+  try {
+    const rows = await fetchAllRowsByRange((from, to) =>
+      sb
+        .from("hirer_profiles")
+        .select("industry")
+        .not("industry", "is", null)
+        .order("industry", { ascending: true })
+        .range(from, to) as unknown,
+    )
+    if (isCancelled?.()) return
+    const names = new Set<string>()
+    for (const r of rows) {
+      const t = String((r as { industry?: string | null }).industry ?? "").trim()
+      if (t) names.add(t)
+    }
+    setIndustryOptions(
+      [...names].sort((a, b) => a.localeCompare(b, "ka")).map((name) => ({ id: name, name_ka: name })),
+    )
+  } catch {
+    /* industry filter is optional */
+  }
+}
+
 export default function HirersPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -107,7 +155,7 @@ export default function HirersPage() {
   const [hirerNextOffset, setHirerNextOffset] = useState(0)
   const hirerNextOffsetRef = useRef(0)
   const [hirersLoadingMore, setHirersLoadingMore] = useState(false)
-  const [industryOptions, setIndustryOptions] = useState<{ id: string; name_ka: string }[]>([])
+  const [industryOptions, setIndustryOptions] = useState<IndustryOption[]>([])
   const [searchText, setSearchText] = useState("")
   const [categoryId, setCategoryId] = useState("")
   const [sortBy, setSortBy] = useState<SortOption>("jobs_desc")
@@ -200,16 +248,12 @@ export default function HirersPage() {
 
       if (qErr) throw qErr
 
-      const mapped: HirerRow[] = (data ?? []).map((row: any) => {
-        const profile = row.profiles as null | {
-          full_name: string | null
-          avatar_url: string | null
-          city: string | null
-        }
+      const mapped: HirerRow[] = (data ?? []).map((row: RawHirerRow) => {
+        const profile = row.profiles
         const company = row.company_name?.trim() || "დამქირავებელი"
         return {
-          id: row.id as string,
-          ownerUserId: row.user_id as string,
+          id: row.id,
+          ownerUserId: row.user_id,
           companyName: company,
           industry: row.industry ?? null,
           description: row.description ?? null,
@@ -227,23 +271,33 @@ export default function HirersPage() {
 
       if (mapped.length > 0) {
         const ids = mapped.map((h) => h.id)
-        const [{ data: cjRows, error: cjErr }, { data: siRows, error: siErr }] = await Promise.all([
+        const ownerIds = Array.from(new Set(mapped.map((h) => h.ownerUserId).filter(Boolean)))
+        const ownerToHirerId = mapped.reduce<Record<string, string>>((acc, h) => {
+          if (h.ownerUserId) acc[h.ownerUserId] = h.id
+          return acc
+        }, {})
+
+        const reviewQuery =
+          ownerIds.length > 0
+            ? supabase.from("reviews").select("reviewee_id, rating_overall").in("reviewee_id", ownerIds)
+            : Promise.resolve({
+                data: [] as { reviewee_id: string | null; rating_overall: number | null }[],
+                error: null,
+              })
+
+        const [
+          { data: cjRows, error: cjErr },
+          { data: siRows, error: siErr },
+          { data: reviewRows, error: reviewErr },
+        ] = await Promise.all([
           supabase.from("completed_jobs").select("hirer_profile_id").in("hirer_profile_id", ids),
           supabase
             .from("service_inquiries")
             .select("hirer_profile_id")
             .eq("status", "completed")
             .in("hirer_profile_id", ids),
+          reviewQuery,
         ])
-        const ownerIds = Array.from(new Set(mapped.map((h) => h.ownerUserId).filter(Boolean)))
-        const ownerToHirerId = mapped.reduce<Record<string, string>>((acc, h) => {
-          if (h.ownerUserId) acc[h.ownerUserId] = h.id
-          return acc
-        }, {})
-        const { data: reviewRows, error: reviewErr } = await supabase
-          .from("reviews")
-          .select("reviewee_id, rating_overall")
-          .in("reviewee_id", ownerIds)
 
         const countMap: Record<string, number> = Object.fromEntries(ids.map((id) => [id, 0]))
         const ratingSumMap: Record<string, number> = Object.fromEntries(ids.map((id) => [id, 0]))
@@ -291,7 +345,17 @@ export default function HirersPage() {
         hirerNextOffsetRef.current = HIRERS_PAGE_SIZE
         setHirerNextOffset(HIRERS_PAGE_SIZE)
       } else {
-        setHirers((prev) => [...prev, ...mapped])
+        setHirers((prev) => {
+          const seen = new Set(prev.map((h) => h.id))
+          const merged = [...prev]
+          for (const h of mapped) {
+            if (!seen.has(h.id)) {
+              seen.add(h.id)
+              merged.push(h)
+            }
+          }
+          return merged
+        })
         hirerNextOffsetRef.current += HIRERS_PAGE_SIZE
         setHirerNextOffset(hirerNextOffsetRef.current)
       }
@@ -308,38 +372,15 @@ export default function HirersPage() {
     }
   }, [])
 
+  const fetchHirersPageRef = useRef(fetchHirersPage)
   useEffect(() => {
-    void fetchHirersPage(false)
+    fetchHirersPageRef.current = fetchHirersPage
   }, [fetchHirersPage])
 
   useEffect(() => {
-    if (!isSupabaseConfigured || !supabase) return
-    const sb = supabase
     let cancelled = false
-    const run = async () => {
-      try {
-        const rows = await fetchAllRowsByRange((from, to) =>
-          sb
-            .from("hirer_profiles")
-            .select("industry")
-            .not("industry", "is", null)
-            .order("industry", { ascending: true })
-            .range(from, to) as unknown,
-        )
-        if (cancelled) return
-        const names = new Set<string>()
-        for (const r of rows) {
-          const t = String((r as { industry?: string | null }).industry ?? "").trim()
-          if (t) names.add(t)
-        }
-        setIndustryOptions(
-          [...names].sort((a, b) => a.localeCompare(b, "ka")).map((name) => ({ id: name, name_ka: name })),
-        )
-      } catch {
-        /* industry filter is optional */
-      }
-    }
-    void run()
+    void fetchHirersPageRef.current(false)
+    void fetchIndustryOptions(setIndustryOptions, () => cancelled)
     return () => {
       cancelled = true
     }
