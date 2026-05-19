@@ -76,11 +76,6 @@ function ExternalLinkArrowIcon({ className }: { className?: string }) {
   )
 }
 
-function ratingStars(value: number) {
-  const rounded = Math.round(value)
-  return `${"★".repeat(Math.max(0, rounded))}${"☆".repeat(Math.max(0, 5 - rounded))}`
-}
-
 const mockHirers: HirerRow[] = [
   {
     id: "00000000-0000-0000-0000-000000000001",
@@ -656,19 +651,16 @@ export default function HirersPage() {
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-lg font-bold text-gray-900">{h.companyName}</p>
                             <p className="truncate text-sm text-slate-500">{h.industry?.trim() || "ინდუსტრია"}</p>
-                            <p className="mt-1 text-xs text-slate-500">
-                              📍 {formatCityForDisplay(h.city) ?? h.city ?? "ქალაქი უცნობია"}
-                            </p>
+                            {formatCityForDisplay(h.city) ? (
+                              <p className="mt-1 text-xs text-slate-500">📍 {formatCityForDisplay(h.city)}</p>
+                            ) : null}
                           </div>
                         </div>
 
                         <p className="mt-3 line-clamp-2 flex-1 text-sm leading-relaxed text-slate-600">{snippet}</p>
 
                         <div className="mt-3 flex items-center justify-between text-sm">
-                          <p className="font-semibold">
-                            <span className="text-amber-500">{ratingStars(h.averageRating)}</span>
-                            <span className="text-gray-900"> {h.averageRating.toFixed(1)}</span>
-                          </p>
+                          <p className="font-semibold text-gray-900">{h.averageRating.toFixed(1)}</p>
                           <p className="text-slate-500">({h.ratingCount} შეფასება)</p>
                         </div>
 

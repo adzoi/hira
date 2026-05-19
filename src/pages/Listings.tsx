@@ -9,6 +9,7 @@ import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
 import { useToast } from "../components/ui/ToastProvider.tsx"
 import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
+import { formatListingPrice } from "../lib/listingPrice.ts"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
@@ -22,6 +23,8 @@ import {
   type CategoryBranchRow,
 } from "../lib/marketplaceCategoryTree.ts"
 import { ViewCountEyeIcon } from "../components/ViewCountEyeIcon.tsx"
+import VipBadge from "../components/VipBadge.tsx"
+import { LIMITS, validateInquiryMessage, validateMoneyAmount } from "../lib/validation.ts"
 type ListingMeta = { categoryId: string | null; subcategoryId: string | null; tags: string[] }
 type Availability = "full_time" | "part_time" | "weekends"
 type SkillItem = { id: string; name: string; category_id: string | null }
@@ -54,7 +57,7 @@ function parseListingDescription(raw: string | null): { description: string; met
   }
 }
 
-type SortOption = "newest" | "price_asc" | "price_desc" | "delivery"
+type SortOption = "newest" | "price_asc" | "price_desc"
 
 type ListingRow = {
   id: string
@@ -62,7 +65,7 @@ type ListingRow = {
   title: string
   descriptionRaw: string | null
   price: number
-  deliveryDays: number
+  priceType: string
   createdAt: string
   freelancerSlug: string
   professionalTitle: string
@@ -94,11 +97,6 @@ function getInitials(fullName: string) {
 function isNegotiable(price: number, description: string) {
   if (price === 0) return true
   return description.toLowerCase().includes("შეთანხმებით")
-}
-
-function ratingStars(value: number) {
-  const rounded = Math.round(value)
-  return `${"★".repeat(Math.max(0, rounded))}${"☆".repeat(Math.max(0, 5 - rounded))}`
 }
 
 function listingMatchesSkillIds(item: ListingRow, skillIds: string[], skillById: Map<string, SkillItem>): boolean {
@@ -160,7 +158,7 @@ const mockListings: ListingRow[] = [
     descriptionRaw:
       '<!--gigori-meta:{"categoryId":null,"subcategoryId":null,"tags":["React","TypeScript"]}-->ლეიაუტის აწყობა, ფორმების დაკავშირება API-თან.',
     price: 450,
-    deliveryDays: 5,
+    priceType: "fixed",
     createdAt: new Date().toISOString(),
     freelancerSlug: "giorgi-beridze",
     professionalTitle: "Full-Stack Developer",
@@ -185,7 +183,7 @@ const mockListings: ListingRow[] = [
     title: "UI/UX რევიუს პაკეტი (Figma)",
     descriptionRaw: "ვახდენთ ინტერფეისის აუდიტს და იუზაბილითის რეკომენდაციებს.",
     price: 280,
-    deliveryDays: 3,
+    priceType: "fixed",
     createdAt: new Date().toISOString(),
     freelancerSlug: "nino-kapanadze",
     professionalTitle: "UI Designer",
@@ -331,20 +329,21 @@ export default function ListingsPage() {
 
   const submitListingInquiry = async () => {
     if (!isSupabaseConfigured || !supabase || !inquiryListing) return
-    const msg = inquiryMessage.trim()
-    if (msg.length < 10) {
-      setInquiryFormError("შეტყობინება მინიმუმ 10 სიმბოლო უნდა იყოს.")
+    const msgResult = validateInquiryMessage(inquiryMessage)
+    if (!msgResult.ok) {
+      setInquiryFormError(msgResult.message)
       return
     }
+    const msg = msgResult.value
     let proposed: number | null = null
     const rawB = inquiryBudget.trim()
     if (rawB) {
-      const n = Number(rawB)
-      if (!Number.isFinite(n) || n < 0) {
-        setInquiryFormError("შემოთავაზებული თანხა არასწორია.")
+      const budgetResult = validateMoneyAmount(rawB, { min: 0, label: "შემოთავაზებული თანხა" })
+      if (!budgetResult.ok || budgetResult.value == null) {
+        setInquiryFormError(budgetResult.ok ? "შემოთავაზებული თანხა არასწორია." : budgetResult.message)
         return
       }
-      proposed = n
+      proposed = budgetResult.value
     }
     setInquirySubmitting(true)
     setInquiryFormError("")
@@ -476,7 +475,7 @@ export default function ListingsPage() {
             title: string | null
             description: string | null
             price: number | string | null
-            delivery_days: number | string | null
+            price_type: string | null
             views_count?: number | string | null
             created_at: string | null
             is_vip?: boolean | null
@@ -510,7 +509,7 @@ export default function ListingsPage() {
             title: r.title ?? "სერვისი",
             descriptionRaw: r.description,
             price: Number(r.price ?? 0),
-            deliveryDays: Number(r.delivery_days ?? 0),
+            priceType: String(r.price_type ?? "fixed"),
             createdAt: r.created_at ?? new Date().toISOString(),
             freelancerSlug: r.slug,
             professionalTitle: r.professional_title ?? "",
@@ -790,7 +789,6 @@ export default function ListingsPage() {
       if (vipOrder !== 0) return vipOrder
       if (sortBy === "price_asc") return a.price - b.price
       if (sortBy === "price_desc") return b.price - a.price
-      if (sortBy === "delivery") return a.deliveryDays - b.deliveryDays
       return +new Date(b.createdAt) - +new Date(a.createdAt)
     })
     return list
@@ -888,7 +886,7 @@ export default function ListingsPage() {
               <div className="h-10 w-[13.5rem] shrink-0">
                 <input
                   value={searchText}
-                  onChange={(event) => setSearchText(event.target.value)}
+                  onChange={(event) => setSearchText(event.target.value.slice(0, LIMITS.search))}
                   className="h-10 w-full rounded-full border border-slate-300 bg-white px-2.5 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:border-[#0088FF] focus:ring-2 focus:ring-inset focus:ring-[#0088FF]"
                   placeholder="ძიება"
                 />
@@ -1044,9 +1042,9 @@ export default function ListingsPage() {
                               className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
                             >
                               <option value={0}>ნებისმიერი</option>
-                              <option value={3}>3+ ვარსკვლავი</option>
-                              <option value={4}>4+ ვარსკვლავი</option>
-                              <option value={5}>5 ვარსკვლავი</option>
+                              <option value={3}>3+</option>
+                              <option value={4}>4+</option>
+                              <option value={5}>5</option>
                             </select>
                           </label>
 
@@ -1118,7 +1116,6 @@ export default function ListingsPage() {
                   <option value="newest">უახლესი</option>
                   <option value="price_asc">ფასი: იაფიდან</option>
                   <option value="price_desc">ფასი: ძვირიდან</option>
-                  <option value="delivery">მოკლე მიწოდება</option>
                 </select>
               </label>
 
@@ -1182,11 +1179,6 @@ export default function ListingsPage() {
                           }
                         }}
                       >
-                        <FreelancerAvailabilityIndicator
-                          available={item.isAcceptingNewWork}
-                          labelWhenAvailable="ფრილანსერი ახალი სამუშაოებისთვის ხელმისაწვდომია."
-                          labelWhenUnavailable="ეს ფრილანსერი ამჟამად ახალი სამუშაოებისთვის ხელმიუწვდომელია. შეთავაზების გაგზავნა მაინც შეგიძლიათ."
-                        />
                         <div className="shrink-0">
                           <div className="flex items-start gap-3">
                             <Link
@@ -1194,18 +1186,24 @@ export default function ListingsPage() {
                               className="shrink-0"
                               onClick={(e) => e.stopPropagation()}
                             >
-                              {item.avatarUrl ? (
-                                <img
-                                  src={avatarImageUrl(supabase, item.avatarUrl) ?? item.avatarUrl}
-                                  alt=""
-                                  loading="lazy"
-                                  className="h-16 w-16 rounded-full object-cover"
-                                />
-                              ) : (
-                                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#1B2B4B] text-lg font-bold text-white">
-                                  {getInitials(item.fullName)}
-                                </div>
-                              )}
+                              <FreelancerAvailabilityIndicator
+                                available={item.isAcceptingNewWork}
+                                labelWhenAvailable="ფრილანსერი ახალი სამუშაოებისთვის ხელმისაწვდომია."
+                                labelWhenUnavailable="ეს ფრილანსერი ამჟამად ახალი სამუშაოებისთვის ხელმიუწვდომელია. შეთავაზების გაგზავნა მაინც შეგიძლიათ."
+                              >
+                                {item.avatarUrl ? (
+                                  <img
+                                    src={avatarImageUrl(supabase, item.avatarUrl) ?? item.avatarUrl}
+                                    alt=""
+                                    loading="lazy"
+                                    className="h-16 w-16 rounded-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#1B2B4B] text-lg font-bold text-white">
+                                    {getInitials(item.fullName)}
+                                  </div>
+                                )}
+                              </FreelancerAvailabilityIndicator>
                             </Link>
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-2">
@@ -1216,16 +1214,12 @@ export default function ListingsPage() {
                                 >
                                   {item.fullName}
                                 </Link>
-                                {item.vipActive ? (
-                                  <span className="rounded-full bg-[#E8F4FF] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#0088FF]">
-                                    VIP
-                                  </span>
-                                ) : null}
+                                {item.vipActive ? <VipBadge /> : null}
                               </div>
                               <p className="truncate text-sm text-slate-500">{item.professionalTitle || "ფრილანსერი"}</p>
-                              <p className="mt-1 text-xs text-slate-500">
-                                📍 {formatCityForDisplay(item.city) ?? item.city ?? "ქალაქი უცნობია"}
-                              </p>
+                              {formatCityForDisplay(item.city) ? (
+                                <p className="mt-1 text-xs text-slate-500">📍 {formatCityForDisplay(item.city)}</p>
+                              ) : null}
                             </div>
                           </div>
 
@@ -1238,10 +1232,7 @@ export default function ListingsPage() {
                           </p>
 
                           <div className="mt-3 flex items-center justify-between text-sm">
-                            <p className="font-semibold">
-                              <span className="text-amber-500">{ratingStars(item.averageRating)}</span>
-                              <span className="text-gray-900"> {item.averageRating.toFixed(1)}</span>
-                            </p>
+                            <p className="font-semibold text-gray-900">{item.averageRating.toFixed(1)}</p>
                           </div>
                         </div>
 
@@ -1267,7 +1258,7 @@ export default function ListingsPage() {
                         <div className="mt-3 shrink-0 space-y-2">
                           <div className="flex items-center justify-between gap-2">
                             <p className="text-sm font-semibold text-gray-900">
-                              {negotiable ? "შეთანხმებით" : `₾${item.price.toLocaleString("ka-GE")} დან`}
+                              {formatListingPrice(item.price, item.priceType, { negotiable })}
                             </p>
                             {hasAvailBadge && availabilityText ? (
                               <span
@@ -1275,17 +1266,13 @@ export default function ListingsPage() {
                               >
                                 {availabilityText}
                               </span>
-                            ) : (
-                              <span className="text-right text-xs text-slate-500">
-                                {item.deliveryDays} სამუშაო დღე
-                              </span>
-                            )}
+                            ) : null}
                           </div>
                           <p className="text-xs text-slate-500">
                             💼 {item.completedJobsCount} შესრულებული ·{" "}
                             <span className="inline-flex items-center gap-0.5 align-middle">
                               <ViewCountEyeIcon className="relative -top-px inline h-3.5 w-3.5 text-slate-500" />
-                              {item.viewsCount} ნახვა
+                              {item.viewsCount}
                             </span>
                           </p>
                         </div>

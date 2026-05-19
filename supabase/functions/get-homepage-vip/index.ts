@@ -1,5 +1,4 @@
-import { Redis } from "https://esm.sh/@upstash/redis@1.20.1"
-import { Ratelimit } from "https://esm.sh/@upstash/ratelimit@0.4.4"
+import { enforceRateLimit, getRedis } from "../_shared/rateLimit.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
 
 declare const Deno: {
@@ -323,37 +322,14 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: "Missing Supabase env" }, 500)
   }
 
-  // ── Rate limiting ────────────────────────────────────────────────────────
-  let redis: Redis | null = null
-  try {
-    if (Deno.env.get("UPSTASH_REDIS_REST_URL") && Deno.env.get("UPSTASH_REDIS_REST_TOKEN")) {
-      redis = Redis.fromEnv()
-    }
-  } catch {
-    redis = null
-  }
+  const rateLimited = await enforceRateLimit(
+    req,
+    { prefix: "rl:homepage-vip", requests: 10, window: "10 s" },
+    corsHeaders,
+  )
+  if (rateLimited) return rateLimited
 
-  if (redis) {
-    try {
-      const ratelimit = new Ratelimit({
-        redis,
-        limiter: Ratelimit.slidingWindow(10, "10 s"),
-        analytics: false,
-        prefix: "rl:homepage-vip",
-      })
-      const ip =
-        req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-        req.headers.get("x-real-ip") ??
-        "anonymous"
-      const { success } = await ratelimit.limit(ip)
-      if (!success) {
-        return jsonResponse({ ok: false, error: "Too many requests" }, 429)
-      }
-    } catch {
-      // Fail open — don't block real users if rate limit check fails
-    }
-  }
-  // ────────────────────────────────────────────────────────────────────────
+  const redis = getRedis()
 
   let limit = 20
   if (req.method === "GET") {

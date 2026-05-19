@@ -2,6 +2,8 @@ import type { MouseEvent } from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import type { Json } from "../lib/database.types"
+import { fetchUnreadConversationCount } from "../lib/chat.ts"
+import { subscribeToChatInbox } from "../lib/chatRealtime.ts"
 import {
   fetchNotifications,
   markAllAsRead,
@@ -11,6 +13,7 @@ import {
 } from "../lib/notifications.ts"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { supabase } from "../lib/supabase"
+import { sanitizeInternalPath } from "../lib/validation.ts"
 
 const navLinks = [
   { label: "მთავარი", to: "/" },
@@ -105,6 +108,7 @@ export default function Navbar() {
   const [userId, setUserId] = useState<string | null>(null)
   const [publicProfileHref, setPublicProfileHref] = useState<string | null>(null)
   const [userType, setUserType] = useState<"freelancer" | "hirer" | null>(null)
+  const [unreadChatCount, setUnreadChatCount] = useState(0)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [detailNotification, setDetailNotification] = useState<AppNotification | null>(null)
@@ -160,11 +164,13 @@ export default function Navbar() {
         setUserType(null)
         setNotifications([])
         setNotificationsOpen(false)
+        setUnreadChatCount(0)
         return
       }
-      const [{ data }, list] = await Promise.all([
+      const [{ data }, list, chatUnread] = await Promise.all([
         client.from("profiles").select("avatar_url, full_name, user_type").eq("id", uid).maybeSingle(),
         fetchNotifications(client),
+        fetchUnreadConversationCount(client),
       ])
       setAvatarUrl(data?.avatar_url ?? null)
       setFullName(data?.full_name ?? "")
@@ -183,6 +189,7 @@ export default function Navbar() {
         setPublicProfileHref(null)
       }
       setNotifications(list)
+      setUnreadChatCount(chatUnread)
     }
 
     refresh()
@@ -195,7 +202,10 @@ export default function Navbar() {
   useEffect(() => {
     const client = supabase
     if (!client || !userId || !isAuthed) return
-    void fetchNotifications(client).then(setNotifications)
+    void Promise.all([fetchNotifications(client), fetchUnreadConversationCount(client)]).then(([list, chatUnread]) => {
+      setNotifications(list)
+      setUnreadChatCount(chatUnread)
+    })
   }, [location.pathname, userId, isAuthed])
 
   useEffect(() => {
@@ -216,6 +226,18 @@ export default function Navbar() {
         setDetailNotification((prev) => (prev?.id === id ? null : prev))
       },
     })
+    return () => {
+      client.removeChannel(channel)
+    }
+  }, [userId, isAuthed])
+
+  useEffect(() => {
+    const client = supabase
+    if (!client || !userId || !isAuthed) return
+    const refreshChatUnread = () => {
+      void fetchUnreadConversationCount(client).then(setUnreadChatCount)
+    }
+    const channel = subscribeToChatInbox(client, userId, refreshChatUnread)
     return () => {
       client.removeChannel(channel)
     }
@@ -276,13 +298,9 @@ export default function Navbar() {
     await markNotificationRead(row)
     setNotificationsOpen(false)
     setMobileMenuOpen(false)
-    const href = row.link?.trim()
+    const href = sanitizeInternalPath(row.link)
     if (!href) return
-    if (href.startsWith("http://") || href.startsWith("https://")) {
-      window.open(href, "_blank", "noopener,noreferrer")
-      return
-    }
-    navigate(href.startsWith("/") ? href : `/${href}`)
+    navigate(href)
   }
 
   const openJobApplicationDetail = async (row: AppNotification) => {
@@ -414,6 +432,30 @@ export default function Navbar() {
           ) : null}
 
           {isAuthed ? (
+            <>
+            <Link
+              to="/messages"
+              aria-label="ჩათი"
+              title="ჩათი"
+              className={`relative inline-flex h-10 w-10 items-center justify-center rounded-xl border transition ${
+                location.pathname.startsWith("/messages")
+                  ? "border-[#0088FF] bg-[#E8F4FF] text-[#0088FF]"
+                  : "border-slate-300 bg-white text-slate-500 hover:border-slate-400 hover:text-slate-700"
+              }`}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M8 10h8M8 14h5M6 20h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H9.5L6 8.5V18a2 2 0 0 0 2 2z"
+                />
+              </svg>
+              {unreadChatCount > 0 ? (
+                <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#0088FF] px-1 text-[10px] font-bold text-white ring-2 ring-white">
+                  {unreadChatCount > 99 ? "99+" : unreadChatCount}
+                </span>
+              ) : null}
+            </Link>
             <div className="relative" ref={notificationsRef}>
               <button
                 type="button"
@@ -499,6 +541,7 @@ export default function Navbar() {
                 </div>
               ) : null}
             </div>
+            </>
           ) : null}
 
           {isAuthed ? (
@@ -527,6 +570,9 @@ export default function Navbar() {
                 </Link>
                 <Link to="/saved" onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
                   შენახული
+                </Link>
+                <Link to="/messages" onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
+                  ჩათი
                 </Link>
                 {publicProfileHref ? (
                   <Link to={publicProfileHref} onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
@@ -697,7 +743,7 @@ export default function Navbar() {
               <div>
                 <p className="text-xs text-slate-500">რეიტინგი</p>
                 <p className="font-semibold text-[#1B2B4B]">
-                  {(detailPayload.average_rating ?? 0).toFixed(1)} ★
+                  {(detailPayload.average_rating ?? 0).toFixed(1)}
                 </p>
               </div>
             </div>

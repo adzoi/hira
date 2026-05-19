@@ -238,7 +238,7 @@ const VipTierPayPalPanel = memo(function VipTierPayPalPanel({
           }
 
           const { data: capData, error: capError } = await supabase.functions.invoke("paypal-capture", {
-            body: { orderID: trimmedOrderId },
+            body: { orderID: trimmedOrderId, job_id: jobId, listing_type: listingType },
           })
 
           if (capError) {

@@ -280,21 +280,27 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
 
   function buildPrintableHtml() {
     const longName = String(localCV.full_name || "").trim().length > 15
-    const escLite = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;")
-    const skills = (localCV.technical_skills || []).filter((s) => truthyStr(s)).map((s) => `<li>${escLite(s)}</li>`).join("")
-    const languages = (localCV.languages || []).filter((s) => truthyStr(s)).map((s) => `<li>${escLite(s)}</li>`).join("")
+    const esc = (s) =>
+      String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;")
+    const skills = (localCV.technical_skills || []).filter((s) => truthyStr(s)).map((s) => `<li>${esc(s)}</li>`).join("")
+    const languages = (localCV.languages || []).filter((s) => truthyStr(s)).map((s) => `<li>${esc(s)}</li>`).join("")
 
     const linkLine = (url) => {
       if (!truthyHttpUrl(url)) return ""
       const u = String(url).trim()
       const display = stripUrlForDisplay(u)
-      return `<div class="print-link"><a href="${u.replace(/"/g, "&quot;")}">🔗 ${display.replace(/</g, "&lt;")}</a></div>`
+      return `<div class="print-link"><a href="${esc(u)}">🔗 ${esc(display)}</a></div>`
     }
 
     const contactBlocks = []
-    if (truthyStr(localCV.email)) contactBlocks.push(`<p>${String(localCV.email)}</p>`)
-    if (truthyStr(localCV.phone)) contactBlocks.push(`<p>${String(localCV.phone)}</p>`)
-    if (truthyStr(localCV.location)) contactBlocks.push(`<p>${String(localCV.location)}</p>`)
+    if (truthyStr(localCV.email)) contactBlocks.push(`<p>${esc(localCV.email)}</p>`)
+    if (truthyStr(localCV.phone)) contactBlocks.push(`<p>${esc(localCV.phone)}</p>`)
+    if (truthyStr(localCV.location)) contactBlocks.push(`<p>${esc(localCV.location)}</p>`)
 
     const printLinks = [linkLine(localCV.linkedin_url), linkLine(localCV.github_url), linkLine(localCV.portfolio_url)]
       .filter(Boolean)
@@ -305,9 +311,9 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
         ? avatarImageUrl(supabase, localCV.avatar_url) ?? localCV.avatar_url
         : localCV.avatar_url
     const avatarBlock = truthyHttpUrl(avatarPrintSrc)
-      ? `<img class="avatar" src="${String(avatarPrintSrc).replace(/"/g, "&quot;")}" alt="" />`
+      ? `<img class="avatar" src="${esc(avatarPrintSrc)}" alt="" />`
       : truthyStr(localCV.full_name)
-        ? `<div class="avatar-fallback">${initialsFromName(localCV.full_name)}</div>`
+        ? `<div class="avatar-fallback">${esc(initialsFromName(localCV.full_name))}</div>`
         : ""
 
     const education = (localCV.education || [])
@@ -318,9 +324,9 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
         const end = edu.end_date ? formatGeorgianMonthYear(String(edu.end_date)) : ""
         return `
           <div class="edu-card">
-            ${line1 ? `<div class="edu-degree">${line1.replace(/</g, "&lt;")}</div>` : ""}
-            ${school ? `<div class="edu-school">${String(school).replace(/</g, "&lt;")}</div>` : ""}
-            ${end ? `<div class="edu-year">${end.replace(/</g, "&lt;")}</div>` : ""}
+            ${line1 ? `<div class="edu-degree">${esc(line1)}</div>` : ""}
+            ${school ? `<div class="edu-school">${esc(school)}</div>` : ""}
+            ${end ? `<div class="edu-year">${esc(end)}</div>` : ""}
           </div>
         `
       })
@@ -330,13 +336,13 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
       .filter((job) => truthyStr(job.role) || truthyStr(job.company) || truthyStr(job.description))
       .map((job) => {
         const desc = String(job.description || "").trim()
-        const bullets = desc ? `<li>${desc.replace(/</g, "&lt;")}</li>` : ""
+        const bullets = desc ? `<li>${esc(desc)}</li>` : ""
         const dates = formatGeorgianExperienceRange(job.start_date, job.end_date, Boolean(job.is_current))
         const title = [job.role, job.company].filter(truthyStr).join(" — ")
         return `
           <div class="work-card">
-            ${title ? `<div class="work-title">${title.replace(/</g, "&lt;")}</div>` : ""}
-            ${dates ? `<div class="work-date">${dates.replace(/</g, "&lt;")}</div>` : ""}
+            ${title ? `<div class="work-title">${esc(title)}</div>` : ""}
+            ${dates ? `<div class="work-date">${esc(dates)}</div>` : ""}
             ${bullets ? `<ul>${bullets}</ul>` : ""}
           </div>
         `
@@ -346,7 +352,7 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
     const summaryBlock = truthyStr(localCV.professional_summary)
       ? `<section class="sec" style="border-top:none;margin-top:0;padding-top:0">
            <h3 class="sec-title">პროფესიული რეზიუმე</h3>
-           <p class="summary">${String(localCV.professional_summary).replace(/</g, "&lt;")}</p>
+           <p class="summary">${esc(localCV.professional_summary)}</p>
          </section>`
       : ""
 
@@ -404,7 +410,7 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
           <div class="cv-shell">
             <aside class="sidebar">
               ${avatarBlock}
-              <h1 class="name" lang="ka">${(localCV.full_name || "").replace(/</g, "&lt;")}</h1>
+              <h1 class="name" lang="ka">${esc(localCV.full_name || "")}</h1>
               ${contactBlocks.length ? `<div class="contact">${contactBlocks.join("")}</div>` : ""}
               ${printLinks ? `<div class="sec" style="border-top:1px solid rgba(255,255,255,.2);margin-top:16px;padding-top:12px">${printLinks}</div>` : ""}
               ${skillsSec}

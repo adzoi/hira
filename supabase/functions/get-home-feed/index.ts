@@ -1,7 +1,5 @@
 // @ts-ignore: URL imports are resolved at Supabase Edge runtime (Deno), not by local TS server.
-import { Redis } from "https://esm.sh/@upstash/redis@1.20.1"
-// @ts-ignore: URL imports are resolved at Supabase Edge runtime (Deno), not by local TS server.
-import { Ratelimit } from "https://esm.sh/@upstash/ratelimit@0.4.4"
+import { enforceRateLimit, getRedis } from "../_shared/rateLimit.ts"
 // @ts-ignore: URL imports are resolved at Supabase Edge runtime (Deno), not by local TS server.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
 
@@ -49,37 +47,14 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: "Missing Supabase env" }, 500)
   }
 
-  // ── Rate limiting ─────────────────────────────────────────────────────────
-  let redis: Redis | null = null
-  try {
-    if (Deno.env.get("UPSTASH_REDIS_REST_URL") && Deno.env.get("UPSTASH_REDIS_REST_TOKEN")) {
-      redis = Redis.fromEnv()
-    }
-  } catch {
-    redis = null
-  }
+  const rateLimited = await enforceRateLimit(
+    req,
+    { prefix: "rl:home-feed", requests: RATE_LIMIT_REQUESTS, window: RATE_LIMIT_WINDOW },
+    corsHeaders,
+  )
+  if (rateLimited) return rateLimited
 
-  if (redis) {
-    try {
-      const ratelimit = new Ratelimit({
-        redis,
-        limiter: Ratelimit.slidingWindow(RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW),
-        analytics: false,
-        prefix: "rl:home-feed",
-      })
-      const ip =
-        req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-        req.headers.get("x-real-ip") ??
-        "anonymous"
-      const { success } = await ratelimit.limit(ip)
-      if (!success) {
-        return jsonResponse({ ok: false, error: "Too many requests" }, 429)
-      }
-    } catch {
-      // Rate limit check failed — fail open (don't block real users)
-    }
-  }
-  // ─────────────────────────────────────────────────────────────────────────
+  const redis = getRedis()
 
   if (redis) {
     try {

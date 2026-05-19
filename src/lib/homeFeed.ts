@@ -11,7 +11,7 @@ export type HomeFreelancerServiceItem = {
   descriptionPreview: string
   priceNegotiable: boolean
   price: number
-  deliveryDays: number
+  priceType: string
   freelancerSlug: string
   fullName: string
   professionalTitle: string
@@ -69,7 +69,7 @@ const MOCK_SERVICES: HomeFreelancerServiceItem[] = [
     descriptionPreview: "ლეიაუთი, ფორმები და API ინტეგრაცია სწრაფად.",
     priceNegotiable: false,
     price: 450,
-    deliveryDays: 5,
+    priceType: "fixed",
     freelancerSlug: "giorgi-beridze",
     fullName: "გიორგი ბერიძე",
     professionalTitle: "Full-Stack Developer",
@@ -87,7 +87,7 @@ const MOCK_SERVICES: HomeFreelancerServiceItem[] = [
     descriptionPreview: "ინტერფეისის აუდიტი და რეკომენდაციები.",
     priceNegotiable: false,
     price: 280,
-    deliveryDays: 3,
+    priceType: "fixed",
     freelancerSlug: "nino-kapanadze",
     fullName: "ნინო კაპანაძე",
     professionalTitle: "UI Designer",
@@ -229,7 +229,7 @@ export async function loadHomeFeed(): Promise<HomeFeedItem[]> {
       descriptionPreview: snippet,
       priceNegotiable,
       price: priceNum,
-      deliveryDays: Number(row.delivery_days ?? 0),
+      priceType: String(row.price_type ?? "fixed"),
       freelancerSlug: slug,
       fullName: String(row.full_name ?? "").trim() || "ფრილანსერი",
       professionalTitle: String(row.professional_title ?? "").trim(),

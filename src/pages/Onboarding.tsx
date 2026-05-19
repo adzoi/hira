@@ -6,9 +6,11 @@ import {
   FREELANCER_EDUCATION_DEGREE_OPTIONS,
   type FreelancerEducationDegreeLevel,
 } from "../lib/freelancerEducation.ts"
-import { parseGitHubField, parseLinkedInField, parseOptionalWebUrl } from "../lib/socialUrls.ts"
+import OptionalSocialUrlField from "../components/OptionalSocialUrlField.tsx"
+import { parseFreelancerSocialFields, socialFormFromDbRow } from "../lib/freelancerSocialFields.ts"
 import { avatarPublicUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
+import { LIMITS, validateOptionalUrl, validateTextField } from "../lib/validation.ts"
 
 /** Skills without a valid mid-level category_id (picker bucket). */
 const SKILL_PICKER_UNCATEGORIZED = "__uncategorized__"
@@ -59,6 +61,16 @@ export default function OnboardingPage() {
   const [noLinkedinProfile, setNoLinkedinProfile] = useState(false)
   const [noGithubProfile, setNoGithubProfile] = useState(false)
   const [noPortfolioWebsite, setNoPortfolioWebsite] = useState(false)
+  const [facebookUrl, setFacebookUrl] = useState("")
+  const [instagramUrl, setInstagramUrl] = useState("")
+  const [tiktokUrl, setTiktokUrl] = useState("")
+  const [youtubeUrl, setYoutubeUrl] = useState("")
+  const [xUrl, setXUrl] = useState("")
+  const [noFacebookProfile, setNoFacebookProfile] = useState(false)
+  const [noInstagramProfile, setNoInstagramProfile] = useState(false)
+  const [noTiktokProfile, setNoTiktokProfile] = useState(false)
+  const [noYoutubeProfile, setNoYoutubeProfile] = useState(false)
+  const [noXProfile, setNoXProfile] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState<string>("")
   const [avatarPreview, setAvatarPreview] = useState<string>("")
   const [avatarUploading, setAvatarUploading] = useState<boolean>(false)
@@ -122,15 +134,23 @@ export default function OnboardingPage() {
             setBio(fp.bio ?? "")
             setAvailability((fp.availability as "full_time" | "part_time" | "weekends" | "") ?? "")
             setLanguages(fp.languages ?? [])
-            const lidLi = (fp.linkedin_url ?? "").trim()
-            const lidGh = (fp.github_url ?? "").trim()
-            const lidPf = (fp.portfolio_url ?? "").trim()
-            setLinkedinUrl(fp.linkedin_url ?? "")
-            setGithubUrl(fp.github_url ?? "")
-            setPortfolioUrl(fp.portfolio_url ?? "")
-            setNoLinkedinProfile(!lidLi)
-            setNoGithubProfile(!lidGh)
-            setNoPortfolioWebsite(!lidPf)
+            const social = socialFormFromDbRow(fp)
+            setLinkedinUrl(social.linkedinUrl)
+            setGithubUrl(social.githubUrl)
+            setPortfolioUrl(social.portfolioUrl)
+            setFacebookUrl(social.facebookUrl)
+            setInstagramUrl(social.instagramUrl)
+            setTiktokUrl(social.tiktokUrl)
+            setYoutubeUrl(social.youtubeUrl)
+            setXUrl(social.xUrl)
+            setNoLinkedinProfile(social.noLinkedinProfile)
+            setNoGithubProfile(social.noGithubProfile)
+            setNoPortfolioWebsite(social.noPortfolioWebsite)
+            setNoFacebookProfile(social.noFacebookProfile)
+            setNoInstagramProfile(social.noInstagramProfile)
+            setNoTiktokProfile(social.noTiktokProfile)
+            setNoYoutubeProfile(social.noYoutubeProfile)
+            setNoXProfile(social.noXProfile)
 
             const [{ data: selectedSkills }] = await Promise.all([
               supabase.from("freelancer_skills").select("skill_id").eq("freelancer_profile_id", fp.id),
@@ -305,7 +325,6 @@ export default function OnboardingPage() {
   }
 
   const nextFromStep2 = () => {
-    if (selectedSkillIds.length < 3) return setError("აირჩიე მინიმუმ 3 უნარი.")
     const normalizedExperience = experiences
       .map((item) => ({
         title: item.title.trim(),
@@ -355,12 +374,25 @@ export default function OnboardingPage() {
     setSubmitting(true)
     setError("")
     try {
-      const parsedLi = parseLinkedInField(noLinkedinProfile ? "" : linkedinUrl)
-      if (parsedLi.ok === false) throw new Error(parsedLi.message)
-      const parsedGh = parseGitHubField(noGithubProfile ? "" : githubUrl)
-      if (parsedGh.ok === false) throw new Error(parsedGh.message)
-      const parsedPf = parseOptionalWebUrl(noPortfolioWebsite ? "" : portfolioUrl)
-      if (parsedPf.ok === false) throw new Error(parsedPf.message)
+      const parsedSocial = parseFreelancerSocialFields({
+        linkedinUrl,
+        githubUrl,
+        portfolioUrl,
+        facebookUrl,
+        instagramUrl,
+        tiktokUrl,
+        youtubeUrl,
+        xUrl,
+        noLinkedinProfile,
+        noGithubProfile,
+        noPortfolioWebsite,
+        noFacebookProfile,
+        noInstagramProfile,
+        noTiktokProfile,
+        noYoutubeProfile,
+        noXProfile,
+      })
+      if (parsedSocial.ok === false) throw new Error(parsedSocial.message)
 
       const slug =
         freelancerSlug ??
@@ -380,9 +412,7 @@ export default function OnboardingPage() {
             bio: bio.trim(),
             availability,
             languages,
-            linkedin_url: parsedLi.value,
-            github_url: parsedGh.value,
-            portfolio_url: parsedPf.value,
+            ...parsedSocial.values,
             is_profile_complete: true,
             is_public: true,
           },
@@ -393,10 +423,12 @@ export default function OnboardingPage() {
       if (fpError || !fp) throw fpError ?? new Error("ფრილანსერის პროფილი ვერ შეინახა.")
 
       await supabase.from("freelancer_skills").delete().eq("freelancer_profile_id", fp.id)
-      const { error: skillsError } = await supabase.from("freelancer_skills").insert(
-        selectedSkillIds.map((skill_id) => ({ freelancer_profile_id: fp.id, skill_id })),
-      )
-      if (skillsError) throw skillsError
+      if (selectedSkillIds.length > 0) {
+        const { error: skillsError } = await supabase.from("freelancer_skills").insert(
+          selectedSkillIds.map((skill_id) => ({ freelancer_profile_id: fp.id, skill_id })),
+        )
+        if (skillsError) throw skillsError
+      }
 
       await supabase.from("experience").delete().eq("freelancer_profile_id", fp.id)
       const normalizedExperience = experiences
@@ -457,9 +489,25 @@ export default function OnboardingPage() {
 
   const submitHirer = async () => {
     if (!supabase) return
-    if (!companyName.trim()) return setError("კომპანიის სახელი სავალდებულოა.")
-    if (companyDescription.trim().length < 30) return setError("კომპანიის აღწერა უნდა იყოს მინიმუმ 30 სიმბოლო.")
+
+    const companyNameResult = validateTextField(companyName, {
+      min: 1,
+      max: 120,
+      label: "კომპანიის სახელი",
+    })
+    if (!companyNameResult.ok) return setError(companyNameResult.message)
+
+    const companyDescriptionResult = validateTextField(companyDescription, {
+      min: LIMITS.companyDescriptionMin,
+      max: LIMITS.companyDescription,
+      label: "აღწერა",
+    })
+    if (!companyDescriptionResult.ok) return setError(companyDescriptionResult.message)
+
     if (!industry) return setError("აირჩიე ინდუსტრია.")
+
+    const websiteResult = validateOptionalUrl(companyWebsite)
+    if (!websiteResult.ok) return setError(websiteResult.message)
 
     setSubmitting(true)
     setError("")
@@ -467,10 +515,10 @@ export default function OnboardingPage() {
       const { error: hpError } = await supabase.from("hirer_profiles").upsert(
         {
           user_id: userId,
-          company_name: companyName.trim(),
-          description: companyDescription.trim(),
+          company_name: companyNameResult.value,
+          description: companyDescriptionResult.value,
           industry,
-          website_url: companyWebsite.trim() || null,
+          website_url: websiteResult.value,
         },
         { onConflict: "user_id" },
       )
@@ -617,11 +665,10 @@ export default function OnboardingPage() {
                 <div className="space-y-4">
                   <div className="space-y-3">
                     <p className="text-xs font-medium text-slate-600">
-                      უნარები — ჯერ აირჩიე კატეგორია, შემდეგ დაამატე ტეგები ამ კატეგორიიდან (მინ. 3 სულ).
+                      უნარები — ჯერ აირჩიე კატეგორია, შემდეგ დაამატე ტეგები ამ კატეგორიიდან (არასავალდებულო).
                     </p>
                     <p className="text-xs text-slate-500">
-                      არჩეულია <span className="font-semibold tabular-nums text-slate-700">{selectedSkillIds.length}</span> უნარი · საჭიროა მინიმუმ{" "}
-                      <span className="font-semibold">3</span>
+                      არჩეულია <span className="font-semibold tabular-nums text-slate-700">{selectedSkillIds.length}</span> უნარი
                     </p>
 
                     <div>
@@ -942,81 +989,86 @@ export default function OnboardingPage() {
                       </span>
                     </div>
                   </div>
-                  <div>
-                    <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={noLinkedinProfile}
-                        onChange={(e) => {
-                          const on = e.target.checked
-                          setNoLinkedinProfile(on)
-                          if (on) setLinkedinUrl("")
-                        }}
-                      />
-                      არ მაქვს LinkedIn პროფილი
-                    </label>
-                    <input
-                      type="url"
-                      disabled={noLinkedinProfile}
-                      className="h-11 w-full rounded-lg border border-slate-300 px-3 disabled:cursor-not-allowed disabled:bg-slate-100"
-                      placeholder="https://www.linkedin.com/in/..."
-                      value={linkedinUrl}
-                      onChange={(e) => setLinkedinUrl(e.target.value)}
-                    />
-                    <p className="mt-1 text-xs text-slate-500">
-                      {noLinkedinProfile ? "ლინკი არ შეინახება." : "დატოვე ცარიელი ან მიუთითე linkedin.com ბმული."}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={noGithubProfile}
-                        onChange={(e) => {
-                          const on = e.target.checked
-                          setNoGithubProfile(on)
-                          if (on) setGithubUrl("")
-                        }}
-                      />
-                      არ მაქვს GitHub პროფილი
-                    </label>
-                    <input
-                      type="url"
-                      disabled={noGithubProfile}
-                      className="h-11 w-full rounded-lg border border-slate-300 px-3 disabled:cursor-not-allowed disabled:bg-slate-100"
-                      placeholder="https://github.com/..."
-                      value={githubUrl}
-                      onChange={(e) => setGithubUrl(e.target.value)}
-                    />
-                    <p className="mt-1 text-xs text-slate-500">
-                      {noGithubProfile ? "ლინკი არ შეინახება." : "დატოვე ცარიელი ან მიუთითე github.com ბმული."}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={noPortfolioWebsite}
-                        onChange={(e) => {
-                          const on = e.target.checked
-                          setNoPortfolioWebsite(on)
-                          if (on) setPortfolioUrl("")
-                        }}
-                      />
-                      არ მაქვს პორტფოლიოს ვებსაიტი
-                    </label>
-                    <input
-                      type="url"
-                      disabled={noPortfolioWebsite}
-                      className="h-11 w-full rounded-lg border border-slate-300 px-3 disabled:cursor-not-allowed disabled:bg-slate-100"
-                      placeholder="https://..."
-                      value={portfolioUrl}
-                      onChange={(e) => setPortfolioUrl(e.target.value)}
-                    />
-                    <p className="mt-1 text-xs text-slate-500">
-                      {noPortfolioWebsite ? "ლინკი არ შეინახება." : "დატოვე ცარიელი ან მიუთითე საიტის ბმული."}
-                    </p>
-                  </div>
+                  <OptionalSocialUrlField
+                    label="LinkedIn"
+                    noLabel="არ მაქვს LinkedIn პროფილი"
+                    placeholder="https://www.linkedin.com/in/..."
+                    value={linkedinUrl}
+                    onChange={setLinkedinUrl}
+                    disabled={noLinkedinProfile}
+                    onDisabledChange={setNoLinkedinProfile}
+                    hint={noLinkedinProfile ? "ლინკი არ შეინახება." : "დატოვე ცარიელი ან მიუთითე linkedin.com ბმული."}
+                  />
+                  <OptionalSocialUrlField
+                    label="GitHub"
+                    noLabel="არ მაქვს GitHub პროფილი"
+                    placeholder="https://github.com/..."
+                    value={githubUrl}
+                    onChange={setGithubUrl}
+                    disabled={noGithubProfile}
+                    onDisabledChange={setNoGithubProfile}
+                    hint={noGithubProfile ? "ლინკი არ შეინახება." : "დატოვე ცარიელი ან მიუთითე github.com ბმული."}
+                  />
+                  <OptionalSocialUrlField
+                    label="Facebook"
+                    noLabel="არ მაქვს Facebook პროფილი"
+                    placeholder="https://www.facebook.com/..."
+                    value={facebookUrl}
+                    onChange={setFacebookUrl}
+                    disabled={noFacebookProfile}
+                    onDisabledChange={setNoFacebookProfile}
+                    hint={noFacebookProfile ? "ლინკი არ შეინახება." : "დატოვე ცარიელი ან მიუთითე facebook.com ბმული."}
+                  />
+                  <OptionalSocialUrlField
+                    label="Instagram"
+                    noLabel="არ მაქვს Instagram პროფილი"
+                    placeholder="https://www.instagram.com/..."
+                    value={instagramUrl}
+                    onChange={setInstagramUrl}
+                    disabled={noInstagramProfile}
+                    onDisabledChange={setNoInstagramProfile}
+                    hint={noInstagramProfile ? "ლინკი არ შეინახება." : "დატოვე ცარიელი ან მიუთითე instagram.com ბმული."}
+                  />
+                  <OptionalSocialUrlField
+                    label="TikTok"
+                    noLabel="არ მაქვს TikTok პროფილი"
+                    placeholder="https://www.tiktok.com/@..."
+                    value={tiktokUrl}
+                    onChange={setTiktokUrl}
+                    disabled={noTiktokProfile}
+                    onDisabledChange={setNoTiktokProfile}
+                    hint={noTiktokProfile ? "ლინკი არ შეინახება." : "დატოვე ცარიელი ან მიუთითე tiktok.com ბმული."}
+                  />
+                  <OptionalSocialUrlField
+                    label="YouTube"
+                    noLabel="არ მაქვს YouTube არხი"
+                    placeholder="https://www.youtube.com/@..."
+                    value={youtubeUrl}
+                    onChange={setYoutubeUrl}
+                    disabled={noYoutubeProfile}
+                    onDisabledChange={setNoYoutubeProfile}
+                    hint={noYoutubeProfile ? "ლინკი არ შეინახება." : "დატოვე ცარიელი ან მიუთითე youtube.com ბმული."}
+                  />
+                  <OptionalSocialUrlField
+                    label="X"
+                    noLabel="არ მაქვს X პროფილი"
+                    placeholder="https://x.com/..."
+                    value={xUrl}
+                    onChange={setXUrl}
+                    disabled={noXProfile}
+                    onDisabledChange={setNoXProfile}
+                    hint={noXProfile ? "ლინკი არ შეინახება." : "დატოვე ცარიელი ან მიუთითე x.com ბმული."}
+                  />
+                  <OptionalSocialUrlField
+                    label="პორტფოლიო"
+                    noLabel="არ მაქვს პორტფოლიოს ვებსაიტი"
+                    placeholder="https://..."
+                    value={portfolioUrl}
+                    onChange={setPortfolioUrl}
+                    disabled={noPortfolioWebsite}
+                    onDisabledChange={setNoPortfolioWebsite}
+                    hint={noPortfolioWebsite ? "ლინკი არ შეინახება." : "დატოვე ცარიელი ან მიუთითე საიტის ბმული."}
+                  />
                   {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
                   <div className="grid grid-cols-2 gap-2">
                     <button onClick={() => setStep(2)} className="h-11 rounded-lg border border-slate-300">უკან</button>

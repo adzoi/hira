@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import Navbar from "../components/Navbar.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
+import { validatePassword } from "../lib/validation.ts"
 
 function recoveryHintFromBrowser(): boolean {
   if (typeof window === "undefined") return false
@@ -86,18 +87,19 @@ export default function ResetPasswordPage() {
     setError("")
     if (!supabase || !ready) return
 
-    if (password !== confirm) {
-      setError("პაროლები არ ემთხვევა ერთმანეთს.")
+    const passwordResult = validatePassword(password)
+    if (!passwordResult.ok) {
+      setError(passwordResult.message)
       return
     }
-    if (password.length < 6) {
-      setError("პაროლი უნდა შეიცავდეს მინიმუმ 6 სიმბოლოს.")
+    if (passwordResult.value !== confirm) {
+      setError("პაროლები არ ემთხვევა ერთმანეთს.")
       return
     }
 
     setBusy(true)
     try {
-      const { error: upErr } = await supabase.auth.updateUser({ password })
+      const { error: upErr } = await supabase.auth.updateUser({ password: passwordResult.value })
       if (upErr) throw upErr
       await supabase.auth.signOut({ scope: "local" }).catch(() => {})
       navigate("/login", { replace: true, state: { reason: "password-reset" as const } })

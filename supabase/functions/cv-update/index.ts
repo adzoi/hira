@@ -1,4 +1,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { enforceRateLimit } from "../_shared/rateLimit.ts"
+import {
+  LIMITS,
+  readJsonBody,
+  sanitizePlainText,
+  validateEmail,
+  validateJsonArrayField,
+  validateOptionalUrl,
+  validateTextField,
+} from "../_shared/validation.ts"
 
 declare const Deno: {
   serve: (handler: (req: Request) => Response | Promise<Response>) => void
@@ -14,8 +24,6 @@ const corsHeaders: Record<string, string> = {
   "Content-Type": "application/json",
 }
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: corsHeaders })
 }
@@ -30,12 +38,41 @@ function getBearerToken(req: Request): string | null {
 
 function validateCvPayload(cv: Record<string, unknown>): string[] {
   const errors: string[] = []
-  const fullName = typeof cv?.full_name === "string" ? cv.full_name.trim() : ""
-  const email = typeof cv?.email === "string" ? cv.email.trim() : ""
-
-  if (fullName.length < 2) errors.push("Full name must be at least 2 characters.")
-  if (email.length > 0 && !EMAIL_REGEX.test(email)) errors.push("Email must be a valid format.")
+  const fullNameResult = validateTextField(cv.full_name, {
+    min: LIMITS.fullNameMin,
+    max: LIMITS.fullName,
+    label: "Full name",
+  })
+  if (!fullNameResult.ok) errors.push(fullNameResult.message)
+  if (typeof cv.email === "string" && cv.email.trim()) {
+    const emailResult = validateEmail(cv.email)
+    if (!emailResult.ok) errors.push(emailResult.message)
+  }
   return errors
+}
+
+function sanitizeCvField(key: string, value: unknown): unknown {
+  if (typeof value === "string") {
+    const max =
+      key === "professional_summary"
+        ? LIMITS.cvSummary
+        : key.endsWith("_url")
+          ? LIMITS.url
+          : key === "custom_slug"
+            ? LIMITS.slug
+            : LIMITS.fullName
+    const textResult = validateTextField(value, { max, required: false, label: key })
+    return textResult.ok ? textResult.value : sanitizePlainText(value).slice(0, max)
+  }
+  if (key === "work_experience" || key === "education" || key === "technical_skills" || key === "soft_skills") {
+    const arrResult = validateJsonArrayField(value, key)
+    return arrResult.ok ? arrResult.value : null
+  }
+  if (key.endsWith("_url")) {
+    const urlResult = validateOptionalUrl(value)
+    return urlResult.ok ? urlResult.value : null
+  }
+  return value
 }
 
 Deno.serve(async (req: Request) => {
@@ -63,11 +100,18 @@ Deno.serve(async (req: Request) => {
     if (authError || !authData.user) return jsonResponse({ errors: ["Unauthorized"] }, 401)
     console.log("[cv-update] authenticated user_id:", authData.user.id)
 
-    const bodyRaw = await req.json().catch(() => null)
-    if (!bodyRaw || typeof bodyRaw !== "object" || Array.isArray(bodyRaw)) {
-      return jsonResponse({ errors: ["Invalid request body"] }, 400)
+    const rateLimited = await enforceRateLimit(
+      req,
+      { prefix: "rl:cv-update", requests: 30, window: "1 m", key: authData.user.id },
+      corsHeaders,
+    )
+    if (rateLimited) return rateLimited
+
+    const parsed = await readJsonBody(req)
+    if (!parsed.ok) {
+      return jsonResponse({ errors: [parsed.error] }, parsed.status)
     }
-    const body = bodyRaw as Record<string, unknown>
+    const body = parsed.value
     const allowedColumns = new Set([
       "full_name",
       "email",
@@ -90,7 +134,7 @@ Deno.serve(async (req: Request) => {
     ])
     const sanitizedBody: Record<string, unknown> = {}
     for (const [key, value] of Object.entries(body)) {
-      if (allowedColumns.has(key)) sanitizedBody[key] = value
+      if (allowedColumns.has(key)) sanitizedBody[key] = sanitizeCvField(key, value)
     }
 
     if (Object.keys(sanitizedBody).length === 0) {

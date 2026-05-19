@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import Navbar from "../components/Navbar.tsx"
 import EmptyState from "../components/ui/EmptyState.tsx"
@@ -9,7 +9,7 @@ import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
-import { formatCityForDisplay, matchesLocationFilter } from "../lib/marketplaceFilters.ts"
+import { matchesLocationFilter } from "../lib/marketplaceFilters.ts"
 import {
   catalogSelectionMatchesEntity,
   categoryChildrenOf,
@@ -21,6 +21,7 @@ import {
 import FreelancerAvailabilityIndicator from "../components/FreelancerAvailabilityIndicator.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
+import { LIMITS, sanitizeDisplayText } from "../lib/validation.ts"
 
 type SortOption = "rating" | "price_asc" | "price_desc" | "newest" | "completed"
 type Availability = "full_time" | "part_time" | "weekends"
@@ -48,6 +49,14 @@ type CategoryItem = { id: string; name_ka: string; parent_id: string | null }
 type SkillItem = { id: string; name: string; category_id: string | null }
 
 const EMPTY_SUBCATEGORY_PARENT_MAP = new Map<string, string>()
+
+const MAX_SEARCH_LENGTH = LIMITS.search
+const MAX_PRICE = 999999
+const MIN_PRICE = 0
+
+function sanitizeText(text: string | null): string | null {
+  return sanitizeDisplayText(text)
+}
 
 const mockFreelancers: FreelancerCardItem[] = [
   {
@@ -163,127 +172,17 @@ function stripListingMeta(raw: string | null) {
   if (!raw) return null
   const prefix = "<!--gigori-meta:"
   const suffix = "-->"
-  if (!raw.startsWith(prefix)) return stripLegacyPricePrefix(raw)
+  if (!raw.startsWith(prefix)) return sanitizeText(stripLegacyPricePrefix(raw))
   const endIndex = raw.indexOf(suffix)
-  if (endIndex < 0) return stripLegacyPricePrefix(raw)
-  return stripLegacyPricePrefix(raw.slice(endIndex + suffix.length))
-}
-
-function ratingStars(value: number) {
-  const rounded = Math.round(value)
-  return `${"★".repeat(Math.max(0, rounded))}${"☆".repeat(Math.max(0, 5 - rounded))}`
+  if (endIndex < 0) return sanitizeText(stripLegacyPricePrefix(raw))
+  return sanitizeText(stripLegacyPricePrefix(raw.slice(endIndex + suffix.length)))
 }
 
 const FREELANCER_PAGE_SIZE = 20
 
-function SkillTagsSingleLine({
-  freelancerId,
-  skills,
-}: {
-  freelancerId: string
-  skills: Array<{ id: string; name: string }>
-}) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const measureChipRefs = useRef<Array<HTMLSpanElement | null>>([])
-  const measureMoreRefs = useRef<Record<number, HTMLSpanElement | null>>({})
-  const [visibleCount, setVisibleCount] = useState(skills.length)
-  const gapPx = 8
-
-  useLayoutEffect(() => {
-    const computeVisibleCount = () => {
-      const container = containerRef.current
-      if (!container || skills.length === 0) {
-        setVisibleCount(0)
-        return
-      }
-
-      const containerWidth = container.clientWidth
-      if (containerWidth <= 0) return
-
-      const chipWidths = skills.map((_, index) => measureChipRefs.current[index]?.offsetWidth ?? 0)
-      const moreWidths: Record<number, number> = {}
-      for (let n = 1; n < skills.length; n += 1) {
-        moreWidths[n] = measureMoreRefs.current[n]?.offsetWidth ?? 0
-      }
-
-      let bestVisible = 1
-      for (let visible = skills.length; visible >= 1; visible -= 1) {
-        const remaining = skills.length - visible
-        const visibleWidth = chipWidths.slice(0, visible).reduce((sum, width) => sum + width, 0)
-        const visibleGaps = Math.max(0, visible - 1) * gapPx
-        const moreWidth = remaining > 0 ? moreWidths[remaining] ?? 0 : 0
-        const moreGap = remaining > 0 ? gapPx : 0
-        const totalWidth = visibleWidth + visibleGaps + moreGap + moreWidth
-
-        if (totalWidth <= containerWidth) {
-          bestVisible = visible
-          break
-        }
-      }
-
-      setVisibleCount(bestVisible)
-    }
-
-    computeVisibleCount()
-    const observer = new ResizeObserver(() => computeVisibleCount())
-    if (containerRef.current) observer.observe(containerRef.current)
-    return () => observer.disconnect()
-  }, [skills])
-
-  if (skills.length === 0) return null
-
-  const hiddenCount = Math.max(0, skills.length - visibleCount)
-  const visibleSkills = skills.slice(0, visibleCount)
-
-  return (
-    <div className="relative mt-3">
-      <div ref={containerRef} className="flex flex-nowrap items-center gap-2 overflow-hidden">
-        {visibleSkills.map((skill) => (
-          <span
-            key={`${freelancerId}-${skill.id}`}
-            className="max-w-[8.5rem] truncate rounded-full border border-[#D4A843] px-2 py-1 text-xs font-medium text-[#1B2B4B]"
-          >
-            {skill.name}
-          </span>
-        ))}
-        {hiddenCount > 0 ? (
-          <span className="rounded-full border border-[#D4A843] px-2 py-1 text-xs font-medium text-[#1B2B4B]">
-            +{hiddenCount}
-          </span>
-        ) : null}
-      </div>
-
-      <div className="pointer-events-none absolute left-0 top-0 -z-10 h-0 overflow-hidden whitespace-nowrap opacity-0">
-        <div className="flex flex-nowrap items-center gap-2">
-          {skills.map((skill, index) => (
-            <span
-              key={`measure-${freelancerId}-${skill.id}`}
-              ref={(el) => {
-                measureChipRefs.current[index] = el
-              }}
-              className="max-w-[8.5rem] truncate rounded-full border border-[#D4A843] px-2 py-1 text-xs font-medium text-[#1B2B4B]"
-            >
-              {skill.name}
-            </span>
-          ))}
-          {skills.slice(1).map((_, idx) => {
-            const n = idx + 1
-            return (
-              <span
-                key={`measure-more-${freelancerId}-${n}`}
-                ref={(el) => {
-                  measureMoreRefs.current[n] = el
-                }}
-                className="rounded-full border border-[#D4A843] px-2 py-1 text-xs font-medium text-[#1B2B4B]"
-              >
-                +{n}
-              </span>
-            )
-          })}
-        </div>
-      </div>
-    </div>
-  )
+function FreelancerCardInitials({ fullName }: { fullName: string }) {
+  const initials = useMemo(() => getInitials(fullName), [fullName])
+  return <>{initials}</>
 }
 
 export default function BrowsePage() {
@@ -293,8 +192,9 @@ export default function BrowsePage() {
   const [advancedDropdownOpen, setAdvancedDropdownOpen] = useState(false)
   const advancedDropdownRef = useRef<HTMLDivElement>(null)
   const [freelancerTotal, setFreelancerTotal] = useState(0)
-  const [freelancerNextOffset, setFreelancerNextOffset] = useState(0)
   const freelancerNextOffsetRef = useRef(0)
+  const fetchInProgressRef = useRef(false)
+  const fetchGenerationRef = useRef(0)
   const [freelancersLoadingMore, setFreelancersLoadingMore] = useState(false)
   const [freelancers, setFreelancers] = useState<FreelancerCardItem[]>([])
   const [categories, setCategories] = useState<CategoryItem[]>([])
@@ -341,20 +241,23 @@ export default function BrowsePage() {
     if (!isSupabaseConfigured || !supabase) {
       setFreelancers(mockFreelancers)
       freelancerNextOffsetRef.current = mockFreelancers.length
-      setFreelancerNextOffset(mockFreelancers.length)
       setFreelancerTotal(mockFreelancers.length)
       setLoading(false)
       setFreelancersLoadingMore(false)
       return
     }
 
+    if (append && fetchInProgressRef.current) return
+    if (append) fetchInProgressRef.current = true
+
     if (!append) {
       freelancerNextOffsetRef.current = 0
-      setFreelancerNextOffset(0)
       setLoading(true)
+      fetchGenerationRef.current += 1
     } else {
       setFreelancersLoadingMore(true)
     }
+    const requestGen = fetchGenerationRef.current
     setError("")
     try {
       const offset = append ? freelancerNextOffsetRef.current : 0
@@ -376,6 +279,8 @@ export default function BrowsePage() {
         .range(offset, offset + FREELANCER_PAGE_SIZE - 1)
 
       if (freelancersErr) throw freelancersErr
+
+      if (!append && requestGen !== fetchGenerationRef.current) return
 
       const mapped: FreelancerCardItem[] = (data ?? []).map((item: any) => {
         const skillRows =
@@ -425,16 +330,16 @@ export default function BrowsePage() {
         }
       }
 
+      if (!append && requestGen !== fetchGenerationRef.current) return
+
       const total = count ?? 0
 
       if (!append) {
         setFreelancers(mapped.length > 0 ? mapped : mockFreelancers)
         freelancerNextOffsetRef.current = FREELANCER_PAGE_SIZE
-        setFreelancerNextOffset(FREELANCER_PAGE_SIZE)
       } else {
         setFreelancers((prev) => [...prev, ...mapped])
         freelancerNextOffsetRef.current += FREELANCER_PAGE_SIZE
-        setFreelancerNextOffset(freelancerNextOffsetRef.current)
       }
 
       setFreelancerTotal(total)
@@ -443,6 +348,7 @@ export default function BrowsePage() {
     } finally {
       setLoading(false)
       setFreelancersLoadingMore(false)
+      if (append) fetchInProgressRef.current = false
     }
   }, [])
 
@@ -492,7 +398,7 @@ export default function BrowsePage() {
     void fetchFreelancersPage(true)
   }
 
-  const freelancersHasMore = freelancerNextOffset < freelancerTotal
+  const freelancersHasMore = freelancerNextOffsetRef.current < freelancerTotal
 
   useEffect(() => {
     const query = searchParams.get("q")
@@ -548,8 +454,8 @@ export default function BrowsePage() {
   }
 
   const saveAdvancedFilters = () => {
-    setSelectedSkillIds([...draftSkillIds])
-    setAvailabilityFilters([...draftAvailability])
+    setSelectedSkillIds(draftSkillIds)
+    setAvailabilityFilters(draftAvailability)
     setMinimumRating(draftMinRating)
     setMinPrice(draftMinPrice)
     setMaxPrice(draftMaxPrice)
@@ -566,18 +472,38 @@ export default function BrowsePage() {
     setDraftLocationFilter("")
   }
 
-  const topSkills = useMemo(() => {
-    const countBySkillId = freelancers.reduce<Record<string, number>>((acc, freelancer) => {
+  const skillCountMap = useMemo(() => {
+    return freelancers.reduce<Record<string, number>>((acc, freelancer) => {
       freelancer.skills.forEach((skill) => {
         acc[skill.id] = (acc[skill.id] ?? 0) + 1
       })
       return acc
     }, {})
+  }, [freelancers])
 
+  const topSkills = useMemo(() => {
     return [...skills]
-      .sort((a, b) => (countBySkillId[b.id] ?? 0) - (countBySkillId[a.id] ?? 0))
+      .sort((a, b) => (skillCountMap[b.id] ?? 0) - (skillCountMap[a.id] ?? 0))
       .slice(0, 15)
-  }, [freelancers, skills])
+  }, [skills, skillCountMap])
+
+  const categoryMatchingSkillIds = useMemo(() => {
+    if (!catalogFilterEffectiveId) return null
+    const matchingIds = new Set<string>()
+    for (const skill of skills) {
+      if (
+        catalogSelectionMatchesEntity(
+          categories as CategoryBranchRow[],
+          catalogFilterEffectiveId,
+          { categoryId: skill.category_id, subcategoryId: null },
+          EMPTY_SUBCATEGORY_PARENT_MAP,
+        )
+      ) {
+        matchingIds.add(skill.id)
+      }
+    }
+    return matchingIds
+  }, [catalogFilterEffectiveId, categories, skills])
 
   const clearFilters = () => {
     setSearchText("")
@@ -604,15 +530,8 @@ export default function BrowsePage() {
       if (!hasSearchMatch) return false
 
       const hasCategoryMatch =
-        !catalogFilterEffectiveId ||
-        freelancer.skills.some((skill) =>
-          catalogSelectionMatchesEntity(
-            categories as CategoryBranchRow[],
-            catalogFilterEffectiveId,
-            { categoryId: skill.categoryId, subcategoryId: null },
-            EMPTY_SUBCATEGORY_PARENT_MAP,
-          ),
-        )
+        !categoryMatchingSkillIds ||
+        freelancer.skills.some((skill) => categoryMatchingSkillIds.has(skill.id))
       if (!hasCategoryMatch) return false
 
       const hasAllSkills =
@@ -640,8 +559,7 @@ export default function BrowsePage() {
   }, [
     freelancers,
     searchText,
-    catalogFilterEffectiveId,
-    categories,
+    categoryMatchingSkillIds,
     selectedSkillIds,
     availabilityFilters,
     minimumRating,
@@ -651,39 +569,33 @@ export default function BrowsePage() {
   ])
 
   const sortedFreelancers = useMemo(() => {
-    const list = [...filteredFreelancers]
     if (sortBy === "rating") {
-      return list.sort((a, b) => b.averageRating - a.averageRating)
+      return filteredFreelancers.toSorted((a, b) => b.averageRating - a.averageRating)
     }
     if (sortBy === "price_asc") {
-      return list.sort((a, b) => {
+      return filteredFreelancers.toSorted((a, b) => {
         const aPrice = getLowestPricedService(a.services)?.price ?? Number.MAX_SAFE_INTEGER
         const bPrice = getLowestPricedService(b.services)?.price ?? Number.MAX_SAFE_INTEGER
         return aPrice - bPrice
       })
     }
     if (sortBy === "price_desc") {
-      return list.sort((a, b) => {
+      return filteredFreelancers.toSorted((a, b) => {
         const aPrice = getLowestPricedService(a.services)?.price ?? -1
         const bPrice = getLowestPricedService(b.services)?.price ?? -1
         return bPrice - aPrice
       })
     }
     if (sortBy === "newest") {
-      return list.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
+      return filteredFreelancers.toSorted((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
     }
-    return list.sort((a, b) => b.completedJobsCount - a.completedJobsCount)
+    return filteredFreelancers.toSorted((a, b) => b.completedJobsCount - a.completedJobsCount)
   }, [filteredFreelancers, sortBy])
 
   const availabilityLabel: Record<Availability, string> = {
     full_time: "სრული განაკვეთი",
     part_time: "ნახევარი განაკვეთი",
     weekends: "შაბათ-კვირა",
-  }
-  const availabilityBadgeClass: Record<Availability, string> = {
-    full_time: "bg-green-100 text-green-700",
-    part_time: "bg-[#D4EEFF] text-[#006ACC]",
-    weekends: "bg-orange-100 text-orange-700",
   }
 
   const toggleDraftAvailability = (value: Availability) => {
@@ -719,10 +631,20 @@ export default function BrowsePage() {
               <div className="min-w-[220px] flex-[0_1_320px]">
                 <input
                   value={searchText}
-                  onChange={(event) => setSearchText(event.target.value)}
+                  onChange={(event) => {
+                    const value = event.target.value
+                    if (value.length <= MAX_SEARCH_LENGTH) {
+                      setSearchText(value)
+                    }
+                  }}
                   className="h-10 w-full rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#0088FF]"
                   placeholder="ძიება"
                 />
+                {searchText.length >= 80 ? (
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    {searchText.length}/{MAX_SEARCH_LENGTH}
+                  </p>
+                ) : null}
               </div>
 
               <label className="relative inline-flex h-10 min-w-[9rem] max-w-[11rem] shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500">
@@ -829,13 +751,18 @@ export default function BrowsePage() {
                             <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">მინ. რეიტინგი</span>
                             <select
                               value={draftMinRating}
-                              onChange={(event) => setDraftMinRating(Number(event.target.value) as 0 | 3 | 4 | 5)}
+                              onChange={(event) => {
+                                const value = Number(event.target.value)
+                                if ([0, 3, 4, 5].includes(value)) {
+                                  setDraftMinRating(value as 0 | 3 | 4 | 5)
+                                }
+                              }}
                               className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
                             >
                               <option value={0}>ნებისმიერი</option>
-                              <option value={3}>3+ ვარსკვლავი</option>
-                              <option value={4}>4+ ვარსკვლავი</option>
-                              <option value={5}>5 ვარსკვლავი</option>
+                              <option value={3}>3+</option>
+                              <option value={4}>4+</option>
+                              <option value={5}>5</option>
                             </select>
                           </label>
 
@@ -846,7 +773,13 @@ export default function BrowsePage() {
                                 type="number"
                                 min={0}
                                 value={draftMinPrice}
-                                onChange={(event) => setDraftMinPrice(event.target.value)}
+                                onChange={(event) => {
+                                  const value = event.target.value
+                                  const numValue = Number(value)
+                                  if (value === "" || (Number.isFinite(numValue) && numValue >= MIN_PRICE && numValue <= MAX_PRICE)) {
+                                    setDraftMinPrice(value)
+                                  }
+                                }}
                                 placeholder="მინ"
                                 className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
                               />
@@ -854,7 +787,13 @@ export default function BrowsePage() {
                                 type="number"
                                 min={0}
                                 value={draftMaxPrice}
-                                onChange={(event) => setDraftMaxPrice(event.target.value)}
+                                onChange={(event) => {
+                                  const value = event.target.value
+                                  const numValue = Number(value)
+                                  if (value === "" || (Number.isFinite(numValue) && numValue >= MIN_PRICE && numValue <= MAX_PRICE)) {
+                                    setDraftMaxPrice(value)
+                                  }
+                                }}
                                 placeholder="მაქს"
                                 className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
                               />
@@ -922,8 +861,9 @@ export default function BrowsePage() {
 
               <button
                 type="button"
+                disabled={loading || freelancersLoadingMore}
                 onClick={() => setAdvancedDropdownOpen(false)}
-                className="ml-auto inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-[#0088FF] px-8 text-base font-bold text-white transition hover:bg-[#006ACC]"
+                className="ml-auto inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-[#0088FF] px-8 text-base font-bold text-white transition hover:bg-[#006ACC] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 ძიება
               </button>
@@ -957,10 +897,6 @@ export default function BrowsePage() {
                   {sortedFreelancers.map((freelancer) => {
                     const lowestPricedService = getLowestPricedService(freelancer.services)
                     const negotiable = !lowestPricedService
-                    const availabilityText =
-                      freelancer.availability && availabilityLabel[freelancer.availability as Availability]
-                        ? availabilityLabel[freelancer.availability as Availability]
-                        : "შეთანხმებით"
 
                     return (
                       <div
@@ -971,60 +907,61 @@ export default function BrowsePage() {
                           to={`/freelancer/${freelancer.slug}`}
                           className="group flex min-h-0 flex-1 flex-col text-inherit no-underline"
                         >
-                        <FreelancerAvailabilityIndicator
-                          available={freelancer.isAcceptingNewWork}
-                          labelWhenAvailable="ახალი სამუშაოებისთვის ხელმისაწვდომია."
-                          labelWhenUnavailable="ახალი სამუშაოებისთვის დროებით ხელმიუწვდომელია."
-                        />
                         <div className="flex items-start gap-3">
-                          {freelancer.avatarUrl ? (
-                            <img
-                              src={avatarImageUrl(supabase, freelancer.avatarUrl) ?? freelancer.avatarUrl}
-                              alt={`${freelancer.fullName} ავატარი`}
-                              loading="lazy"
-                              className="h-16 w-16 rounded-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#1B2B4B] text-lg font-bold text-white">
-                              {getInitials(freelancer.fullName)}
-                            </div>
-                          )}
+                          <FreelancerAvailabilityIndicator
+                            available={freelancer.isAcceptingNewWork}
+                            labelWhenAvailable="ახალი სამუშაოებისთვის ხელმისაწვდომია."
+                            labelWhenUnavailable="ახალი სამუშაოებისთვის დროებით ხელმიუწვდომელია."
+                          >
+                            {freelancer.avatarUrl ? (
+                              <div className="relative h-16 w-16">
+                                <img
+                                  src={avatarImageUrl(supabase, freelancer.avatarUrl) ?? freelancer.avatarUrl}
+                                  alt={`${freelancer.fullName} ავატარი`}
+                                  loading="lazy"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = "none"
+                                    e.currentTarget.parentElement?.querySelector(".avatar-fallback")?.classList.remove("hidden")
+                                  }}
+                                  className="h-16 w-16 rounded-full object-cover"
+                                />
+                                <div className="avatar-fallback absolute inset-0 hidden flex h-16 w-16 items-center justify-center rounded-full bg-[#1B2B4B] text-lg font-bold text-white">
+                                  <FreelancerCardInitials fullName={freelancer.fullName} />
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#1B2B4B] text-lg font-bold text-white">
+                                <FreelancerCardInitials fullName={freelancer.fullName} />
+                              </div>
+                            )}
+                          </FreelancerAvailabilityIndicator>
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-lg font-bold text-[#1B2B4B]">{freelancer.fullName}</p>
                             <p className="truncate text-sm text-slate-500">{freelancer.professionalTitle}</p>
-                            <p className="mt-1 text-xs text-slate-500">
-                              📍 {formatCityForDisplay(freelancer.city) ?? "ქალაქი უცნობია"}
-                            </p>
                           </div>
                         </div>
 
-                        <div className="mt-3 flex items-center justify-between text-sm">
-                          <p className="font-semibold text-[#D4A843]">
-                            {ratingStars(freelancer.averageRating)} {freelancer.averageRating.toFixed(1)}
-                          </p>
-                          <p className="text-slate-500">({freelancer.totalReviewsCount} შეფასება)</p>
-                        </div>
-
-                        <SkillTagsSingleLine freelancerId={freelancer.id} skills={freelancer.skills} />
-
-                        <div className="mt-3 flex items-center justify-between">
-                          <p className="text-sm font-semibold text-[#1B2B4B]">
-                            {lowestPricedService
-                              ? negotiable
-                                ? "შეთანხმებით"
-                                : `₾${lowestPricedService.price} დან`
-                              : "ფასი შეთანხმებით"}
-                          </p>
-                          <span
-                            className={`rounded-full px-2 py-1 text-xs ${
-                              freelancer.availability && availabilityBadgeClass[freelancer.availability as Availability]
-                                ? availabilityBadgeClass[freelancer.availability as Availability]
-                                : "bg-slate-100 text-slate-700"
-                            }`}
+                        {freelancer.totalReviewsCount > 0 ? (
+                          <div
+                            className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-0.5"
+                            aria-label={`საშუალო რეიტინგი ${freelancer.averageRating.toFixed(1)}, ${freelancer.totalReviewsCount} შეფასება`}
                           >
-                            {availabilityText}
-                          </span>
-                        </div>
+                            <span className="text-sm font-semibold tabular-nums text-[#1B2B4B]">
+                              {freelancer.averageRating.toFixed(1)}
+                            </span>
+                            <span className="text-xs text-slate-500">
+                              · {freelancer.totalReviewsCount} შეფასება
+                            </span>
+                          </div>
+                        ) : null}
+
+                        <p className="mt-3 text-sm font-semibold text-[#1B2B4B]">
+                          {lowestPricedService
+                            ? negotiable
+                              ? "შეთანხმებით"
+                              : `₾${lowestPricedService.price} დან`
+                            : "ფასი შეთანხმებით"}
+                        </p>
 
                         <p className="mt-2 text-xs text-slate-500">💼 {freelancer.completedJobsCount} შესრულებული</p>
                         </Link>

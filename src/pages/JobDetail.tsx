@@ -5,10 +5,14 @@ import VIPUpgrade from "../components/VIPUpgrade.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
 import { useToast } from "../components/ui/ToastProvider.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
+import StartConversationButton from "../components/StartConversationButton.tsx"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { jobVacancyStats } from "../lib/jobVacancies.ts"
+import { formatJobBudget, jobApplicationRateLabel } from "../lib/listingPrice.ts"
 import { jobVipIsActive } from "../lib/vipJobTiers.ts"
+import { formatHirerContactForApplicant, hirerContactCopyText } from "../lib/jobContactPreference.ts"
+import { validateCoverLetter, validateMoneyAmount } from "../lib/validation.ts"
 
 type JobData = {
   id: string
@@ -97,6 +101,7 @@ export default function JobDetailPage() {
   const [authedUserType, setAuthedUserType] = useState<"freelancer" | "hirer" | "guest">("guest")
   const [freelancerProfileId, setFreelancerProfileId] = useState<string | null>(null)
   const [alreadyApplied, setAlreadyApplied] = useState(false)
+  const [jobApplicationId, setJobApplicationId] = useState<string | null>(null)
   const [coverLetter, setCoverLetter] = useState("")
   const [proposedRate, setProposedRate] = useState("")
   const [submitError, setSubmitError] = useState("")
@@ -329,7 +334,12 @@ export default function JobDetailPage() {
               .eq("job_id", mappedJob.id)
               .eq("freelancer_profile_id", fp.id)
               .maybeSingle()
-            if (!appliedError && applied) setAlreadyApplied(true)
+            if (!appliedError && applied) {
+              setAlreadyApplied(true)
+              setJobApplicationId(applied.id)
+            } else {
+              setJobApplicationId(null)
+            }
           }
         } else if (profile.user_type === "hirer") {
           setAuthedUserType("hirer")
@@ -348,26 +358,14 @@ export default function JobDetailPage() {
     loadData()
   }, [id])
 
-  const budgetTypeLabel = useMemo(() => {
-    if (!job) return ""
-    if (job.budget_type === "fixed") return "ფიქსირებული"
-    if (job.budget_type === "hourly") return "საათობრივი"
-    if (job.budget_type === "monthly") return "თვიური"
-    return job.budget_type
-  }, [job])
-
   const budgetText = useMemo(() => {
     if (!job) return ""
-    if (job.budget_type === "hourly") return `₾${job.budget_min ?? 0}/საათი`
-    if (job.budget_type === "monthly") return `₾${job.budget_min ?? 0}/თვე`
-    return `₾${job.budget_min ?? 0} - ₾${job.budget_max ?? 0}`
+    return formatJobBudget(job.budget_min, job.budget_max, job.budget_type)
   }, [job])
 
   const rateLabel = useMemo(() => {
     if (!job) return "შემოთავაზებული ფასი (₾)"
-    if (job.budget_type === "hourly") return "საათობრივი განაკვეთი (₾)"
-    if (job.budget_type === "monthly") return "თვიური გასამრჯელო (₾)"
-    return "შემოთავაზებული ფასი (₾)"
+    return jobApplicationRateLabel(job.budget_type)
   }, [job])
 
   const isJobOwner =
@@ -380,9 +378,20 @@ export default function JobDetailPage() {
     setSubmitError("")
     setSubmitSuccess("")
 
-    if (coverLetter.trim().length > 0 && coverLetter.trim().length < 50) {
-      setSubmitError("კომენტარი უნდა შედგებოდეს მინიმუმ 50 სიმბოლოსგან.")
+    const coverResult = validateCoverLetter(coverLetter)
+    if (!coverResult.ok) {
+      setSubmitError(coverResult.message)
       return
+    }
+
+    let rateNote: string | null = null
+    if (proposedRate.trim()) {
+      const rateResult = validateMoneyAmount(proposedRate, { min: 0, label: "ტარიფი" })
+      if (!rateResult.ok || rateResult.value == null) {
+        setSubmitError(rateResult.ok ? "შემოთავაზებული ტარიფი არასწორია." : rateResult.message)
+        return
+      }
+      rateNote = `შემოთავაზებული ტარიფი: ₾${rateResult.value}`
     }
 
     const vs = jobVacancyStats(job.vacancies, job.accepted_count)
@@ -394,23 +403,29 @@ export default function JobDetailPage() {
     setSubmitting(true)
     try {
       const noteParts: string[] = []
-      if (coverLetter.trim()) noteParts.push(coverLetter.trim())
-      if (proposedRate.trim()) noteParts.push(`შემოთავაზებული ტარიფი: ₾${proposedRate.trim()}`)
+      if (coverResult.value) noteParts.push(coverResult.value)
+      if (rateNote) noteParts.push(rateNote)
       const coverNote = noteParts.length > 0 ? noteParts.join("\n\n") : null
 
-      const { error: applyError } = await supabase.from("job_applications").insert({
-        job_id: job.id,
-        freelancer_profile_id: freelancerProfileId,
-        cover_note: coverNote,
-        status: "pending",
-      })
+      const { data: inserted, error: applyError } = await supabase
+        .from("job_applications")
+        .insert({
+          job_id: job.id,
+          freelancer_profile_id: freelancerProfileId,
+          cover_note: coverNote,
+          status: "pending",
+        })
+        .select("id")
+        .single()
       if (applyError) throw applyError
 
       setAlreadyApplied(true)
-      const contact =
-        job.contact_preference === "phone" && job.hirer_phone
-          ? `ტელეფონი: ${job.hirer_phone}`
-          : `ელფოსტა: ${job.hirer_email}`
+      if (inserted?.id) setJobApplicationId(inserted.id)
+      const contact = formatHirerContactForApplicant({
+        contactPreference: job.contact_preference,
+        email: job.hirer_email,
+        phone: job.hirer_phone,
+      })
       setSubmitSuccess(`განცხადება გაგზავნილია! დამქირავებელი დაგიკავშირდება: ${contact}`)
       pushToast({ type: "success", message: "განცხადება გაგზავნილია" })
     } catch (applyErr) {
@@ -423,7 +438,11 @@ export default function JobDetailPage() {
 
   const copyContact = async () => {
     if (!job) return
-    const value = job.contact_preference === "phone" && job.hirer_phone ? job.hirer_phone : job.hirer_email
+    const value = hirerContactCopyText({
+      contactPreference: job.contact_preference,
+      email: job.hirer_email,
+      phone: job.hirer_phone,
+    })
     if (!value) return
     await navigator.clipboard.writeText(value)
     pushToast({ type: "info", message: "კოპირებულია!" })
@@ -529,7 +548,7 @@ export default function JobDetailPage() {
             <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <h2 className="border-l-4 border-[#D4A843] pl-3 text-xl font-bold text-[#1B2B4B]">ბიუჯეტი</h2>
               <p className="mt-4 text-lg font-bold text-[#1B2B4B]">
-                ბიუჯეტი: {budgetText} ({budgetTypeLabel})
+                ბიუჯეტი: {budgetText}
               </p>
             </article>
 
@@ -569,8 +588,18 @@ export default function JobDetailPage() {
               ) : authedUserType === "hirer" ? (
                 <p className="text-sm font-semibold text-slate-700">თქვენ ხართ დამქირავებელი</p>
               ) : alreadyApplied ? (
-                <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-700">
-                  განცხადება გაგზავნილია ✓
+                <div className="space-y-3">
+                  <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-700">
+                    განცხადება გაგზავნილია ✓
+                  </div>
+                  {job.hirer_user_id ? (
+                    <StartConversationButton
+                      otherUserId={job.hirer_user_id}
+                      jobApplicationId={jobApplicationId}
+                      variant="primary"
+                      className="w-full"
+                    />
+                  ) : null}
                 </div>
               ) : job.status !== "open" || (vacancySnap?.isFull ?? false) ? (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
@@ -607,10 +636,16 @@ export default function JobDetailPage() {
                     type="button"
                     disabled={submitting}
                     onClick={handleApply}
-                    className="inline-flex h-11 items-center justify-center rounded-lg bg-[#1B2B4B] px-5 text-sm font-semibold text-white hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:opacity-60"
+                    className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-[#1B2B4B] px-5 text-sm font-semibold text-white hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:opacity-60"
                   >
                     {submitting ? "მიმდინარეობს..." : "განცხადების გაგზავნა"}
                   </button>
+                  {job.hirer_user_id ? (
+                    <StartConversationButton
+                      otherUserId={job.hirer_user_id}
+                      className="w-full"
+                    />
+                  ) : null}
                 </div>
               )}
             </article>
@@ -644,6 +679,13 @@ export default function JobDetailPage() {
               </button>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <SaveBookmarkButton variant="icon" resourceType="hirer" resourceId={job.hirer_profile_id} />
+                {!isJobOwner && job.hirer_user_id ? (
+                  <StartConversationButton
+                    otherUserId={job.hirer_user_id}
+                    jobApplicationId={jobApplicationId}
+                    className="min-w-[10rem] flex-1"
+                  />
+                ) : null}
                 <Link
                   to={`/hirer/${job.hirer_profile_id}`}
                   className="inline-flex min-h-[44px] min-w-0 flex-1 items-center justify-center rounded-lg border border-transparent px-3 py-2 text-center text-sm font-semibold text-[#D4A843] underline hover:bg-amber-50/60 sm:flex-none sm:justify-start"
@@ -663,11 +705,7 @@ export default function JobDetailPage() {
                     <Link key={other.id} to={`/job/${other.id}`} className="block rounded-lg border border-slate-200 p-3 hover:border-[#D4A843]">
                       <p className="font-semibold text-[#1B2B4B]">{other.title}</p>
                       <p className="mt-1 text-xs text-slate-600">
-                        {other.budget_type === "hourly"
-                          ? `₾${other.budget_min ?? 0}/საათი`
-                          : other.budget_type === "monthly"
-                            ? `₾${other.budget_min ?? 0}/თვე`
-                            : `₾${other.budget_min ?? 0} - ₾${other.budget_max ?? 0}`}
+                        {formatJobBudget(other.budget_min, other.budget_max, other.budget_type)}
                       </p>
                     </Link>
                   ))

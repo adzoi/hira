@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { enforceRateLimit } from "../_shared/rateLimit.ts"
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -22,6 +23,13 @@ function getBearerToken(req: Request): string | null {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders })
   if (req.method !== "GET") return jsonResponse({ errors: ["Method not allowed"] }, 405)
+
+  const rateLimited = await enforceRateLimit(
+    req,
+    { prefix: "rl:cv-get", requests: 60, window: "1 m" },
+    corsHeaders,
+  )
+  if (rateLimited) return rateLimited
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
   const serviceRoleKey =

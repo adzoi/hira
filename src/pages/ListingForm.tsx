@@ -3,6 +3,11 @@ import { Link, useNavigate, useParams } from "react-router-dom"
 import Navbar from "../components/Navbar"
 import VIPUpgrade from "../components/VIPUpgrade"
 import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
+import {
+  normalizeListingPriceType,
+  PRICE_TYPE_LABELS,
+  type ListingPriceType,
+} from "../lib/listingPrice.ts"
 import { formatSupabaseClientError, isSupabaseConfigured, supabase } from "../lib/supabase"
 import { serviceImageThumbnailUrl } from "../lib/storageImageUrl.ts"
 import {
@@ -12,6 +17,12 @@ import {
   rootIdContainingCategory,
   type CategoryBranchRow,
 } from "../lib/marketplaceCategoryTree.ts"
+import {
+  validateListingDescription,
+  validateListingTitle,
+  validateMoneyAmount,
+  validateTags,
+} from "../lib/validation.ts"
 
 type ListingMeta = {
   categoryId: string | null
@@ -123,7 +134,7 @@ export default function ListingFormPage() {
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [price, setPrice] = useState("")
-  const [deliveryDays, setDeliveryDays] = useState("3")
+  const [priceType, setPriceType] = useState<ListingPriceType>("fixed")
   const [isActive, setIsActive] = useState(true)
   /** Mid-level category (e.g. Web Development); stored in listing meta as `categoryId`. */
   const [categoryId, setCategoryId] = useState("")
@@ -212,7 +223,7 @@ export default function ListingFormPage() {
           setTitle(listing.title ?? "")
           setDescription(parsed.description)
           setPrice(String(listing.price ?? 0))
-          setDeliveryDays(String(listing.delivery_days ?? 3))
+          setPriceType(normalizeListingPriceType((listing as { price_type?: string | null }).price_type))
           setIsActive(listing.is_active ?? true)
 
           let resolvedMid = parsed.meta.categoryId ?? ""
@@ -357,20 +368,27 @@ export default function ListingFormPage() {
     if (!supabase || !freelancerProfileId) return
     setError("")
 
-    if (!title.trim()) {
-      setError("სათაური სავალდებულოა.")
+    const titleResult = validateListingTitle(title)
+    if (!titleResult.ok) {
+      setError(titleResult.message)
       return
     }
-    const parsedPrice = Number(price || "0")
-    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
-      setError("ფასი არასწორია.")
+    const descriptionResult = validateListingDescription(description)
+    if (!descriptionResult.ok) {
+      setError(descriptionResult.message)
       return
     }
-    const parsedDelivery = Number(deliveryDays || "0")
-    if (!Number.isInteger(parsedDelivery) || parsedDelivery <= 0) {
-      setError("ვადა უნდა იყოს დადებითი მთელი რიცხვი.")
+    const tagsResult = validateTags(tags)
+    if (!tagsResult.ok) {
+      setError(tagsResult.message)
       return
     }
+    const priceResult = validateMoneyAmount(price || "0", { min: 0, label: "ფასი" })
+    if (!priceResult.ok || priceResult.value == null) {
+      setError(priceResult.ok ? "ფასი სავალდებულოა." : priceResult.message)
+      return
+    }
+    const parsedPrice = priceResult.value
     if (subcategoryId.trim() && !subcategories.some((s) => s.id === subcategoryId.trim())) {
       setError("აირჩიე სპეციალიზაცია სიიდან ან გასუფთავე.")
       return
@@ -383,18 +401,18 @@ export default function ListingFormPage() {
         title: string
         description: string
         price: number
-        delivery_days: number
+        price_type: ListingPriceType
         is_active: boolean
       } = {
         freelancer_profile_id: freelancerProfileId,
-        title: title.trim(),
-        description: buildListingDescription(description, {
+        title: titleResult.value,
+        description: buildListingDescription(descriptionResult.value, {
           categoryId: persistedListingCategoryId || null,
           subcategoryId: subcategoryId.trim() || null,
-          tags,
+          tags: tagsResult.value,
         }),
         price: parsedPrice,
-        delivery_days: parsedDelivery,
+        price_type: priceType,
         is_active: isActive,
       }
 
@@ -569,9 +587,10 @@ export default function ListingFormPage() {
             </label>
 
             <div>
-              <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">თეგები</p>
+              <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">თეგები (არასავალდებულო)</p>
               {!specializationParentCategoryId ? (
                 <p className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                  თეგების არჩევა შეგიძლია კატეგორიის მითითების შემდეგ — სავალდებულო არ არის.
                 </p>
               ) : (
                 <>
@@ -592,7 +611,7 @@ export default function ListingFormPage() {
                     ))}
                   </div>
                   <p className="mt-2 text-xs text-slate-500">
-                    კატეგორიაზე მორგებული თეგები. არჩეული: {tags.length}
+                    კატეგორიაზე მორგებული თეგები (არასავალდებულო). არჩეული: {tags.length}
                   </p>
                 </>
               )}
@@ -609,7 +628,23 @@ export default function ListingFormPage() {
               />
             </label>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-4">
+              <div>
+                <p className="mb-2 text-sm font-semibold text-[#1B2B4B]">ფასის ტიპი</p>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {(Object.keys(PRICE_TYPE_LABELS) as ListingPriceType[]).map((key) => (
+                    <label key={key} className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                      <input
+                        type="radio"
+                        name="price_type"
+                        checked={priceType === key}
+                        onChange={() => setPriceType(key)}
+                      />
+                      {PRICE_TYPE_LABELS[key]}
+                    </label>
+                  ))}
+                </div>
+              </div>
               <label className="block">
                 <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">ფასი (₾)</span>
                 <input
@@ -617,16 +652,6 @@ export default function ListingFormPage() {
                   min="0"
                   value={price}
                   onChange={(event) => setPrice(event.target.value)}
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">ვადა (დღე) *</span>
-                <input
-                  type="number"
-                  min="1"
-                  value={deliveryDays}
-                  onChange={(event) => setDeliveryDays(event.target.value)}
                   className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm"
                 />
               </label>

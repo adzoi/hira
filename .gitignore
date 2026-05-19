@@ -17,6 +17,10 @@ dist-ssr
 .env.*
 !.env.example
 
+# Editor scratch files that may contain pasted secrets
+Untitled
+Untitled*
+
 # Supabase CLI cache
 supabase/.temp/
 

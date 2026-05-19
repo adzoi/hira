@@ -71,4 +71,20 @@ export default defineConfig([
   },
 ])
 ```
-# gigori
+# Gigori
+
+## Environment variables
+
+1. Copy `.env.example` to `.env` and fill in values from your Supabase and PayPal dashboards.
+2. Never commit `.env`. Only `.env.example` (placeholders) belongs in Git.
+3. **Client (`VITE_*`)** — embedded in the browser bundle. Use only publishable keys (Supabase anon/publishable key, PayPal client ID). Do not add service-role keys, PayPal secrets, or API keys with `VITE_`.
+4. **Edge Functions** — set secrets in [Supabase Dashboard](https://supabase.com/dashboard) → Edge Functions (or `supabase secrets set`). See `.env.example` for the full list.
+5. **k6 load tests** — pass at runtime:
+   ```bash
+   k6 run \
+     -e SUPABASE_FUNCTIONS_URL="https://YOUR_REF.supabase.co/functions/v1" \
+     -e SUPABASE_ANON_KEY="your-anon-key" \
+     load-test.js
+   ```
+
+If `.env` or `Untitled` were ever committed, rotate Supabase and PayPal credentials and purge Git history before pushing again.

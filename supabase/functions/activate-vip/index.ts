@@ -1,5 +1,6 @@
 // @ts-ignore -- Deno edge functions support URL imports; TS language service in this workspace does not resolve them.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
+import { enforceRateLimit } from "../_shared/rateLimit.ts"
 
 declare const Deno: {
   env: { get: (key: string) => string | undefined }
@@ -129,6 +130,13 @@ Deno.serve(async (req) => {
     console.error("[activate-vip] auth.getUser", userErr)
     return jsonResponse({ ok: false, error: "Unauthorized" }, 401)
   }
+
+  const rateLimited = await enforceRateLimit(
+    req,
+    { prefix: "rl:activate-vip", requests: 10, window: "1 m", key: user.id },
+    corsHeaders,
+  )
+  if (rateLimited) return rateLimited
 
   const admin = createClient(supabaseUrl, serviceRoleKey)
 

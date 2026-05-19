@@ -8,9 +8,17 @@ import {
   type FreelancerEducationDegreeLevel,
 } from "../lib/freelancerEducation.ts"
 import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
-import { parseGitHubField, parseLinkedInField, parseOptionalWebUrl } from "../lib/socialUrls.ts"
+import {
+  normalizeListingPriceType,
+  PRICE_TYPE_LABELS,
+  type ListingPriceType,
+} from "../lib/listingPrice.ts"
+import OptionalSocialUrlField from "../components/OptionalSocialUrlField.tsx"
+import { parseFreelancerSocialFields, socialFormFromDbRow } from "../lib/freelancerSocialFields.ts"
 import { avatarImageUrl, avatarPublicUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
+import { isAuthRateLimited, signInWithRateLimit } from "../lib/authRateLimit"
+import { LIMITS, validateOptionalUrl, validateTextField } from "../lib/validation.ts"
 
 /** Skills without a valid mid-level category_id (picker bucket). */
 const SKILL_PICKER_UNCATEGORIZED = "__uncategorized__"
@@ -32,7 +40,7 @@ type ServiceListingForm = {
   title: string
   description: string
   price: string
-  deliveryDays: string
+  priceType: "fixed" | "hourly" | "monthly"
   isActive: boolean
 }
 
@@ -93,6 +101,16 @@ export default function ProfilePage() {
   const [noLinkedinProfile, setNoLinkedinProfile] = useState(true)
   const [noGithubProfile, setNoGithubProfile] = useState(true)
   const [noPortfolioWebsite, setNoPortfolioWebsite] = useState(true)
+  const [facebookUrl, setFacebookUrl] = useState("")
+  const [instagramUrl, setInstagramUrl] = useState("")
+  const [tiktokUrl, setTiktokUrl] = useState("")
+  const [youtubeUrl, setYoutubeUrl] = useState("")
+  const [xUrl, setXUrl] = useState("")
+  const [noFacebookProfile, setNoFacebookProfile] = useState(true)
+  const [noInstagramProfile, setNoInstagramProfile] = useState(true)
+  const [noTiktokProfile, setNoTiktokProfile] = useState(true)
+  const [noYoutubeProfile, setNoYoutubeProfile] = useState(true)
+  const [noXProfile, setNoXProfile] = useState(true)
 
   const [companyName, setCompanyName] = useState("")
   const [companyDescription, setCompanyDescription] = useState("")
@@ -217,15 +235,23 @@ export default function ProfilePage() {
             setAvailability(fp.availability ?? "")
             setAcceptingNewWork(fp.is_accepting_new_work !== false)
             setLanguages(Array.isArray(fp.languages) ? fp.languages : [])
-            const loadedLi = (fp.linkedin_url ?? "").trim()
-            const loadedGh = (fp.github_url ?? "").trim()
-            const loadedPf = (fp.portfolio_url ?? "").trim()
-            setLinkedinUrl(fp.linkedin_url ?? "")
-            setGithubUrl(fp.github_url ?? "")
-            setPortfolioUrl(fp.portfolio_url ?? "")
-            setNoLinkedinProfile(!loadedLi)
-            setNoGithubProfile(!loadedGh)
-            setNoPortfolioWebsite(!loadedPf)
+            const social = socialFormFromDbRow(fp)
+            setLinkedinUrl(social.linkedinUrl)
+            setGithubUrl(social.githubUrl)
+            setPortfolioUrl(social.portfolioUrl)
+            setFacebookUrl(social.facebookUrl)
+            setInstagramUrl(social.instagramUrl)
+            setTiktokUrl(social.tiktokUrl)
+            setYoutubeUrl(social.youtubeUrl)
+            setXUrl(social.xUrl)
+            setNoLinkedinProfile(social.noLinkedinProfile)
+            setNoGithubProfile(social.noGithubProfile)
+            setNoPortfolioWebsite(social.noPortfolioWebsite)
+            setNoFacebookProfile(social.noFacebookProfile)
+            setNoInstagramProfile(social.noInstagramProfile)
+            setNoTiktokProfile(social.noTiktokProfile)
+            setNoYoutubeProfile(social.noYoutubeProfile)
+            setNoXProfile(social.noXProfile)
 
             const [
               { data: serviceRows, error: servicesError },
@@ -237,7 +263,7 @@ export default function ProfilePage() {
             ] = await Promise.all([
               supabase
                 .from("services")
-                .select("id,title,description,price,delivery_days,is_active")
+                .select("id,title,description,price,price_type,is_active")
                 .eq("freelancer_profile_id", fp.id)
                 .order("created_at", { ascending: false }),
               supabase
@@ -270,7 +296,7 @@ export default function ProfilePage() {
               title: item.title ?? "",
               description: stripListingMeta(item.description ?? ""),
               price: item.price !== null && item.price !== undefined ? String(item.price) : "",
-              deliveryDays: item.delivery_days ? String(item.delivery_days) : "3",
+              priceType: normalizeListingPriceType(item.price_type),
               isActive: item.is_active ?? true,
             }))
 
@@ -397,25 +423,52 @@ export default function ProfilePage() {
     setError("")
     setSuccess("")
     try {
+      const fullNameResult = validateTextField(fullName, {
+        min: LIMITS.fullNameMin,
+        max: LIMITS.fullName,
+        label: "სახელი",
+      })
+      if (!fullNameResult.ok) throw new Error(fullNameResult.message)
+
+      const websiteResult = validateOptionalUrl(companyWebsite)
+      if (!websiteResult.ok) throw new Error(websiteResult.message)
+
       await supabase.from("profiles").update({
-        full_name: fullName.trim(),
+        full_name: fullNameResult.value,
         city: city.trim() || null,
         phone: phone.trim() || null,
         avatar_url: avatarUrl || null,
       }).eq("id", userId)
 
       if (userType === "freelancer") {
-        const parsedLi = parseLinkedInField(noLinkedinProfile ? "" : linkedinUrl)
-        if (parsedLi.ok === false) {
-          throw new Error(parsedLi.message)
-        }
-        const parsedGh = parseGitHubField(noGithubProfile ? "" : githubUrl)
-        if (parsedGh.ok === false) {
-          throw new Error(parsedGh.message)
-        }
-        const parsedPf = parseOptionalWebUrl(noPortfolioWebsite ? "" : portfolioUrl)
-        if (parsedPf.ok === false) {
-          throw new Error(parsedPf.message)
+        const bioResult = validateTextField(bio, {
+          min: 0,
+          max: LIMITS.bio,
+          required: false,
+          label: "ბიო",
+        })
+        if (!bioResult.ok) throw new Error(bioResult.message)
+
+        const parsedSocial = parseFreelancerSocialFields({
+          linkedinUrl,
+          githubUrl,
+          portfolioUrl,
+          facebookUrl,
+          instagramUrl,
+          tiktokUrl,
+          youtubeUrl,
+          xUrl,
+          noLinkedinProfile,
+          noGithubProfile,
+          noPortfolioWebsite,
+          noFacebookProfile,
+          noInstagramProfile,
+          noTiktokProfile,
+          noYoutubeProfile,
+          noXProfile,
+        })
+        if (parsedSocial.ok === false) {
+          throw new Error(parsedSocial.message)
         }
 
         const { data: existingFp, error: existingFpErr } = await supabase
@@ -437,12 +490,10 @@ export default function ProfilePage() {
               user_id: userId,
               slug,
               professional_title: professionalTitle.trim() || null,
-              bio: bio.trim() || null,
+              bio: bioResult.value || null,
               availability: availability || null,
               languages,
-              linkedin_url: parsedLi.value,
-              github_url: parsedGh.value,
-              portfolio_url: parsedPf.value,
+              ...parsedSocial.values,
               is_public: existingFp?.is_public ?? true,
               is_profile_complete: existingFp?.is_profile_complete ?? true,
               is_accepting_new_work: acceptingNewWork,
@@ -480,10 +531,10 @@ export default function ProfilePage() {
             title: item.title.trim(),
             description: item.description.trim(),
             priceRaw: item.price.trim(),
-            deliveryDaysRaw: item.deliveryDays.trim(),
+            priceType: item.priceType,
             isActive: item.isActive,
           }))
-          .filter((item) => item.title || item.description || item.priceRaw || item.deliveryDaysRaw)
+          .filter((item) => item.title || item.description || item.priceRaw)
 
         if (nonEmptyListings.length > 3) {
           throw new Error("მაქსიმუმ 3 ლისტინგის დამატება შეგიძლია.")
@@ -499,17 +550,12 @@ export default function ProfilePage() {
             throw new Error(`ლისტინგი #${index + 1}: ფასი არასწორია.`)
           }
 
-          const parsedDeliveryDays = Number(item.deliveryDaysRaw || "0")
-          if (!Number.isInteger(parsedDeliveryDays) || parsedDeliveryDays <= 0) {
-            throw new Error(`ლისტინგი #${index + 1}: ვადა უნდა იყოს დადებითი მთელი რიცხვი.`)
-          }
-
           return {
             id: item.id,
             title: item.title,
             description: item.description || null,
             price: parsedPrice,
-            delivery_days: parsedDeliveryDays,
+            price_type: item.priceType,
             is_active: item.isActive,
           }
         })
@@ -535,7 +581,7 @@ export default function ProfilePage() {
                 title: listing.title,
                 description: listing.description,
                 price: listing.price,
-                delivery_days: listing.delivery_days,
+                price_type: listing.price_type,
                 is_active: listing.is_active,
               })
               .eq("id", listing.id)
@@ -550,7 +596,7 @@ export default function ProfilePage() {
                 title: listing.title,
                 description: listing.description,
                 price: listing.price,
-                delivery_days: listing.delivery_days,
+                price_type: listing.price_type,
                 is_active: listing.is_active,
               })
               .select("id")
@@ -562,7 +608,7 @@ export default function ProfilePage() {
 
         const { data: refreshedServices, error: refreshServicesError } = await supabase
           .from("services")
-          .select("id,title,description,price,delivery_days,is_active")
+          .select("id,title,description,price,price_type,is_active")
           .eq("freelancer_profile_id", targetFreelancerId)
           .order("created_at", { ascending: false })
         if (refreshServicesError) throw refreshServicesError
@@ -572,7 +618,7 @@ export default function ProfilePage() {
           title: item.title ?? "",
           description: item.description ?? "",
           price: item.price !== null && item.price !== undefined ? String(item.price) : "",
-          deliveryDays: item.delivery_days ? String(item.delivery_days) : "3",
+          priceType: normalizeListingPriceType(item.price_type),
           isActive: item.is_active ?? true,
         }))
         setServiceListings(mappedRefreshed.slice(0, 3))
@@ -656,12 +702,26 @@ export default function ProfilePage() {
           if (eduErr) throw eduErr
         }
       } else {
+        const companyNameResult = validateTextField(companyName, {
+          min: 1,
+          max: 120,
+          label: "კომპანიის სახელი",
+        })
+        if (!companyNameResult.ok) throw new Error(companyNameResult.message)
+
+        const companyDescriptionResult = validateTextField(companyDescription, {
+          min: LIMITS.companyDescriptionMin,
+          max: LIMITS.companyDescription,
+          label: "აღწერა",
+        })
+        if (!companyDescriptionResult.ok) throw new Error(companyDescriptionResult.message)
+
         await supabase.from("hirer_profiles").upsert({
           user_id: userId,
-          company_name: companyName.trim() || null,
-          description: companyDescription.trim() || null,
+          company_name: companyNameResult.value,
+          description: companyDescriptionResult.value,
           industry: industry || null,
-          website_url: companyWebsite.trim() || null,
+          website_url: websiteResult.value,
         }, { onConflict: "user_id" })
       }
       setSuccess("ცვლილებები შენახულია.")
@@ -717,12 +777,13 @@ export default function ProfilePage() {
       } = await client.auth.getUser()
       if (!user) return
 
-      const { error: signInError } = await client.auth.signInWithPassword({
-        email: user.email!,
-        password: deletePassword,
-      })
+      const { error: signInError } = await signInWithRateLimit(user.email!, deletePassword)
       if (signInError) {
-        setDeleteError("პაროლი არასწორია. სცადე თავიდან.")
+        if (isAuthRateLimited(signInError.status, signInError.message)) {
+          setDeleteError("ზედმეტი მცდელობები დაფიქსირდა. გთხოვ, სცადე 15 წუთში.")
+        } else {
+          setDeleteError("პაროლი არასწორია. სცადე თავიდან.")
+        }
         return
       }
 
@@ -814,12 +875,13 @@ export default function ProfilePage() {
     setPasswordBusy(true)
     try {
       const authEmail = accountEmail.trim()
-      const { error: signErr } = await supabase.auth.signInWithPassword({
-        email: authEmail,
-        password: currentPasswordPw,
-      })
+      const { error: signErr } = await signInWithRateLimit(authEmail, currentPasswordPw)
       if (signErr) {
-        setAccountErr("პაროლი არასწორია.")
+        if (isAuthRateLimited(signErr.status, signErr.message)) {
+          setAccountErr("ზედმეტი მცდელობები დაფიქსირდა. გთხოვ, სცადე 15 წუთში.")
+        } else {
+          setAccountErr("პაროლი არასწორია.")
+        }
         return
       }
       const { error: pwErr } = await supabase.auth.updateUser({ password: newPassword })
@@ -1149,83 +1211,74 @@ export default function ProfilePage() {
                   ) : null}
                 </div>
               </div>
-              <div>
-                <label className="mb-1 block text-base font-semibold text-gray-900">LinkedIn პროფილი</label>
-                <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={noLinkedinProfile}
-                    onChange={(e) => {
-                      const on = e.target.checked
-                      setNoLinkedinProfile(on)
-                      if (on) setLinkedinUrl("")
-                    }}
-                  />
-                  არ მაქვს
-                </label>
-                <input
-                  type="url"
-                  inputMode="url"
-                  disabled={noLinkedinProfile}
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3 disabled:cursor-not-allowed disabled:bg-slate-100"
-                  placeholder="https://www.linkedin.com/in/..."
-                  value={linkedinUrl}
-                  onChange={(e) => setLinkedinUrl(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-base font-semibold text-gray-900">GitHub პროფილი</label>
-                <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={noGithubProfile}
-                    onChange={(e) => {
-                      const on = e.target.checked
-                      setNoGithubProfile(on)
-                      if (on) setGithubUrl("")
-                    }}
-                  />
-                  არ მაქვს
-                </label>
-                <input
-                  type="url"
-                  inputMode="url"
-                  disabled={noGithubProfile}
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3 disabled:cursor-not-allowed disabled:bg-slate-100"
-                  placeholder="https://github.com/მომხმარებელი"
-                  value={githubUrl}
-                  onChange={(e) => setGithubUrl(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-base font-semibold text-gray-900">პორტფოლიო</label>
-                <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={noPortfolioWebsite}
-                    onChange={(e) => {
-                      const on = e.target.checked
-                      setNoPortfolioWebsite(on)
-                      if (on) setPortfolioUrl("")
-                    }}
-                  />
-                  არ მაქვს
-                </label>
-                <input
-                  type="url"
-                  inputMode="url"
-                  disabled={noPortfolioWebsite}
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3 disabled:cursor-not-allowed disabled:bg-slate-100"
-                  placeholder="https://"
-                  value={portfolioUrl}
-                  onChange={(e) => setPortfolioUrl(e.target.value)}
-                />
-              </div>
+              <OptionalSocialUrlField
+                label="LinkedIn პროფილი"
+                placeholder="https://www.linkedin.com/in/..."
+                value={linkedinUrl}
+                onChange={setLinkedinUrl}
+                disabled={noLinkedinProfile}
+                onDisabledChange={setNoLinkedinProfile}
+              />
+              <OptionalSocialUrlField
+                label="GitHub პროფილი"
+                placeholder="https://github.com/მომხმარებელი"
+                value={githubUrl}
+                onChange={setGithubUrl}
+                disabled={noGithubProfile}
+                onDisabledChange={setNoGithubProfile}
+              />
+              <OptionalSocialUrlField
+                label="Facebook"
+                placeholder="https://www.facebook.com/..."
+                value={facebookUrl}
+                onChange={setFacebookUrl}
+                disabled={noFacebookProfile}
+                onDisabledChange={setNoFacebookProfile}
+              />
+              <OptionalSocialUrlField
+                label="Instagram"
+                placeholder="https://www.instagram.com/..."
+                value={instagramUrl}
+                onChange={setInstagramUrl}
+                disabled={noInstagramProfile}
+                onDisabledChange={setNoInstagramProfile}
+              />
+              <OptionalSocialUrlField
+                label="TikTok"
+                placeholder="https://www.tiktok.com/@..."
+                value={tiktokUrl}
+                onChange={setTiktokUrl}
+                disabled={noTiktokProfile}
+                onDisabledChange={setNoTiktokProfile}
+              />
+              <OptionalSocialUrlField
+                label="YouTube"
+                placeholder="https://www.youtube.com/@..."
+                value={youtubeUrl}
+                onChange={setYoutubeUrl}
+                disabled={noYoutubeProfile}
+                onDisabledChange={setNoYoutubeProfile}
+              />
+              <OptionalSocialUrlField
+                label="X"
+                placeholder="https://x.com/..."
+                value={xUrl}
+                onChange={setXUrl}
+                disabled={noXProfile}
+                onDisabledChange={setNoXProfile}
+              />
+              <OptionalSocialUrlField
+                label="პორტფოლიო"
+                placeholder="https://"
+                value={portfolioUrl}
+                onChange={setPortfolioUrl}
+                disabled={noPortfolioWebsite}
+                onDisabledChange={setNoPortfolioWebsite}
+              />
               <div className="space-y-3">
-                <label className="mb-1 block text-base font-semibold text-gray-900">უნარები (მინ. 3)</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">უნარები (არასავალდებულო)</label>
                 <p className="text-xs text-slate-500">
-                  არჩეულია <span className="font-semibold tabular-nums text-slate-700">{selectedSkillIds.length}</span> უნარი · საჭიროა მინიმუმ{" "}
-                  <span className="font-semibold">3</span>
+                  არჩეულია <span className="font-semibold tabular-nums text-slate-700">{selectedSkillIds.length}</span> უნარი
                 </p>
 
                 <div>
@@ -1382,7 +1435,26 @@ export default function ProfilePage() {
                           />
                         </div>
 
-                        <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-3">
+                          <div>
+                            <p className="mb-2 text-base font-semibold text-gray-900">ფასის ტიპი</p>
+                            <div className="grid gap-2 sm:grid-cols-3">
+                              {(Object.keys(PRICE_TYPE_LABELS) as ListingPriceType[]).map((key) => (
+                                <label
+                                  key={key}
+                                  className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                >
+                                  <input
+                                    type="radio"
+                                    name={`listing-price-type-${index}`}
+                                    checked={listing.priceType === key}
+                                    onChange={() => updateListing(index, { priceType: key })}
+                                  />
+                                  {PRICE_TYPE_LABELS[key]}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
                           <div>
                             <label className="mb-1 block text-base font-semibold text-gray-900">ფასი (₾)</label>
                             <input
@@ -1393,18 +1465,6 @@ export default function ProfilePage() {
                               value={listing.price}
                               onChange={(e) => updateListing(index, { price: e.target.value })}
                               placeholder="0"
-                            />
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-base font-semibold text-gray-900">ვადა (დღე) *</label>
-                            <input
-                              type="number"
-                              min="1"
-                              step="1"
-                              className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
-                              value={listing.deliveryDays}
-                              onChange={(e) => updateListing(index, { deliveryDays: e.target.value })}
-                              placeholder="3"
                             />
                           </div>
                         </div>

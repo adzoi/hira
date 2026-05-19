@@ -1,3 +1,5 @@
+import { enforceRateLimit } from "../_shared/rateLimit.ts"
+
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -15,6 +17,14 @@ function jsonResponse(body: unknown, status = 200) {
  */
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders })
+
+  const rateLimited = await enforceRateLimit(
+    req,
+    { prefix: "rl:cv-generate", requests: 10, window: "1 m" },
+    corsHeaders,
+  )
+  if (rateLimited) return rateLimited
+
   return jsonResponse(
     {
       errors: [

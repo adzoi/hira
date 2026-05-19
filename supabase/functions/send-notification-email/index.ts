@@ -1,19 +1,41 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts"
+import { enforceRateLimit } from "../_shared/rateLimit.ts"
+import { corsHeadersFor } from "../_shared/cors.ts"
+import { readJsonBody, validateTextField, validateUuid, escapeHtml } from "../_shared/validation.ts"
 
 /** Gmail SMTP path: CTA always opens production dashboard (ASCII URL avoids client quirks). */
 const GMAIL_CTA_DASHBOARD_URL = "https://gigori-production.up.railway.app/dashboard"
 
-const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-}
-
-function jsonResponse(body: unknown, status = 200) {
+function jsonResponse(req: Request, body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsHeadersFor(req), "Content-Type": "application/json" },
   })
+}
+
+function isAuthorized(req: Request): boolean {
+  const webhookSecret = Deno.env.get("EMAIL_WEBHOOK_SECRET")?.trim() ?? ""
+  const webhookHeader = req.headers.get("X-Gigori-Webhook-Secret")?.trim() ?? ""
+  if (webhookSecret && webhookHeader === webhookSecret) return true
+
+  const authHeader = req.headers.get("Authorization") ?? ""
+  if (!authHeader.startsWith("Bearer ")) return false
+  const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() ?? ""
+  const bearerToken = authHeader.slice("Bearer ".length).trim()
+  return Boolean(serviceRole && bearerToken === serviceRole)
+}
+
+/** Only same-origin relative paths; blocks external and protocol-relative URLs. */
+function safeNotificationHref(linkRaw: string, siteUrl: string): string {
+  const fallback = siteUrl ? `${siteUrl}/dashboard` : "/dashboard"
+  const trimmed = linkRaw.trim()
+  if (!trimmed) return fallback
+  if (trimmed.startsWith("//")) return fallback
+  if (/^https?:\/\//i.test(trimmed)) return fallback
+  const path = trimmed.startsWith("/") ? trimmed : `/${trimmed}`
+  if (!/^\/[a-zA-Z0-9/_-]*$/.test(path)) return fallback
+  return siteUrl ? `${siteUrl}${path}` : path
 }
 
 type Body = {
@@ -108,32 +130,53 @@ async function sendWithGmailSmtp(params: {
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders })
-  if (req.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405)
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeadersFor(req) })
+  if (req.method !== "POST") return jsonResponse(req, { error: "Method not allowed" }, 405)
 
-  const authHeader = req.headers.get("Authorization") ?? ""
-  if (!authHeader.startsWith("Bearer ")) return jsonResponse({ error: "Unauthorized" }, 401)
-
-  const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() ?? ""
+  if (!isAuthorized(req)) return jsonResponse(req, { error: "Unauthorized" }, 401)
   const resendKey = Deno.env.get("RESEND_API_KEY")?.trim() ?? ""
   const gmailUser = Deno.env.get("GMAIL_SMTP_USER")?.trim() ?? ""
   const gmailAppPassword = Deno.env.get("GMAIL_SMTP_APP_PASSWORD")?.trim() ?? ""
 
   if (!resendKey && (!gmailUser || !gmailAppPassword)) {
-    return jsonResponse({ error: "Email not configured" }, 503)
+    return jsonResponse(req, { error: "Email not configured" }, 503)
   }
 
-  let parsed: Body
-  try {
-    parsed = (await req.json()) as Body
-  } catch {
-    return jsonResponse({ error: "Invalid JSON" }, 400)
+  const bodyParsed = await readJsonBody(req)
+  if (!bodyParsed.ok) {
+    return jsonResponse(req, { error: bodyParsed.error }, bodyParsed.status)
+  }
+  const parsed = bodyParsed.value as Body
+
+  const userIdResult = validateUuid(typeof parsed.user_id === "string" ? parsed.user_id : "", "user_id")
+  if (!userIdResult.ok) return jsonResponse(req, { error: userIdResult.message }, 400)
+  const userId = userIdResult.value
+
+  if (parsed.title != null) {
+    const titleResult = validateTextField(parsed.title, {
+      max: 200,
+      required: false,
+      label: "title",
+    })
+    if (!titleResult.ok) return jsonResponse({ error: titleResult.message }, 400)
+  }
+  if (parsed.body != null && typeof parsed.body === "string" && parsed.body.trim()) {
+    const bodyResult = validateTextField(parsed.body, {
+      max: 2000,
+      required: false,
+      label: "body",
+    })
+    if (!bodyResult.ok) return jsonResponse({ error: bodyResult.message }, 400)
   }
 
-  const userId = typeof parsed.user_id === "string" ? parsed.user_id.trim() : ""
-  const linkRaw = parsed.link != null ? String(parsed.link).trim() : ""
+  const linkRaw = parsed.link != null ? String(parsed.link).trim().slice(0, 2048) : ""
 
-  if (!userId) return jsonResponse({ error: "user_id is required" }, 400)
+  const rateLimited = await enforceRateLimit(
+    req,
+    { prefix: "rl:send-notification-email", requests: 10, window: "1 m", key: userId, failClosed: true },
+    corsHeaders,
+  )
+  if (rateLimited) return rateLimited
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim() ?? ""
   if (!supabaseUrl || !serviceRole) return jsonResponse({ error: "Server misconfigured" }, 500)
@@ -156,12 +199,7 @@ Deno.serve(async (req: Request) => {
 
   const email = adminUser.user.email.trim()
   const siteUrl = (Deno.env.get("PUBLIC_SITE_URL") ?? Deno.env.get("SITE_URL") ?? "").replace(/\/$/, "")
-  const href =
-    linkRaw && (linkRaw.startsWith("http://") || linkRaw.startsWith("https://"))
-      ? linkRaw
-      : linkRaw
-        ? `${siteUrl}${linkRaw.startsWith("/") ? "" : "/"}${linkRaw}`
-        : `${siteUrl}/dashboard`
+  const href = safeNotificationHref(linkRaw, siteUrl)
 
   if (resendKey) {
     const from = Deno.env.get("RESEND_FROM")?.trim() || "Gigori <onboarding@resend.dev>"
@@ -175,7 +213,7 @@ Deno.serve(async (req: Request) => {
     </div>
     <div style="padding:28px 24px;color:#1B2B4B;line-height:1.6;">
       <p style="font-size:15px;margin:0 0 20px;">You have a new notification on Gigori.</p>
-      <a href="${href}" style="display:inline-block;background:#0088FF;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:600;font-size:15px;">Check it</a>
+      <a href="${escapeHtml(href)}" style="display:inline-block;background:#0088FF;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:600;font-size:15px;">Check it</a>
     </div>
     <div style="padding:14px 24px;font-size:12px;color:#94a3b8;border-top:1px solid #e2e8f0;">
       If you did not expect this email, you can ignore it.

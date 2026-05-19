@@ -1,5 +1,6 @@
 import { Redis } from "https://esm.sh/@upstash/redis@1.20.1"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
+import { enforceRateLimit } from "../_shared/rateLimit.ts"
 
 declare const Deno: {
   serve: (handler: (req: Request) => Response | Promise<Response>) => void
@@ -13,6 +14,21 @@ Deno.serve(async (req) => {
       headers: { "Access-Control-Allow-Origin": "*" },
     })
   }
+
+  if (req.method !== "GET" && req.method !== "OPTIONS") {
+    return new Response(JSON.stringify({ ok: false, error: "Method not allowed" }), {
+      status: 405,
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+    })
+  }
+
+  const corsHeaders = { "Access-Control-Allow-Origin": "*" }
+  const rateLimited = await enforceRateLimit(
+    req,
+    { prefix: "rl:health", requests: 10, window: "1 m" },
+    corsHeaders,
+  )
+  if (rateLimited) return rateLimited
 
   const checks: Record<string, string> = {}
   let allOk = true

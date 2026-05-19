@@ -26,15 +26,24 @@ export const options = {
   },
 };
 
-const BASE = "https://sumwawnbeltxoppjdcjs.supabase.co/functions/v1";
+const BASE = (__ENV.SUPABASE_FUNCTIONS_URL ?? "").replace(/\/$/, "");
+const ANON_KEY = __ENV.SUPABASE_ANON_KEY ?? "";
+
+if (!BASE || !ANON_KEY) {
+  throw new Error(
+    "Missing env: set SUPABASE_FUNCTIONS_URL and SUPABASE_ANON_KEY, e.g.\n" +
+      '  k6 run -e SUPABASE_FUNCTIONS_URL="https://xxx.supabase.co/functions/v1" ' +
+      '-e SUPABASE_ANON_KEY="your-anon-key" load-test.js',
+  );
+}
+
 const CATEGORIES = ["all", "design", "development", "marketing", "writing"];
 
 export default function () {
-  // __ENV.ANON_KEY passed via: k6 run -e ANON_KEY="eyJ..." load-test.js
   const headers = {
     "Content-Type": "application/json",
-    "Authorization": `Bearer ${__ENV.ANON_KEY}`,
-    "apikey": __ENV.ANON_KEY,
+    Authorization: `Bearer ${ANON_KEY}`,
+    apikey: ANON_KEY,
   };
 
   const category = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];

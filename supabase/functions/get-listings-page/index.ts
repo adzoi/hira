@@ -1,5 +1,5 @@
-import { Redis } from "https://esm.sh/@upstash/redis@1.20.1"
-import { Ratelimit } from "https://esm.sh/@upstash/ratelimit@0.4.4"
+import { enforceRateLimit, getRedis } from "../_shared/rateLimit.ts"
+import { normalizeCategory, parsePage, readJsonBody } from "../_shared/validation.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
 
 const corsHeaders: Record<string, string> = {
@@ -27,17 +27,6 @@ function isCachedSuccessPayload(v: unknown): v is SuccessPayload {
   return o.ok === true && "data" in o
 }
 
-function parsePage(raw: string | null): number {
-  const n = Number.parseInt(raw ?? "1", 10)
-  if (!Number.isFinite(n) || n < 1) return 1
-  return Math.floor(n)
-}
-
-function normalizeCategory(raw: string | null | undefined): string {
-  const s = String(raw ?? "").trim()
-  return s.length > 0 ? s : "all"
-}
-
 async function parseParams(req: Request): Promise<{ category: string; page: number }> {
   if (req.method === "GET") {
     const u = new URL(req.url)
@@ -46,20 +35,12 @@ async function parseParams(req: Request): Promise<{ category: string; page: numb
       page: parsePage(u.searchParams.get("page")),
     }
   }
-  try {
-    const body = (await req.json()) as { category?: string | null; page?: unknown }
-    const pageRaw =
-      typeof body?.page === "number"
-        ? String(body.page)
-        : typeof body?.page === "string"
-          ? body.page
-          : "1"
-    return {
-      category: normalizeCategory(body?.category ?? ""),
-      page: parsePage(pageRaw),
-    }
-  } catch {
-    return { category: "all", page: 1 }
+  const parsed = await readJsonBody(req)
+  if (!parsed.ok) return { category: "all", page: 1 }
+  const body = parsed.value
+  return {
+    category: normalizeCategory(body.category),
+    page: parsePage(body.page),
   }
 }
 
@@ -77,37 +58,14 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: "Missing Supabase env" }, 500)
   }
 
-  // ── Rate limiting ────────────────────────────────────────────────────────
-  let redis: Redis | null = null
-  try {
-    if (Deno.env.get("UPSTASH_REDIS_REST_URL") && Deno.env.get("UPSTASH_REDIS_REST_TOKEN")) {
-      redis = Redis.fromEnv()
-    }
-  } catch {
-    redis = null
-  }
+  const rateLimited = await enforceRateLimit(
+    req,
+    { prefix: "rl:listings-page", requests: 20, window: "10 s" },
+    corsHeaders,
+  )
+  if (rateLimited) return rateLimited
 
-  if (redis) {
-    try {
-      const ratelimit = new Ratelimit({
-        redis,
-        limiter: Ratelimit.slidingWindow(20, "10 s"),
-        analytics: false,
-        prefix: "rl:listings-page",
-      })
-      const ip =
-        req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-        req.headers.get("x-real-ip") ??
-        "anonymous"
-      const { success } = await ratelimit.limit(ip)
-      if (!success) {
-        return jsonResponse({ ok: false, error: "Too many requests" }, 429)
-      }
-    } catch {
-      // Fail open
-    }
-  }
-  // ────────────────────────────────────────────────────────────────────────
+  const redis = getRedis()
 
   const { category, page } = await parseParams(req)
   const cacheKey = `listings:page:${category}:${page}`

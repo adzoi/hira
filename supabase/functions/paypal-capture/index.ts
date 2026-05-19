@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
+import { enforceRateLimit } from "../_shared/rateLimit.ts"
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -40,6 +41,25 @@ async function paypalAccessToken(apiBase: string, clientId: string, secret: stri
   return data.access_token
 }
 
+async function paypalGetOrder(
+  apiBase: string,
+  accessToken: string,
+  orderId: string,
+): Promise<Record<string, unknown>> {
+  const res = await fetch(`${apiBase}/v2/checkout/orders/${encodeURIComponent(orderId)}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+  })
+  const body = (await res.json()) as Record<string, unknown>
+  if (!res.ok) {
+    console.error("[paypal-capture] get order failed", res.status, body)
+    throw new Error("PayPal order lookup failed")
+  }
+  return body
+}
+
 /**
  * Server-side order capture (avoids client-side "Buyer access token not present" on capture).
  * @see https://developer.paypal.com/docs/api/orders/v2/#orders_capture
@@ -71,65 +91,157 @@ async function paypalCaptureOrder(
   return body
 }
 
-async function readJsonBody(req: Request): Promise<unknown> {
-  return req.json()
-}
+async function verifyListingOwnership(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  listingId: string,
+  listingType: string,
+): Promise<boolean> {
+  if (listingType === "freelancer") {
+    const { data: serviceRow, error: serviceErr } = await admin
+      .from("services")
+      .select("id, freelancer_profile_id")
+      .eq("id", listingId)
+      .maybeSingle()
+    if (serviceErr || !serviceRow) return false
 
-async function getPayPalAccessToken(): Promise<string> {
-  const paypalApiBase = (Deno.env.get("PAYPAL_API_BASE") ?? "https://api-m.sandbox.paypal.com").replace(/\/$/, "")
-  const paypalClientId = Deno.env.get("PAYPAL_CLIENT_ID") ?? ""
-  const paypalSecret = paypalClientSecret()
-  if (!paypalClientId || !paypalSecret) {
-    throw new Error("PayPal not configured")
+    const freelancerProfileId = String(
+      (serviceRow as { freelancer_profile_id?: string }).freelancer_profile_id ?? "",
+    )
+    const { data: freelancerRow, error: freelancerErr } = await admin
+      .from("freelancer_profiles")
+      .select("user_id")
+      .eq("id", freelancerProfileId)
+      .maybeSingle()
+    if (freelancerErr || !freelancerRow) return false
+    return String((freelancerRow as { user_id?: string }).user_id ?? "") === userId
   }
-  return paypalAccessToken(paypalApiBase, paypalClientId, paypalSecret)
+
+  const { data: jobRow, error: jobErr } = await admin
+    .from("jobs")
+    .select("id, hirer_profile_id")
+    .eq("id", listingId)
+    .maybeSingle()
+  if (jobErr || !jobRow) return false
+
+  const hirerProfileId = String((jobRow as { hirer_profile_id?: string }).hirer_profile_id ?? "")
+  const { data: hp, error: hpErr } = await admin
+    .from("hirer_profiles")
+    .select("user_id")
+    .eq("id", hirerProfileId)
+    .maybeSingle()
+  if (hpErr || !hp?.user_id) return false
+  return String(hp.user_id) === userId
 }
 
-async function captureOrder(orderID: string, accessToken: string): Promise<Record<string, unknown>> {
-  const paypalApiBase = (Deno.env.get("PAYPAL_API_BASE") ?? "https://api-m.sandbox.paypal.com").replace(/\/$/, "")
-  return paypalCaptureOrder(paypalApiBase, accessToken, orderID)
+function orderReferenceId(order: Record<string, unknown>): string | null {
+  const purchaseUnits = order.purchase_units as unknown
+  const firstUnit = Array.isArray(purchaseUnits) ? purchaseUnits[0] : null
+  if (!firstUnit || typeof firstUnit !== "object" || firstUnit === null) return null
+  const ref = (firstUnit as { reference_id?: unknown }).reference_id
+  return typeof ref === "string" && ref.trim() ? ref.trim() : null
 }
 
 Deno.serve(async (req: Request) => {
   try {
-    // Handle CORS preflight
-    if (req.method === 'OPTIONS') {
+    if (req.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders })
     }
 
-    if (req.method !== 'POST') {
-      return jsonResponse({ error: 'Method not allowed' }, 405)
+    if (req.method !== "POST") {
+      return jsonResponse({ error: "Method not allowed" }, 405)
     }
 
-    let payload: any
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim() ?? ""
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")?.trim() ?? ""
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() ?? ""
+    if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey) {
+      return jsonResponse({ error: "Server misconfigured" }, 500)
+    }
+
+    const authHeader = req.headers.get("Authorization") ?? ""
+    if (!authHeader.startsWith("Bearer ")) {
+      return jsonResponse({ error: "Unauthorized" }, 401)
+    }
+
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    })
+    const {
+      data: { user },
+      error: userErr,
+    } = await userClient.auth.getUser()
+    if (userErr || !user) {
+      return jsonResponse({ error: "Unauthorized" }, 401)
+    }
+
+    const rateLimited = await enforceRateLimit(
+      req,
+      { prefix: "rl:paypal-capture", requests: 5, window: "1 m", key: user.id, failClosed: true },
+      corsHeaders,
+    )
+    if (rateLimited) return rateLimited
+
+    let payload: Record<string, unknown>
     try {
-      payload = await readJsonBody(req)
+      payload = (await req.json()) as Record<string, unknown>
     } catch {
-      return jsonResponse({ error: 'Invalid JSON body' }, 400)
+      return jsonResponse({ error: "Invalid JSON body" }, 400)
     }
 
-    const orderID = payload?.orderID
-    if (!orderID || typeof orderID !== 'string') {
-      return jsonResponse({ error: 'orderID is required' }, 400)
+    const orderID = typeof payload.orderID === "string" ? payload.orderID.trim() : ""
+    const listingId = typeof payload.job_id === "string" ? payload.job_id.trim() : ""
+    const listingType = typeof payload.listing_type === "string"
+      ? payload.listing_type.trim().toLowerCase()
+      : "job"
+
+    if (!orderID) {
+      return jsonResponse({ error: "orderID is required" }, 400)
+    }
+    if (!listingId) {
+      return jsonResponse({ error: "job_id is required" }, 400)
+    }
+    if (listingType !== "job" && listingType !== "freelancer") {
+      return jsonResponse({ error: "Invalid listing_type" }, 400)
     }
 
-    console.log('Starting paypal-capture, orderID:', orderID)
-    console.log('PAYPAL_CLIENT_ID exists:', !!Deno.env.get('PAYPAL_CLIENT_ID'))
-    console.log('PAYPAL_SECRET exists:', !!Deno.env.get('PAYPAL_SECRET'))
+    const admin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
 
-    const accessToken = await getPayPalAccessToken()
-    console.log('Got access token')
+    const ownsListing = await verifyListingOwnership(admin, user.id, listingId, listingType)
+    if (!ownsListing) {
+      return jsonResponse({ error: "Forbidden" }, 403)
+    }
 
-    const captureResponse = await captureOrder(orderID, accessToken)
-    console.log('Capture done:', JSON.stringify(captureResponse))
+    const paypalApiBase = (Deno.env.get("PAYPAL_API_BASE") ?? "https://api-m.sandbox.paypal.com").replace(/\/$/, "")
+    const paypalClientId = Deno.env.get("PAYPAL_CLIENT_ID") ?? ""
+    const paypalSecret = paypalClientSecret()
+    if (!paypalClientId || !paypalSecret) {
+      return jsonResponse({ error: "PayPal not configured" }, 500)
+    }
 
+    const accessToken = await paypalAccessToken(paypalApiBase, paypalClientId, paypalSecret)
+    const order = await paypalGetOrder(paypalApiBase, accessToken, orderID)
+
+    const referenceId = orderReferenceId(order)
+    if (referenceId !== listingId) {
+      return jsonResponse({ error: "Order does not match listing" }, 403)
+    }
+
+    const orderStatus = String(order.status ?? "")
+    if (orderStatus === "COMPLETED") {
+      return jsonResponse(order, 200)
+    }
+    if (orderStatus !== "APPROVED" && orderStatus !== "CREATED") {
+      return jsonResponse({ error: "Order is not capturable" }, 400)
+    }
+
+    const captureResponse = await paypalCaptureOrder(paypalApiBase, accessToken, orderID)
     return jsonResponse(captureResponse, 200)
-
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    const stack = err instanceof Error ? err.stack : ''
-    console.error('UNHANDLED ERROR:', message)
-    console.error('STACK:', stack)
-    return jsonResponse({ error: message, stack }, 500)
+    console.error("[paypal-capture] unhandled error:", message)
+    return jsonResponse({ error: message }, 500)
   }
 })

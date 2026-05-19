@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import Navbar from "../components/Navbar"
+import { ViewCountEyeIcon } from "../components/ViewCountEyeIcon.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
+import StartConversationButton from "../components/StartConversationButton.tsx"
 import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
+import { formatListingPrice, normalizeListingPriceType } from "../lib/listingPrice.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { avatarImageUrl, serviceImageDetailUrl, serviceImageThumbnailUrl } from "../lib/storageImageUrl.ts"
+import { validateInquiryMessage, validateMoneyAmount } from "../lib/validation.ts"
 
 type ListingMeta = {
   categoryId: string | null
@@ -44,13 +48,14 @@ type ListingDetail = {
   title: string
   descriptionRaw: string | null
   price: number
-  deliveryDays: number
+  priceType: string
   createdAt: string
   imageUrls: string[]
   fullName: string
   professionalTitle: string
   avatarUrl: string | null
   freelancerSlug: string
+  freelancerUserId: string
   averageRating: number
   viewsCount: number
   isAcceptingNewWork: boolean
@@ -65,6 +70,8 @@ export default function ListingDetailPage() {
   const [item, setItem] = useState<ListingDetail | null>(null)
   const [viewerType, setViewerType] = useState<"hirer" | "freelancer" | null>(null)
   const [viewerFreelancerProfileId, setViewerFreelancerProfileId] = useState<string | null>(null)
+  const [viewerHirerProfileId, setViewerHirerProfileId] = useState<string | null>(null)
+  const [existingInquiryId, setExistingInquiryId] = useState<string | null>(null)
   const [offerMessage, setOfferMessage] = useState("")
   const [offerBudget, setOfferBudget] = useState("")
   const [offerError, setOfferError] = useState("")
@@ -97,7 +104,7 @@ export default function ListingDetailPage() {
             title,
             description,
             price,
-            delivery_days,
+            price_type,
             views_count,
             created_at,
             image_urls,
@@ -107,6 +114,7 @@ export default function ListingDetailPage() {
               average_rating,
               is_accepting_new_work,
               profiles:profiles!freelancer_profiles_user_id_fkey (
+                id,
                 full_name,
                 avatar_url
               )
@@ -124,7 +132,7 @@ export default function ListingDetailPage() {
           professional_title: string | null
           average_rating: number | null
           is_accepting_new_work?: boolean | null
-          profiles: { full_name: string | null; avatar_url: string | null } | null
+          profiles: { id: string; full_name: string | null; avatar_url: string | null } | null
         } | null
         if (!fp?.slug) throw new Error("ლისტინგი ვერ მოიძებნა.")
 
@@ -134,7 +142,7 @@ export default function ListingDetailPage() {
           title: data.title ?? "სერვისი",
           descriptionRaw: data.description,
           price: Number(data.price ?? 0),
-          deliveryDays: Number(data.delivery_days ?? 0),
+          priceType: normalizeListingPriceType((data as { price_type?: string | null }).price_type),
           createdAt: data.created_at ?? new Date().toISOString(),
           imageUrls: Array.isArray((data as { image_urls?: unknown }).image_urls)
             ? ((data as { image_urls: unknown[] }).image_urls.map((x) => String(x)).filter(Boolean).slice(0, 3))
@@ -143,6 +151,7 @@ export default function ListingDetailPage() {
           professionalTitle: fp.professional_title?.trim() || "ფრილანსერი",
           avatarUrl: fp.profiles?.avatar_url ?? null,
           freelancerSlug: fp.slug,
+          freelancerUserId: String(fp.profiles?.id ?? ""),
           averageRating: Number(fp.average_rating ?? 0),
           viewsCount: Number((data as { views_count?: number | null }).views_count ?? 0),
           isAcceptingNewWork: fp.is_accepting_new_work !== false,
@@ -165,6 +174,8 @@ export default function ListingDetailPage() {
       if (!user) {
         setViewerType(null)
         setViewerFreelancerProfileId(null)
+        setViewerHirerProfileId(null)
+        setExistingInquiryId(null)
         return
       }
       const { data: profile } = await supabase.from("profiles").select("user_type").eq("id", user.id).maybeSingle()
@@ -173,12 +184,37 @@ export default function ListingDetailPage() {
       if (ut === "freelancer") {
         const { data: fp } = await supabase.from("freelancer_profiles").select("id").eq("user_id", user.id).maybeSingle()
         setViewerFreelancerProfileId(fp?.id ?? null)
+        setViewerHirerProfileId(null)
+      } else if (ut === "hirer") {
+        setViewerFreelancerProfileId(null)
+        const { data: hp } = await supabase.from("hirer_profiles").select("id").eq("user_id", user.id).maybeSingle()
+        setViewerHirerProfileId(hp?.id ?? null)
       } else {
         setViewerFreelancerProfileId(null)
+        setViewerHirerProfileId(null)
       }
     }
     void loadViewer()
   }, [])
+
+  useEffect(() => {
+    const loadInquiry = async () => {
+      if (!item?.id || !viewerHirerProfileId || !supabase) {
+        setExistingInquiryId(null)
+        return
+      }
+      const { data } = await supabase
+        .from("service_inquiries")
+        .select("id")
+        .eq("service_id", item.id)
+        .eq("hirer_profile_id", viewerHirerProfileId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      setExistingInquiryId(data?.id ?? null)
+    }
+    void loadInquiry()
+  }, [item?.id, viewerHirerProfileId])
 
   const imagePublicUrls = useMemo(() => {
     if (!item) return []
@@ -251,20 +287,21 @@ export default function ListingDetailPage() {
   const submitOffer = async () => {
     if (!item || !supabase) return
     setOfferError("")
-    const message = offerMessage.trim()
-    if (message.length < 10) {
-      setOfferError("შეთავაზების ტექსტი მინიმუმ 10 სიმბოლო უნდა იყოს.")
+    const messageResult = validateInquiryMessage(offerMessage)
+    if (!messageResult.ok) {
+      setOfferError(messageResult.message)
       return
     }
+    const message = messageResult.value
     let proposedBudget: number | null = null
     const budgetRaw = offerBudget.trim()
     if (budgetRaw) {
-      const n = Number(budgetRaw)
-      if (!Number.isFinite(n) || n < 0) {
-        setOfferError("შემოთავაზებული თანხა არასწორია.")
+      const budgetResult = validateMoneyAmount(budgetRaw, { min: 0, label: "შემოთავაზებული თანხა" })
+      if (!budgetResult.ok || budgetResult.value == null) {
+        setOfferError(budgetResult.ok ? "შემოთავაზებული თანხა არასწორია." : budgetResult.message)
         return
       }
-      proposedBudget = n
+      proposedBudget = budgetResult.value
     }
 
     setOfferSubmitting(true)
@@ -295,6 +332,15 @@ export default function ListingDetailPage() {
         status: "pending",
       })
       if (insertErr) throw insertErr
+      const { data: latestInquiry } = await supabase
+        .from("service_inquiries")
+        .select("id")
+        .eq("service_id", item.id)
+        .eq("hirer_profile_id", hirerProfile.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (latestInquiry?.id) setExistingInquiryId(latestInquiry.id)
       setOfferMessage("")
       setOfferBudget("")
       setOfferError("")
@@ -322,7 +368,10 @@ export default function ListingDetailPage() {
           <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
             <section className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
               <h1 className="text-2xl font-extrabold text-[#1B2B4B]">{item.title}</h1>
-              <p className="mt-1 text-xs text-slate-500">{item.viewsCount} ნახვა</p>
+              <p className="mt-1 inline-flex items-center gap-1 text-xs text-slate-500">
+                <ViewCountEyeIcon className="h-3.5 w-3.5 shrink-0" />
+                {item.viewsCount}
+              </p>
               <p className="mt-2 text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">
                 {parsed.description || "დეტალური აღწერა ჯერ არ არის დამატებული."}
               </p>
@@ -378,7 +427,7 @@ export default function ListingDetailPage() {
                 <Link to={`/freelancer/${encodeURIComponent(item.freelancerSlug)}`} className="min-w-0 flex-1">
                   <p className="truncate font-bold text-[#1B2B4B]">{item.fullName}</p>
                   <p className="truncate text-xs text-slate-600">{item.professionalTitle}</p>
-                  <p className="mt-0.5 text-xs font-semibold text-[#D4A843]">★ {item.averageRating.toFixed(1)}</p>
+                  <p className="mt-0.5 text-xs font-semibold text-[#D4A843]">{item.averageRating.toFixed(1)}</p>
                 </Link>
               </div>
 
@@ -391,10 +440,7 @@ export default function ListingDetailPage() {
               <div className="mt-4 space-y-2 text-sm text-slate-700">
                 <p>
                   <span className="font-semibold text-[#1B2B4B]">ფასი:</span>{" "}
-                  {item.price === 0 ? "შეთანხმებით" : `${item.price.toLocaleString("ka-GE")} ₾`}
-                </p>
-                <p>
-                  <span className="font-semibold text-[#1B2B4B]">ვადა:</span> {Math.max(1, item.deliveryDays)} დღე
+                  {formatListingPrice(item.price, item.priceType)}
                 </p>
                 <p>
                   <span className="font-semibold text-[#1B2B4B]">დამატებულია:</span>{" "}
@@ -418,7 +464,7 @@ export default function ListingDetailPage() {
                 </div>
               ) : null}
 
-              <div className="mt-5 flex gap-2">
+              <div className="mt-5 flex flex-wrap gap-2">
                 {!viewerOwnsListing ? (
                   <SaveBookmarkButton
                     variant="icon"
@@ -426,9 +472,16 @@ export default function ListingDetailPage() {
                     resourceId={item.freelancerProfileId}
                   />
                 ) : null}
+                {!viewerOwnsListing && item.freelancerUserId ? (
+                  <StartConversationButton
+                    otherUserId={item.freelancerUserId}
+                    serviceInquiryId={existingInquiryId}
+                    className="min-w-[10rem] flex-1"
+                  />
+                ) : null}
                 <Link
                   to={`/freelancer/${encodeURIComponent(item.freelancerSlug)}`}
-                  className="inline-flex h-11 min-w-0 flex-1 items-center justify-center rounded-lg bg-[#1B2B4B] px-4 text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B]"
+                  className="inline-flex h-11 min-w-[10rem] flex-1 items-center justify-center rounded-lg bg-[#1B2B4B] px-4 text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B]"
                 >
                   ფრილანსერის პროფილი
                 </Link>

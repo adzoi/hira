@@ -103,6 +103,98 @@ export interface Database {
           }
         ]
       }
+      conversation_reads: {
+        Row: {
+          conversation_id: string
+          last_read_at: string
+          user_id: string
+        }
+        Insert: {
+          conversation_id: string
+          last_read_at?: string
+          user_id: string
+        }
+        Update: {
+          conversation_id?: string
+          last_read_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_reads_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversation_reads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      conversations: {
+        Row: {
+          created_at: string
+          id: string
+          job_application_id: string | null
+          last_message_at: string | null
+          participant_high: string
+          participant_low: string
+          service_inquiry_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          job_application_id?: string | null
+          last_message_at?: string | null
+          participant_high: string
+          participant_low: string
+          service_inquiry_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          job_application_id?: string | null
+          last_message_at?: string | null
+          participant_high?: string
+          participant_low?: string
+          service_inquiry_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversations_job_application_id_fkey"
+            columns: ["job_application_id"]
+            isOneToOne: false
+            referencedRelation: "job_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_participant_high_fkey"
+            columns: ["participant_high"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_participant_low_fkey"
+            columns: ["participant_low"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_service_inquiry_id_fkey"
+            columns: ["service_inquiry_id"]
+            isOneToOne: false
+            referencedRelation: "service_inquiries"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       experience: {
         Row: {
           created_at: string
@@ -225,8 +317,10 @@ export interface Database {
           bio: string | null
           completed_jobs_count: number
           created_at: string
+          facebook_url: string | null
           github_url: string | null
           id: string
+          instagram_url: string | null
           is_profile_complete: boolean
           is_public: boolean
           is_accepting_new_work: boolean
@@ -236,9 +330,12 @@ export interface Database {
           portfolio_url: string | null
           professional_title: string | null
           slug: string
+          tiktok_url: string | null
           total_reviews_count: number
           updated_at: string
           user_id: string
+          x_url: string | null
+          youtube_url: string | null
         }
         Insert: {
           availability?: string | null
@@ -246,8 +343,10 @@ export interface Database {
           bio?: string | null
           completed_jobs_count?: number
           created_at?: string
+          facebook_url?: string | null
           github_url?: string | null
           id?: string
+          instagram_url?: string | null
           is_profile_complete?: boolean
           is_public?: boolean
           is_accepting_new_work?: boolean
@@ -257,9 +356,12 @@ export interface Database {
           portfolio_url?: string | null
           professional_title?: string | null
           slug: string
+          tiktok_url?: string | null
           total_reviews_count?: number
           updated_at?: string
           user_id: string
+          x_url?: string | null
+          youtube_url?: string | null
         }
         Update: {
           availability?: string | null
@@ -267,8 +369,10 @@ export interface Database {
           bio?: string | null
           completed_jobs_count?: number
           created_at?: string
+          facebook_url?: string | null
           github_url?: string | null
           id?: string
+          instagram_url?: string | null
           is_profile_complete?: boolean
           is_public?: boolean
           is_accepting_new_work?: boolean
@@ -278,9 +382,12 @@ export interface Database {
           portfolio_url?: string | null
           professional_title?: string | null
           slug?: string
+          tiktok_url?: string | null
           total_reviews_count?: number
           updated_at?: string
           user_id?: string
+          x_url?: string | null
+          youtube_url?: string | null
         }
         Relationships: [
           {
@@ -564,6 +671,45 @@ export interface Database {
             columns: ["subcategory_id"]
             isOneToOne: false
             referencedRelation: "subcategories"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      messages: {
+        Row: {
+          body: string
+          conversation_id: string
+          created_at: string
+          id: string
+          sender_id: string
+        }
+        Insert: {
+          body: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          sender_id: string
+        }
+        Update: {
+          body?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           }
         ]
@@ -914,7 +1060,7 @@ export interface Database {
       services: {
         Row: {
           created_at: string
-          delivery_days: number
+          delivery_days: number | null
           description: string | null
           freelancer_profile_id: string
           id: string
@@ -922,6 +1068,7 @@ export interface Database {
           is_active: boolean
           is_vip: boolean
           price: number
+          price_type: string
           title: string
           updated_at: string
           views_count: number
@@ -929,7 +1076,7 @@ export interface Database {
         }
         Insert: {
           created_at?: string
-          delivery_days: number
+          delivery_days?: number | null
           description?: string | null
           freelancer_profile_id: string
           id?: string
@@ -937,6 +1084,7 @@ export interface Database {
           is_active?: boolean
           is_vip?: boolean
           price: number
+          price_type?: string
           title: string
           updated_at?: string
           views_count?: number
@@ -944,7 +1092,7 @@ export interface Database {
         }
         Update: {
           created_at?: string
-          delivery_days?: number
+          delivery_days?: number | null
           description?: string | null
           freelancer_profile_id?: string
           id?: string
@@ -952,6 +1100,7 @@ export interface Database {
           is_active?: boolean
           is_vip?: boolean
           price?: number
+          price_type?: string
           title?: string
           updated_at?: string
           views_count?: number
@@ -1178,6 +1327,24 @@ export interface Database {
       delete_user: {
         Args: Record<PropertyKey, never>
         Returns: unknown
+      }
+      get_or_create_conversation: {
+        Args: {
+          p_other_user_id: string
+          p_job_application_id?: string | null
+          p_service_inquiry_id?: string | null
+        }
+        Returns: string
+      }
+      send_status_notification: {
+        Args: {
+          p_target_user_id: string
+          p_title: string
+          p_body: string
+          p_link: string
+          p_type?: string | null
+        }
+        Returns: undefined
       }
       get_home_feed: {
         Args: Record<PropertyKey, never>

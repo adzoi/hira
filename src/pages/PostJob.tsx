@@ -10,6 +10,19 @@ import {
   rootIdContainingCategory,
   type CategoryBranchRow,
 } from "../lib/marketplaceCategoryTree.ts"
+import { formatJobBudget, PRICE_TYPE_LABELS } from "../lib/listingPrice.ts"
+import {
+  encodeJobContactPreference,
+  JOB_CONTACT_LABELS,
+  normalizeJobContactPreference,
+  parseJobContactPreference,
+} from "../lib/jobContactPreference.ts"
+import {
+  assertField,
+  validateJobDescription,
+  validateJobTitle,
+  validatePositiveInt,
+} from "../lib/validation.ts"
 
 const MAX_JOB_IMAGES = 3
 const MAX_INPUT_IMAGE_BYTES = 10 * 1024 * 1024
@@ -50,12 +63,6 @@ async function compressImage(file: File): Promise<Blob> {
   }
 }
 
-const BUDGET_TYPE_LABELS: Record<string, string> = {
-  fixed: "ფიქსირებული",
-  hourly: "საათობრივი",
-  monthly: "თვიური",
-}
-
 const DURATION_TYPE_LABELS: Record<string, string> = {
   one_time: "ერთჯერადი",
   ongoing: "ხანგრძლივი",
@@ -66,11 +73,6 @@ const LOCATION_TYPE_LABELS: Record<string, string> = {
   tbilisi: "თბილისი",
   hybrid: "Hybrid",
   anywhere: "ნებისმიერი ადგილი",
-}
-
-const CONTACT_LABELS: Record<string, string> = {
-  email: "ელფოსტა",
-  phone: "ტელეფონი",
 }
 
 type CategoryRow = {
@@ -92,6 +94,7 @@ type FieldErrors = {
   budgetMax?: string
   applicationDeadline?: string
   vacancies?: string
+  contactMethods?: string
 }
 
 const PUBLISH_ERROR_SCROLL_ORDER = [
@@ -103,6 +106,7 @@ const PUBLISH_ERROR_SCROLL_ORDER = [
   "budgetMax",
   "vacancies",
   "applicationDeadline",
+  "contactMethods",
 ] as const satisfies readonly (keyof FieldErrors)[]
 
 function scrollToFirstPublishError(errors: FieldErrors) {
@@ -148,7 +152,8 @@ export default function PostJobPage() {
   const [locationType, setLocationType] = useState("remote")
 
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
-  const [contactPreference, setContactPreference] = useState("email")
+  const [contactEmail, setContactEmail] = useState(true)
+  const [contactPhone, setContactPhone] = useState(false)
   const [applicationDeadline, setApplicationDeadline] = useState("")
   const [vacancies, setVacancies] = useState(1)
   const [acceptedCountSnapshot, setAcceptedCountSnapshot] = useState(0)
@@ -280,7 +285,11 @@ export default function PostJobPage() {
           setBudgetMax(jobRow.budget_max == null ? "" : String(jobRow.budget_max))
           setDurationType(jobRow.duration_type)
           setLocationType(jobRow.location_type)
-          setContactPreference(jobRow.contact_preference)
+          const parsedContact = parseJobContactPreference(
+            normalizeJobContactPreference(String(jobRow.contact_preference ?? "email")),
+          )
+          setContactEmail(parsedContact.contactEmail)
+          setContactPhone(parsedContact.contactPhone)
           setApplicationDeadline(jobRow.application_deadline ? jobRow.application_deadline.slice(0, 10) : "")
           const jr = jobRow as { vacancies?: unknown; accepted_count?: unknown }
           const vacN = Number(jr.vacancies ?? 1)
@@ -429,11 +438,8 @@ export default function PostJobPage() {
   const getPublishErrors = (): FieldErrors => {
     const e: FieldErrors = {}
 
-    if (!title.trim()) {
-      e.title = "სათაური სავალდებულოა."
-    } else if (title.trim().length > 100) {
-      e.title = "სათაური არ უნდა აღემატებოდეს 100 სიმბოლოს."
-    }
+    const titleResult = validateJobTitle(title)
+    if (!titleResult.ok) e.title = titleResult.message
 
     if (!rootCategoryId) {
       e.categoryId = "category სავალდებულოა."
@@ -441,11 +447,8 @@ export default function PostJobPage() {
       e.categoryId = "subcategory სავალდებულოა."
     }
 
-    if (!description.trim()) {
-      e.description = "აღწერა სავალდებულოა."
-    } else if (description.trim().length < 100) {
-      e.description = "აღწერა უნდა იყოს მინიმუმ 100 სიმბოლო."
-    }
+    const descriptionResult = validateJobDescription(description)
+    if (!descriptionResult.ok) e.description = descriptionResult.message
 
     if (!budgetType) {
       e.budgetType = "აირჩიე ბიუჯეტის ტიპი."
@@ -467,14 +470,25 @@ export default function PostJobPage() {
       e.applicationDeadline = "ვადა უნდა იყოს მომავალში."
     }
 
-    if (!Number.isFinite(vacancies) || vacancies < 1 || !Number.isInteger(vacancies)) {
-      e.vacancies = "ვაკანსიების რაოდენობა მინიმუმ 1 უნდა იყოს."
-    } else if (isEdit && vacancies < acceptedCountSnapshot) {
+    const vacanciesResult = validatePositiveInt(vacancies, {
+      min: 1,
+      max: 100,
+      label: "ვაკანსიები",
+    })
+    if (!vacanciesResult.ok) {
+      e.vacancies = vacanciesResult.message
+    } else if (isEdit && vacanciesResult.value < acceptedCountSnapshot) {
       e.vacancies = `ვაკანსიები არ უნდა იყოს ნაკლები უკვე მიღებული ფრილანსერების (${acceptedCountSnapshot}) რაოდენობაზე.`
+    }
+
+    if (!contactEmail && !contactPhone) {
+      e.contactMethods = "აირჩიე მინიმუმ ერთი კონტაქტის მეთოდი."
     }
 
     return e
   }
+
+  const contactPreference = encodeJobContactPreference(contactEmail, contactPhone)
 
   const handlePublishFromPreview = async () => {
     if (!supabase || !hirerProfileId) return
@@ -489,6 +503,9 @@ export default function PostJobPage() {
     setSubmitting(true)
     setPageError("")
 
+    const safeTitle = assertField(validateJobTitle(title))
+    const safeDescription = assertField(validateJobDescription(description))
+
     try {
       let currentJobId = jobId ?? null
       if (isEdit && jobId) {
@@ -497,8 +514,8 @@ export default function PostJobPage() {
           .update({
             category_id: categoryId,
             subcategory_id: subcategoryId || null,
-            title: title.trim(),
-            description: description.trim(),
+            title: safeTitle,
+            description: safeDescription,
             budget_type: budgetType,
             budget_min: Number(budgetMin),
             budget_max: Number(budgetMax),
@@ -534,8 +551,8 @@ export default function PostJobPage() {
             hirer_profile_id: hirerProfileId,
             category_id: categoryId,
             subcategory_id: subcategoryId || null,
-            title: title.trim(),
-            description: description.trim(),
+            title: safeTitle,
+            description: safeDescription,
             budget_type: budgetType,
             budget_min: Number(budgetMin),
             budget_max: Number(budgetMax),
@@ -656,11 +673,18 @@ export default function PostJobPage() {
                   <span className="rounded-full bg-white px-3 py-1 text-slate-700">სპეციალიზაცია: {subcategoryNameKa}</span>
                 ) : null}
                 <span className="rounded-full bg-white px-3 py-1 text-slate-700">
-                  ბიუჯეტი: {budgetMin} - {budgetMax} ₾ ({BUDGET_TYPE_LABELS[budgetType] ?? budgetType})
+                  ბიუჯეტი:{" "}
+                  {formatJobBudget(
+                    budgetMin ? Number(budgetMin) : null,
+                    budgetMax ? Number(budgetMax) : null,
+                    budgetType,
+                  )}
                 </span>
                 <span className="rounded-full bg-white px-3 py-1 text-slate-700">ტიპი: {DURATION_TYPE_LABELS[durationType] ?? durationType}</span>
                 <span className="rounded-full bg-white px-3 py-1 text-slate-700">ლოკაცია: {LOCATION_TYPE_LABELS[locationType] ?? locationType}</span>
-                <span className="rounded-full bg-white px-3 py-1 text-slate-700">კონტაქტი: {CONTACT_LABELS[contactPreference] ?? contactPreference}</span>
+                <span className="rounded-full bg-white px-3 py-1 text-slate-700">
+                  კონტაქტი: {JOB_CONTACT_LABELS[contactPreference] ?? contactPreference}
+                </span>
                 {applicationDeadline ? (
                   <span className="rounded-full bg-white px-3 py-1 text-slate-700">ვადა: {applicationDeadline}</span>
                 ) : null}
@@ -846,10 +870,10 @@ export default function PostJobPage() {
                     ბიუჯეტის ტიპი <span className="text-red-500">*</span>
                   </p>
                   <div className="grid gap-2 sm:grid-cols-3">
-                    {Object.keys(BUDGET_TYPE_LABELS).map((key) => (
+                    {Object.keys(PRICE_TYPE_LABELS).map((key) => (
                       <label key={key} className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm">
                         <input type="radio" name="budget_type" checked={budgetType === key} onChange={() => setBudgetType(key)} />
-                        {BUDGET_TYPE_LABELS[key]}
+                        {PRICE_TYPE_LABELS[key as keyof typeof PRICE_TYPE_LABELS]}
                       </label>
                     ))}
                   </div>
@@ -1057,16 +1081,36 @@ export default function PostJobPage() {
                   <p className="mt-1 text-xs text-slate-500">რამდენ ფრილანსერს შეუძლია ერთად მუშაობა ამ განცხადებაზე (მინ. 1).</p>
                   {fieldErrors.vacancies ? <p className="mt-1 text-sm text-red-600">{fieldErrors.vacancies}</p> : null}
                 </label>
-                <div>
+                <div id="post-job-field-contactMethods">
                   <p className="mb-2 text-sm font-semibold text-[#1B2B4B]">კონტაქტის მეთოდი</p>
+                  <p className="mb-2 text-xs text-slate-500">ფრილანსერები დაგიკავშირდებიან პროფილში მითითებული ელფოსტით და/ან ტელეფონით.</p>
                   <div className="grid gap-2 sm:grid-cols-2">
-                    {Object.keys(CONTACT_LABELS).map((key) => (
-                      <label key={key} className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm">
-                        <input type="radio" name="contact_preference" checked={contactPreference === key} onChange={() => setContactPreference(key)} />
-                        {CONTACT_LABELS[key]}
-                      </label>
-                    ))}
+                    <label className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={contactEmail}
+                        onChange={(e) => {
+                          if (!e.target.checked && !contactPhone) return
+                          setContactEmail(e.target.checked)
+                        }}
+                      />
+                      {JOB_CONTACT_LABELS.email}
+                    </label>
+                    <label className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={contactPhone}
+                        onChange={(e) => {
+                          if (!e.target.checked && !contactEmail) return
+                          setContactPhone(e.target.checked)
+                        }}
+                      />
+                      {JOB_CONTACT_LABELS.phone}
+                    </label>
                   </div>
+                  {fieldErrors.contactMethods ? (
+                    <p className="mt-1 text-sm text-red-600">{fieldErrors.contactMethods}</p>
+                  ) : null}
                 </div>
                 <label className="block">
                   <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">განაცხადის ბოლო ვადა</span>

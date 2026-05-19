@@ -22,5 +22,5 @@ SET accepted_count = COALESCE(
       WHERE ja.job_id = j.id
         AND ja.status IN ('accepted', 'in_progress', 'freelancer_done', 'hirer_done', 'completed')
     ),
-    0,
+    0
   );

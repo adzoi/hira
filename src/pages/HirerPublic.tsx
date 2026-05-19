@@ -9,8 +9,18 @@ import FollowListsModal, { FollowStatPills, type FollowModalTab } from "../compo
 import { countFollowers, countFollowing, followUser, isFollowing, unfollowUser } from "../lib/follows.ts"
 import { jobVacancyStats } from "../lib/jobVacancies.ts"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
+import StartConversationButton from "../components/StartConversationButton.tsx"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
+import { formatCityForDisplay } from "../lib/marketplaceFilters.ts"
+import { formatJobBudget } from "../lib/listingPrice.ts"
+import ProfilePendingOffers from "../components/ProfilePendingOffers.tsx"
+import {
+  acceptListingOffer,
+  declineListingOffer,
+  fetchPendingListingOffersFromHirer,
+  type ProfileListingOffer,
+} from "../lib/profileOffers.ts"
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -76,38 +86,12 @@ function formatDate(dateString: string) {
   return new Date(dateString).toLocaleDateString("ka-GE")
 }
 
-function ratingStars(value: number) {
-  const rounded = Math.round(value)
-  return `${"★".repeat(Math.max(0, rounded))}${"☆".repeat(Math.max(0, 5 - rounded))}`
-}
-
 function reviewerInitials(fullName: string) {
   const parts = fullName.trim().split(/\s+/).filter(Boolean)
   if (parts.length === 0) return "ფ"
   return `${parts[0][0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase()
 }
 
-function formatBudget(job: OpenJobBrief) {
-  const min = job.budgetMin
-  const max = job.budgetMax
-  const bType = job.budgetType
-  const label =
-    bType === "hourly"
-      ? "საათში"
-      : bType === "monthly"
-        ? "თვეში"
-        : "ბიუჯეტი"
-  if (min !== null && max !== null && min === max) {
-    return `${min.toLocaleString("ka-GE")} ₾ (${label})`
-  }
-  if (min !== null && max !== null) {
-    return `${min.toLocaleString("ka-GE")} – ${max.toLocaleString("ka-GE")} ₾ (${label})`
-  }
-  if (min !== null) {
-    return `დან ${min.toLocaleString("ka-GE")} ₾ (${label})`
-  }
-  return "დაუზუსტებული"
-}
 
 export default function HirerPublicPage() {
   const { pushToast } = useToast()
@@ -129,6 +113,9 @@ export default function HirerPublicPage() {
     "hidden",
   )
   const [followBusy, setFollowBusy] = useState(false)
+  const [viewerFreelancerProfileId, setViewerFreelancerProfileId] = useState<string | null>(null)
+  const [pendingListingOffers, setPendingListingOffers] = useState<ProfileListingOffer[]>([])
+  const [listingOfferBusyId, setListingOfferBusyId] = useState<string | null>(null)
 
   const hirerRatingSummary = useMemo(() => {
     if (hirerReviews.length === 0) return { average: 0, count: 0 }
@@ -137,6 +124,9 @@ export default function HirerPublicPage() {
   }, [hirerReviews])
 
   const viewerOwnsHirer = Boolean(hirer?.ownerUserId && viewerUserId && viewerUserId === hirer.ownerUserId)
+  const canRespondToListingOffers = Boolean(
+    hirer?.id && viewerFreelancerProfileId && viewerUserId && !viewerOwnsHirer,
+  )
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return
@@ -148,7 +138,15 @@ export default function HirerPublicPage() {
       const {
         data: { session },
       } = await client.auth.getSession()
-      if (!cancelled) setViewerUserId(session?.user?.id ?? null)
+      if (cancelled) return
+      const uid = session?.user?.id ?? null
+      setViewerUserId(uid)
+      if (!uid) {
+        setViewerFreelancerProfileId(null)
+        return
+      }
+      const { data: fp } = await client.from("freelancer_profiles").select("id").eq("user_id", uid).maybeSingle()
+      if (!cancelled) setViewerFreelancerProfileId(fp?.id ?? null)
     }
 
     void readSession()
@@ -163,6 +161,27 @@ export default function HirerPublicPage() {
       subscription.unsubscribe()
     }
   }, [])
+
+  useEffect(() => {
+    if (!supabase || !canRespondToListingOffers || !hirer?.id || !viewerFreelancerProfileId) {
+      setPendingListingOffers([])
+      return
+    }
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const offers = await fetchPendingListingOffersFromHirer(supabase, hirer.id, viewerFreelancerProfileId)
+        if (!cancelled) setPendingListingOffers(offers)
+      } catch {
+        if (!cancelled) setPendingListingOffers([])
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [canRespondToListingOffers, hirer?.id, viewerFreelancerProfileId])
 
   useEffect(() => {
     document.title = "დამქირავებლის პროფილი — გიგორი"
@@ -462,6 +481,54 @@ export default function HirerPublicPage() {
     }
   }, [hirer?.ownerUserId, viewerOwnsHirer])
 
+  const reloadPendingListingOffers = async () => {
+    if (!supabase || !hirer?.id || !viewerFreelancerProfileId) {
+      setPendingListingOffers([])
+      return
+    }
+    try {
+      const offers = await fetchPendingListingOffersFromHirer(supabase, hirer.id, viewerFreelancerProfileId)
+      setPendingListingOffers(offers)
+    } catch {
+      setPendingListingOffers([])
+    }
+  }
+
+  const handleAcceptListingOffer = async (offer: ProfileListingOffer) => {
+    if (!supabase) return
+    setListingOfferBusyId(offer.id)
+    try {
+      await acceptListingOffer(supabase, offer.id)
+      pushToast({ type: "success", message: "შეთავაზება მიღებულია." })
+      await reloadPendingListingOffers()
+    } catch (e) {
+      pushToast({
+        type: "error",
+        message: e instanceof Error ? e.message : "შეცდომა მოხდა.",
+      })
+    } finally {
+      setListingOfferBusyId(null)
+    }
+  }
+
+  const handleDeclineListingOffer = async (offer: ProfileListingOffer) => {
+    if (!supabase) return
+    if (!window.confirm("ნამდვილად გსურს შეთავაზების უარყოფა?")) return
+    setListingOfferBusyId(offer.id)
+    try {
+      await declineListingOffer(supabase, offer.id)
+      pushToast({ type: "info", message: "შეთავაზება უარყოფილია." })
+      await reloadPendingListingOffers()
+    } catch (e) {
+      pushToast({
+        type: "error",
+        message: e instanceof Error ? e.message : "შეცდომა მოხდა.",
+      })
+    } finally {
+      setListingOfferBusyId(null)
+    }
+  }
+
   const handleHirerFollowToggle = async () => {
     if (!supabase || !hirer?.ownerUserId || viewerOwnsHirer || followBusy) return
     const hirerProfileUuid = hirer.id
@@ -588,16 +655,18 @@ export default function HirerPublicPage() {
                   }}
                 />
               ) : null}
-              <p className="mt-1 text-sm font-semibold text-slate-600">
-                {[hirer.industry, hirer.city].filter(Boolean).join(" · ") || "Georgia"}
-              </p>
+              {[hirer.industry, formatCityForDisplay(hirer.city)].filter(Boolean).length > 0 ? (
+                <p className="mt-1 text-sm font-semibold text-slate-600">
+                  {[hirer.industry, formatCityForDisplay(hirer.city)].filter(Boolean).join(" · ")}
+                </p>
+              ) : null}
               <p className="mt-2 text-sm text-slate-700">საკონტაქტო: {hirer.contactName}</p>
               <p className="mt-2 text-sm font-semibold text-[#D4A843]">
                 {hirerRatingSummary.count === 0 ? (
                   <span className="text-slate-500">შეფასებები ჯერ არ არის</span>
                 ) : (
                   <>
-                    {ratingStars(hirerRatingSummary.average)} {hirerRatingSummary.average.toFixed(1)} ·{" "}
+                    {hirerRatingSummary.average.toFixed(1)} ·{" "}
                     {hirerRatingSummary.count} შეფასება
                   </>
                 )}
@@ -637,6 +706,13 @@ export default function HirerPublicPage() {
                           : "გამოწერა"}
                   </button>
                 ) : null}
+                {viewerUserId && !viewerOwnsHirer && hirer.ownerUserId ? (
+                  <StartConversationButton
+                    otherUserId={hirer.ownerUserId}
+                    variant="primary"
+                    className="h-11 w-full sm:min-w-[10rem]"
+                  />
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -673,6 +749,16 @@ export default function HirerPublicPage() {
           ) : null}
         </header>
 
+        {canRespondToListingOffers ? (
+          <ProfilePendingOffers
+            variant="listing"
+            offers={pendingListingOffers}
+            busyId={listingOfferBusyId}
+            onAccept={(offer) => void handleAcceptListingOffer(offer)}
+            onDecline={(offer) => void handleDeclineListingOffer(offer)}
+          />
+        ) : null}
+
         {hirerReviews.length > 0 ? (
           <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="border-l-4 border-[#D4A843] pl-3 text-lg font-extrabold text-[#1B2B4B]">შეფასებები</h2>
@@ -689,7 +775,7 @@ export default function HirerPublicPage() {
                     </div>
                   </div>
                   <p className="mt-2 text-sm font-semibold text-[#D4A843]">
-                    {ratingStars(review.rating_overall)} {review.rating_overall.toFixed(1)}
+                    {review.rating_overall.toFixed(1)}
                   </p>
                   <p className="mt-2 break-words text-sm text-slate-700 [overflow-wrap:anywhere]">{review.review_text}</p>
                 </li>
@@ -720,7 +806,9 @@ export default function HirerPublicPage() {
                       className="block min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-[#D4A843]/70"
                     >
                       <p className="break-words font-bold text-[#1B2B4B] [overflow-wrap:anywhere]">{job.title}</p>
-                      <p className="mt-1 text-sm text-slate-600">{formatBudget(job)}</p>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {formatJobBudget(job.budgetMin, job.budgetMax, job.budgetType)}
+                      </p>
                       <p className="mt-1 text-xs text-slate-500">
                         {vac.isFull ? (
                           <span className="font-semibold text-amber-800">დაკომლექტებული</span>

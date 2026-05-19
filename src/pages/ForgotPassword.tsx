@@ -3,16 +3,45 @@ import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import Navbar from "../components/Navbar.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
+import {
+  authCooldownUntil,
+  consumeAuthRateLimit,
+  isAuthRateLimited,
+} from "../lib/authRateLimit"
+import { validateEmail } from "../lib/validation.ts"
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("")
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState(false)
+  const [cooldownUntil, setCooldownUntil] = useState<number | null>(null)
+  const [cooldownSeconds, setCooldownSeconds] = useState(0)
 
   useEffect(() => {
     document.title = "პაროლის აღდგენა — გიგორი"
   }, [])
+
+  useEffect(() => {
+    if (!cooldownUntil) {
+      setCooldownSeconds(0)
+      return
+    }
+
+    const updateCountdown = () => {
+      const remainingMs = cooldownUntil - Date.now()
+      if (remainingMs <= 0) {
+        setCooldownUntil(null)
+        setCooldownSeconds(0)
+        return
+      }
+      setCooldownSeconds(Math.ceil(remainingMs / 1000))
+    }
+
+    updateCountdown()
+    const timerId = window.setInterval(updateCountdown, 1000)
+    return () => window.clearInterval(timerId)
+  }, [cooldownUntil])
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -23,17 +52,37 @@ export default function ForgotPasswordPage() {
       return
     }
 
-    const trimmed = email.trim()
-    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-      setError("გთხოვთ მიუთითოთ სწორი ელფოსტა.")
+    const emailResult = validateEmail(email)
+    if (!emailResult.ok) {
+      setError(emailResult.message)
+      return
+    }
+    const trimmed = emailResult.value
+
+    if (cooldownUntil && Date.now() < cooldownUntil) {
+      const secondsLeft = Math.ceil((cooldownUntil - Date.now()) / 1000)
+      setError(`ზედმეტი მცდელობები დაფიქსირდა. სცადე ${secondsLeft} წამში.`)
       return
     }
 
     setBusy(true)
     try {
+      const rateCheck = await consumeAuthRateLimit("recover", trimmed)
+      if (!rateCheck.ok) {
+        setCooldownUntil(authCooldownUntil(rateCheck.retryAfterSeconds))
+        setError(`ზედმეტი მცდელობები დაფიქსირდა. გთხოვ, სცადე ${rateCheck.retryAfterSeconds} წამში.`)
+        return
+      }
+
       const redirectTo = `${window.location.origin}/auth/reset-password`
       const { error: resetErr } = await supabase.auth.resetPasswordForEmail(trimmed, { redirectTo })
-      if (resetErr) throw resetErr
+      if (resetErr) {
+        if (isAuthRateLimited(resetErr.status, resetErr.message)) {
+          setCooldownUntil(authCooldownUntil())
+          throw new Error("ზედმეტი მცდელობები დაფიქსირდა. გთხოვ, სცადე 15 წუთში.")
+        }
+        throw resetErr
+      }
       setSent(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : "მოთხოვნა ვერ გაიგზავნა. სცადეთ მოგვიანებით.")
@@ -74,10 +123,14 @@ export default function ForgotPasswordPage() {
               ) : null}
               <button
                 type="submit"
-                disabled={busy}
+                disabled={busy || cooldownSeconds > 0}
                 className="h-11 w-full rounded-lg bg-[#1B2B4B] text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {busy ? "მიმდინარეობს..." : "ბმულის გაგზავნა"}
+                {busy
+                  ? "მიმდინარეობს..."
+                  : cooldownSeconds > 0
+                    ? `სცადე ${cooldownSeconds} წამში`
+                    : "ბმულის გაგზავნა"}
               </button>
             </form>
           )}

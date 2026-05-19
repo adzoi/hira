@@ -6,6 +6,7 @@ import { countFreelancerProfileVisits, recordProfileVisit } from "../lib/profile
 import { formatFreelancerEducationDegreeLevel } from "../lib/freelancerEducation.ts"
 import { parseListingPreview } from "../lib/listingDescription.ts"
 import { listingPriceNegotiable } from "../lib/homeFeed.ts"
+import { formatListingPrice, normalizeListingPriceType } from "../lib/listingPrice.ts"
 import { formatCityForDisplay } from "../lib/marketplaceFilters.ts"
 import { supabaseEdgeHeaders } from "../lib/supabaseEdgeHeaders.ts"
 import FollowListsModal, { type FollowModalTab } from "../components/FollowListsModal.tsx"
@@ -13,7 +14,16 @@ import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import { ViewCountEyeIcon } from "../components/ViewCountEyeIcon.tsx"
 import { countFollowers, countFollowing, followUser, isFollowing, unfollowUser } from "../lib/follows.ts"
 import { avatarImageUrl, jobOrServiceImageDisplayUrl } from "../lib/storageImageUrl.ts"
+import SocialProfileLinks from "../components/SocialProfileLinks.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
+import ProfilePendingOffers from "../components/ProfilePendingOffers.tsx"
+import {
+  acceptJobApplication,
+  fetchPendingApplicationsFromFreelancer,
+  rejectJobApplication,
+  type ProfileJobApplication,
+} from "../lib/profileOffers.ts"
+import StartConversationButton from "../components/StartConversationButton.tsx"
 
 type ProfileData = {
   id: string
@@ -37,6 +47,11 @@ type FreelancerData = {
   linkedin_url: string | null
   github_url: string | null
   portfolio_url: string | null
+  facebook_url: string | null
+  instagram_url: string | null
+  tiktok_url: string | null
+  youtube_url: string | null
+  x_url: string | null
   bio: string | null
   user_id: string
   is_accepting_new_work?: boolean | null
@@ -50,7 +65,7 @@ type ServiceData = {
   title: string
   description: string | null
   price: number
-  delivery_days: number
+  price_type: string
   views_count: number
   tags: string[]
   /** From raw listing text + price (before meta strip). */
@@ -131,28 +146,6 @@ function formatDate(dateString: string) {
   return new Date(dateString).toLocaleDateString("ka-GE")
 }
 
-function ratingStars(value: number) {
-  const rounded = Math.round(value)
-  return `${"★".repeat(Math.max(0, rounded))}${"☆".repeat(Math.max(0, 5 - rounded))}`
-}
-
-function ExternalLinkArrowIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.25"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M7 17L17 7M17 7H10M17 7V14" />
-    </svg>
-  )
-}
-
 function MapPinIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -177,31 +170,6 @@ function BriefcaseOutlineIcon({ className }: { className?: string }) {
       <path d="M9 11V7a3 3 0 0 1 6 0v4" />
       <rect x="2" y="9" width="20" height="12" rx="2" />
       <path d="M6 11h12" />
-    </svg>
-  )
-}
-
-function ClockOutlineIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3 2" />
-    </svg>
-  )
-}
-
-function LinkedInBrandIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
-    </svg>
-  )
-}
-
-function GitHubBrandIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
     </svg>
   )
 }
@@ -252,11 +220,19 @@ export default function FreelancerProfilePage() {
   const [followListsModalTab, setFollowListsModalTab] = useState<FollowModalTab>("followers")
   const [followButtonMode, setFollowButtonMode] = useState<"hidden" | "loading" | "guest" | "follow" | "unfollow">("hidden")
   const [followBusy, setFollowBusy] = useState(false)
+  const [viewerUserId, setViewerUserId] = useState<string | null>(null)
+  const [viewerHirerProfileId, setViewerHirerProfileId] = useState<string | null>(null)
+  const [pendingJobApplications, setPendingJobApplications] = useState<ProfileJobApplication[]>([])
+  const [applicationOfferBusyId, setApplicationOfferBusyId] = useState<string | null>(null)
 
   const profileAvatarDisplayUrl = useMemo(() => {
     if (!profile?.avatar_url) return null
     return avatarImageUrl(supabase, profile.avatar_url) ?? profile.avatar_url
   }, [profile?.avatar_url])
+
+  const canRespondToApplications = Boolean(
+    freelancer?.id && viewerHirerProfileId && viewerUserId && !viewerIsOwner,
+  )
 
   useEffect(() => {
     document.title = "ფრილანსერები — გიგორი"
@@ -264,6 +240,65 @@ export default function FreelancerProfilePage() {
       document.title = "გიგორი"
     }
   }, [])
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return
+
+    const client = supabase
+    let cancelled = false
+
+    const readSession = async () => {
+      const {
+        data: { session },
+      } = await client.auth.getSession()
+      if (cancelled) return
+      const uid = session?.user?.id ?? null
+      setViewerUserId(uid)
+      if (!uid) {
+        setViewerHirerProfileId(null)
+        return
+      }
+      const { data: hp } = await client.from("hirer_profiles").select("id").eq("user_id", uid).maybeSingle()
+      if (!cancelled) setViewerHirerProfileId(hp?.id ?? null)
+    }
+
+    void readSession()
+    const {
+      data: { subscription },
+    } = client.auth.onAuthStateChange(() => {
+      void readSession()
+    })
+
+    return () => {
+      cancelled = true
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!supabase || !canRespondToApplications || !freelancer?.id || !viewerHirerProfileId) {
+      setPendingJobApplications([])
+      return
+    }
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const apps = await fetchPendingApplicationsFromFreelancer(
+          supabase,
+          viewerHirerProfileId,
+          freelancer.id,
+        )
+        if (!cancelled) setPendingJobApplications(apps)
+      } catch {
+        if (!cancelled) setPendingJobApplications([])
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [canRespondToApplications, freelancer?.id, viewerHirerProfileId])
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -364,7 +399,7 @@ export default function FreelancerProfilePage() {
             .maybeSingle(),
           supabase
             .from("services")
-            .select("id,title,description,price,delivery_days,views_count")
+            .select("id,title,description,price,price_type,views_count")
             .eq("freelancer_profile_id", freelancerData.id)
             .eq("is_active", true)
             .order("created_at", { ascending: false }),
@@ -468,7 +503,7 @@ export default function FreelancerProfilePage() {
               title: service.title,
               description: parsed.text.trim() ? parsed.text : null,
               price: service.price,
-              delivery_days: service.delivery_days,
+              price_type: normalizeListingPriceType(service.price_type),
               views_count: Number(service.views_count ?? 0),
               tags: parsed.tags,
               negotiable: listingPriceNegotiable(service.price, rawDesc),
@@ -721,6 +756,58 @@ export default function FreelancerProfilePage() {
     }
   }, [profile?.id, viewerIsOwner])
 
+  const reloadPendingJobApplications = async () => {
+    if (!supabase || !freelancer?.id || !viewerHirerProfileId) {
+      setPendingJobApplications([])
+      return
+    }
+    try {
+      const apps = await fetchPendingApplicationsFromFreelancer(
+        supabase,
+        viewerHirerProfileId,
+        freelancer.id,
+      )
+      setPendingJobApplications(apps)
+    } catch {
+      setPendingJobApplications([])
+    }
+  }
+
+  const handleAcceptJobApplication = async (offer: ProfileJobApplication) => {
+    if (!supabase || !viewerHirerProfileId) return
+    setApplicationOfferBusyId(offer.applicationId)
+    try {
+      await acceptJobApplication(supabase, offer, viewerHirerProfileId)
+      pushToast({ type: "success", message: "განმცხადებელი მიღებულია." })
+      await reloadPendingJobApplications()
+    } catch (e) {
+      pushToast({
+        type: "error",
+        message: e instanceof Error ? e.message : "შეცდომა მოხდა.",
+      })
+    } finally {
+      setApplicationOfferBusyId(null)
+    }
+  }
+
+  const handleRejectJobApplication = async (offer: ProfileJobApplication) => {
+    if (!supabase) return
+    if (!window.confirm("ნამდვილად გსურს ამ განმცხადებლის უარყოფა?")) return
+    setApplicationOfferBusyId(offer.applicationId)
+    try {
+      await rejectJobApplication(supabase, offer)
+      pushToast({ type: "info", message: "განმცხადებელი უარყოფილია." })
+      await reloadPendingJobApplications()
+    } catch (e) {
+      pushToast({
+        type: "error",
+        message: e instanceof Error ? e.message : "შეცდომა მოხდა.",
+      })
+    } finally {
+      setApplicationOfferBusyId(null)
+    }
+  }
+
   const handleFollowToggle = async () => {
     if (!supabase || !profile?.id || viewerIsOwner || followBusy) return
 
@@ -938,6 +1025,12 @@ export default function FreelancerProfilePage() {
                                 : "გამოწერა"}
                         </button>
                       ) : null}
+                      {viewerUserId && !viewerIsOwner ? (
+                        <StartConversationButton
+                          otherUserId={freelancer.user_id}
+                          className="min-w-[8rem] flex-1"
+                        />
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => void openContactModal()}
@@ -956,16 +1049,17 @@ export default function FreelancerProfilePage() {
                   ) : null}
 
                   <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-gray-500">
-                    <span className="inline-flex items-center gap-1.5">
-                      <MapPinIcon className="h-4 w-4 shrink-0 text-red-500" />
-                      {formatCityForDisplay(profile.city) ?? "ქალაქი უცნობია"}
-                    </span>
+                    {formatCityForDisplay(profile.city) ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <MapPinIcon className="h-4 w-4 shrink-0 text-red-500" />
+                        {formatCityForDisplay(profile.city)}
+                      </span>
+                    ) : null}
                     <span className="inline-flex items-center gap-1.5">
                       <CalendarOutlineIcon className="h-4 w-4 shrink-0 text-gray-400" />
                       {formatDate(profile.member_since)}
                     </span>
                     <span className="inline-flex flex-wrap items-center gap-1.5">
-                      <span className="text-amber-400">{ratingStars(freelancer.average_rating)}</span>
                       <span className="font-semibold text-gray-900">{freelancer.average_rating.toFixed(1)}</span>
                       <span>
                         • {freelancer.total_reviews_count} შეფასება
@@ -1028,65 +1122,7 @@ export default function FreelancerProfilePage() {
                         </span>
                       ))}
                     </div>
-                    <div className="ml-auto flex flex-wrap items-center gap-2">
-                      {freelancer.linkedin_url ? (
-                        <a
-                          href={freelancer.linkedin_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 rounded-full border border-[#E5E7EB] px-3 py-1 text-sm text-[#0088FF] transition hover:bg-[#F9FAFB]"
-                        >
-                          <LinkedInBrandIcon className="h-4 w-4" />
-                          LinkedIn
-                        </a>
-                      ) : (
-                        <span
-                          className="inline-flex cursor-default items-center gap-1 rounded-full border border-[#E5E7EB] px-3 py-1 text-sm text-gray-400"
-                          title="ლინკი არ არის დამატებული"
-                        >
-                          <LinkedInBrandIcon className="h-4 w-4 opacity-50" />
-                          LinkedIn
-                        </span>
-                      )}
-                      {freelancer.github_url ? (
-                        <a
-                          href={freelancer.github_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 rounded-full border border-[#E5E7EB] px-3 py-1 text-sm text-[#0088FF] transition hover:bg-[#F9FAFB]"
-                        >
-                          <GitHubBrandIcon className="h-4 w-4" />
-                          GitHub
-                        </a>
-                      ) : (
-                        <span
-                          className="inline-flex cursor-default items-center gap-1 rounded-full border border-[#E5E7EB] px-3 py-1 text-sm text-gray-400"
-                          title="ლინკი არ არის დამატებული"
-                        >
-                          <GitHubBrandIcon className="h-4 w-4 opacity-50" />
-                          GitHub
-                        </span>
-                      )}
-                      {freelancer.portfolio_url ? (
-                        <a
-                          href={freelancer.portfolio_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-sm text-red-500 transition hover:bg-red-50"
-                        >
-                          <ExternalLinkArrowIcon className="h-3.5 w-3.5" />
-                          Portfolio
-                        </a>
-                      ) : (
-                        <span
-                          className="inline-flex cursor-default items-center gap-1 rounded-full border border-[#E5E7EB] px-3 py-1 text-sm text-gray-400"
-                          title="ლინკი არ არის დამატებული"
-                        >
-                          <ExternalLinkArrowIcon className="h-3.5 w-3.5" />
-                          Portfolio
-                        </span>
-                      )}
-                    </div>
+                    <SocialProfileLinks urls={freelancer} className="ml-auto flex flex-wrap items-center gap-2" />
                   </div>
 
                   <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-gray-100 pt-4">
@@ -1141,6 +1177,16 @@ export default function FreelancerProfilePage() {
               </div>
             </section>
 
+            {canRespondToApplications ? (
+              <ProfilePendingOffers
+                variant="application"
+                offers={pendingJobApplications}
+                busyId={applicationOfferBusyId}
+                onAccept={(offer) => void handleAcceptJobApplication(offer)}
+                onReject={(offer) => void handleRejectJobApplication(offer)}
+              />
+            ) : null}
+
             <div className="mt-5 flex flex-wrap gap-2">
               <button
                 type="button"
@@ -1191,7 +1237,6 @@ export default function FreelancerProfilePage() {
                       >
                         <p className="mb-1 text-xs text-gray-400">ფრილანსერი · სერვისი</p>
                         <div className="flex items-center gap-2 text-sm font-semibold">
-                          <span className="text-amber-400">{ratingStars(freelancer.average_rating)}</span>
                           <span className="text-gray-900">{freelancer.average_rating.toFixed(1)}</span>
                         </div>
                         <h2 className="mt-2 mb-2 line-clamp-2 text-base font-semibold text-gray-900">{service.title}</h2>
@@ -1209,17 +1254,11 @@ export default function FreelancerProfilePage() {
                         ) : null}
                         <div className="mb-4 flex flex-wrap gap-1.5">
                           <span className={metaPillClass}>
-                            {negotiable ? "შეთანხმებით" : `${service.price.toLocaleString("ka-GE")} ₾`}
+                            {formatListingPrice(service.price, service.price_type, { negotiable })}
                           </span>
-                          {!negotiable ? (
-                            <span className={metaPillClass}>
-                              <ClockOutlineIcon className="h-3.5 w-3.5 shrink-0 text-gray-500" />
-                              {service.delivery_days} სამუშაო დღე
-                            </span>
-                          ) : null}
                           <span className={metaPillClass}>
                             <ViewCountEyeIcon className="h-3.5 w-3.5 shrink-0 text-gray-500" />
-                            {service.views_count} ნახვა
+                            {service.views_count}
                           </span>
                         </div>
                         <div className="mt-auto flex gap-2 pt-1">
@@ -1325,10 +1364,7 @@ export default function FreelancerProfilePage() {
                             <p className="text-xs text-gray-500">{formatDate(review.created_at)}</p>
                           </div>
                         </div>
-                        <p className="mt-2 text-sm font-semibold">
-                          <span className="text-amber-400">{ratingStars(review.rating_overall)}</span>{" "}
-                          <span className="text-gray-900">{review.rating_overall.toFixed(1)}</span>
-                        </p>
+                        <p className="mt-2 text-sm font-semibold text-gray-900">{review.rating_overall.toFixed(1)}</p>
                         <p className="mt-2 text-sm text-[#374151]">{review.review_text}</p>
                       </div>
                     ))

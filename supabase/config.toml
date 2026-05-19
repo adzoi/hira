@@ -7,3 +7,9 @@ verify_jwt = false
 
 [functions.get-homepage-vip]
 verify_jwt = false
+
+[functions.auth-login]
+verify_jwt = false
+
+[functions.auth-rate-limit]
+verify_jwt = false

@@ -6,11 +6,13 @@ import Navbar from "../components/Navbar"
 import VIPUpgrade from "../components/VIPUpgrade"
 import { countFollowers, countFollowing } from "../lib/follows.ts"
 import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
+import { formatListingPrice, normalizeListingPriceType } from "../lib/listingPrice.ts"
 import { countFreelancerProfileVisits } from "../lib/profileVisits"
 import { subscribeToDashboardMessaging } from "../lib/dashboardMessagingRealtime.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import type { Database } from "../lib/database.types"
 import { jobVacancyStats } from "../lib/jobVacancies.ts"
+import { validateReviewComment } from "../lib/validation.ts"
 
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"]
 type FreelancerProfileRow = Database["public"]["Tables"]["freelancer_profiles"]["Row"]
@@ -23,7 +25,7 @@ type ServiceDraft = {
   title: string
   description: string
   price: string
-  deliveryDays: string
+  priceType: "fixed" | "hourly" | "monthly"
   isActive: boolean
 }
 
@@ -34,7 +36,7 @@ function snapshotServices(services: ServiceDraft[]) {
       title: item.title.trim(),
       description: item.description.trim(),
       price: item.price.trim(),
-      deliveryDays: item.deliveryDays.trim(),
+      priceType: item.priceType,
       isActive: item.isActive,
     })),
   )
@@ -182,6 +184,16 @@ function mapServiceInquiryRowsForHirer(rows: unknown[] | null | undefined): Dash
   return out
 }
 
+/** Freelancer marks done → pending hirer unless hirer already marked done (legacy). */
+function listingStatusAfterFreelancerMarksDone(currentStatus: string): "freelancer_done" | "completed" {
+  return currentStatus === "hirer_done" ? "completed" : "freelancer_done"
+}
+
+/** Hirer always completes the inquiry when they mark done. */
+function listingStatusAfterHirerMarksDone(_currentStatus: string): "completed" {
+  return "completed"
+}
+
 function listingInquiryStatusLabel(status: string) {
   switch (status) {
     case "pending":
@@ -195,7 +207,7 @@ function listingInquiryStatusLabel(status: string) {
     case "completed":
       return "დასრულებული"
     case "freelancer_done":
-      return "ფრილანსერმა დაასრულა"
+      return "ფრილანსერმა დაასრულა — ელოდება დადასტურებას"
     case "hirer_done":
       return "დამქირავებელმა დაასრულა"
     case "cancelled":
@@ -621,14 +633,12 @@ export default function DashboardPage() {
     async (targetUserId: string | null | undefined, title: string, body: string, link: string, type = "status_update") => {
       if (!supabase || !targetUserId) return
       try {
-        await supabase.from("notifications").insert({
-          user_id: targetUserId,
-          title,
-          body,
-          link,
-          type,
-          is_read: false,
-          payload: {},
+        await supabase.rpc("send_status_notification", {
+          p_target_user_id: targetUserId,
+          p_title: title,
+          p_body: body,
+          p_link: link,
+          p_type: type,
         })
       } catch {
         /* non-blocking */
@@ -1016,7 +1026,7 @@ export default function DashboardPage() {
                 title: item.title ?? "",
                 description: stripListingMeta(item.description ?? ""),
                 price: item.price !== null && item.price !== undefined ? String(item.price) : "",
-                deliveryDays: item.delivery_days ? String(item.delivery_days) : "3",
+                priceType: normalizeListingPriceType(item.price_type),
                 isActive: item.is_active ?? true,
               }))
               setServiceDrafts(nextDrafts)
@@ -1651,8 +1661,9 @@ export default function DashboardPage() {
     try {
       if (withReview) {
         if (!modal.hirerUserId) throw new Error("დამქირავებლის პროფილი ვერ მოიძებნა.")
-        const comment = freelancerListingReviewComment.trim()
-        if (comment.length < 10) throw new Error("კომენტარი უნდა შედგებოდეს მინიმუნ 10 სიმბოლოსგან.")
+        const commentResult = validateReviewComment(freelancerListingReviewComment)
+        if (!commentResult.ok) throw new Error(commentResult.message)
+        const comment = commentResult.value
         if (freelancerListingReviewStars < 1 || freelancerListingReviewStars > 5) {
           throw new Error("აირჩიე შეფასება.")
         }
@@ -1679,7 +1690,7 @@ export default function DashboardPage() {
         if (reviewErr) throw reviewErr
       }
 
-      const nextStatus = "completed"
+      const nextStatus = listingStatusAfterFreelancerMarksDone(modal.status)
       const { error } = await supabaseAny
         .from("service_inquiries")
         .update({
@@ -1693,10 +1704,10 @@ export default function DashboardPage() {
       setFreelancerListingCompleteModal(null)
       await notifyUser(
         modal.hirerUserId,
-        nextStatus === "completed" ? "სამუშაო დასრულდა" : "ფრილანსერმა დაადასტურა დასრულება",
+        nextStatus === "completed" ? "სამუშაო დასრულდა" : "ფრილანსერმა დაასრულა სამუშაო",
         nextStatus === "completed"
           ? `ლისტინგის „${modal.listingTitle}“ სამუშაო დასრულდა ორივე მხარის დადასტურებით.`
-          : `ფრილანსერმა მიუთითა, რომ ლისტინგის „${modal.listingTitle}“ სამუშაო დასრულებულია.`,
+          : `ფრილანსერმა მიუთითა, რომ ლისტინგის „${modal.listingTitle}“ სამუშაო დასრულებულია. გთხოვთ, დაადასტუროთ დასრულება.`,
         "/dashboard",
         "listing_inquiry_status",
       )
@@ -1704,7 +1715,7 @@ export default function DashboardPage() {
         withReview
           ? nextStatus === "completed"
             ? "შეთავაზება დასრულდა და შეფასება გაიგზავნა."
-            : "შეფასება გაიგზავნა, დასრულება დაელოდება დამქირავებლის დადასტურებას."
+            : "შეფასება გაიგზავნა. დასრულება ელოდება დამქირავებლის დადასტურებას."
           : nextStatus === "completed"
             ? "შეთავაზება დასრულდა."
             : "დასრულება მონიშნულია — ელოდება დამქირავებლის დადასტურებას.",
@@ -1765,30 +1776,27 @@ export default function DashboardPage() {
     setListingInquiryBusyId(item.id)
     try {
       const nowIso = new Date().toISOString()
-      const nextStatus = "completed"
+      const confirmingFreelancer = item.status === "freelancer_done"
+      const nextStatus = listingStatusAfterHirerMarksDone(item.status)
       const { error } = await supabase
         .from("service_inquiries")
         .update({
           status: nextStatus,
-          completed_at: nextStatus === "completed" ? nowIso : null,
+          completed_at: nowIso,
           updated_at: nowIso,
         })
         .eq("id", item.id)
       if (error) throw error
       await notifyUser(
         item.freelancerUserId,
-        nextStatus === "completed" ? "სამუშაო დასრულდა" : "დამქირავებელმა დაადასტურა დასრულება",
-        nextStatus === "completed"
-          ? `ლისტინგის „${item.listingTitle}“ სამუშაო დასრულდა ორივე მხარის დადასტურებით.`
-          : `დამქირავებელმა მიუთითა, რომ ლისტინგის „${item.listingTitle}“ სამუშაო დასრულებულია.`,
+        "სამუშაო დასრულდა",
+        confirmingFreelancer
+          ? `დამქირავებელმა დაადასტურა, რომ ლისტინგის „${item.listingTitle}“ სამუშაო დასრულებულია.`
+          : `დამქირავებელმა დაასრულა ლისტინგის „${item.listingTitle}“ სამუშაო.`,
         "/dashboard",
         "listing_inquiry_status",
       )
-      setSuccessMessage(
-        nextStatus === "completed"
-          ? "შეთავაზება დასრულდა."
-          : "დასრულება მონიშნულია — ელოდება ფრილანსერის დადასტურებას.",
-      )
+      setSuccessMessage(confirmingFreelancer ? "დასრულება დადასტურებულია." : "შეთავაზება დასრულდა.")
       await reloadHirerListingInquiries()
     } catch {
       /* ignore */
@@ -1811,11 +1819,12 @@ export default function DashboardPage() {
       setHirerListingReviewError("ფრილანსერის პროფილი ვერ მოიძებნა.")
       return
     }
-    const comment = hirerListingReviewComment.trim()
-    if (comment.length < 10) {
-      setHirerListingReviewError("კომენტარი უნდა შედგებოდეს მინიმუმ 10 სიმბოლოსგან.")
+    const commentResult = validateReviewComment(hirerListingReviewComment)
+    if (!commentResult.ok) {
+      setHirerListingReviewError(commentResult.message)
       return
     }
+    const comment = commentResult.value
     if (hirerListingReviewStars < 1 || hirerListingReviewStars > 5) {
       setHirerListingReviewError("აირჩიე შეფასება.")
       return
@@ -2051,10 +2060,9 @@ export default function DashboardPage() {
       if (!completedJobId) throw new Error("დასრულების ჩანაწერი ვერ შეიქმნა.")
 
       if (withReview) {
-        const comment = reviewComment.trim()
-        if (comment.length < 10) {
-          throw new Error("კომენტარი უნდა შედგებოდეს მინიმუმ 10 სიმბოლოსგან.")
-        }
+        const commentResult = validateReviewComment(reviewComment)
+        if (!commentResult.ok) throw new Error(commentResult.message)
+        const comment = commentResult.value
         if (reviewStars < 1 || reviewStars > 5) {
           throw new Error("აირჩიე შეფასება.")
         }
@@ -2133,11 +2141,12 @@ export default function DashboardPage() {
   const submitFreelancerHirerReview = async () => {
     const modal = freelancerHirerReviewModal
     if (!supabase || !profile || !modal) return
-    const comment = reviewComment.trim()
-    if (comment.length < 10) {
-      setFreelancerHirerReviewError("კომენტარი უნდა შედგებოდეს მინიმუმ 10 სიმბოლოსგან.")
+    const commentResult = validateReviewComment(reviewComment)
+    if (!commentResult.ok) {
+      setFreelancerHirerReviewError(commentResult.message)
       return
     }
+    const comment = commentResult.value
     if (reviewStars < 1 || reviewStars > 5) {
       setFreelancerHirerReviewError("აირჩიე შეფასება.")
       return
@@ -2207,10 +2216,10 @@ export default function DashboardPage() {
           title: item.title.trim(),
           description: item.description.trim(),
           priceRaw: item.price.trim(),
-          deliveryDaysRaw: item.deliveryDays.trim(),
+          priceType: item.priceType,
           isActive: item.isActive,
         }))
-        .filter((item) => item.title || item.description || item.priceRaw || item.deliveryDaysRaw)
+        .filter((item) => item.title || item.description || item.priceRaw)
 
       if (nonEmptyDrafts.length > 3) {
         throw new Error("მაქსიმუმ შესაძლებელია 3 სერვისის დამატება.")
@@ -2222,16 +2231,12 @@ export default function DashboardPage() {
         if (!Number.isFinite(price) || price < 0) {
           throw new Error(`სერვისი #${index + 1}: ფასი არასწორია.`)
         }
-        const deliveryDays = Number(item.deliveryDaysRaw || "0")
-        if (!Number.isInteger(deliveryDays) || deliveryDays <= 0) {
-          throw new Error(`სერვისი #${index + 1}: ვადა უნდა იყოს დადებითი მთელი რიცხვი.`)
-        }
         return {
           id: item.id,
           title: item.title,
           description: item.description || null,
           price,
-          delivery_days: deliveryDays,
+          price_type: item.priceType,
           is_active: item.isActive,
         }
       })
@@ -2256,7 +2261,7 @@ export default function DashboardPage() {
               title: item.title,
               description: item.description,
               price: item.price,
-              delivery_days: item.delivery_days,
+              price_type: item.price_type,
               is_active: item.is_active,
             })
             .eq("id", item.id)
@@ -2268,7 +2273,7 @@ export default function DashboardPage() {
             title: item.title,
             description: item.description,
             price: item.price,
-            delivery_days: item.delivery_days,
+            price_type: item.price_type,
             is_active: item.is_active,
           })
           if (insertError) throw insertError
@@ -2289,7 +2294,7 @@ export default function DashboardPage() {
           title: item.title ?? "",
           description: stripListingMeta(item.description ?? ""),
           price: item.price !== null && item.price !== undefined ? String(item.price) : "",
-          deliveryDays: item.delivery_days ? String(item.delivery_days) : "3",
+          priceType: normalizeListingPriceType(item.price_type),
           isActive: item.is_active ?? true,
         })),
       )
@@ -2300,7 +2305,7 @@ export default function DashboardPage() {
             title: item.title ?? "",
             description: stripListingMeta(item.description ?? ""),
             price: item.price !== null && item.price !== undefined ? String(item.price) : "",
-            deliveryDays: item.delivery_days ? String(item.delivery_days) : "3",
+            priceType: normalizeListingPriceType(item.price_type),
             isActive: item.is_active ?? true,
           })),
         ),
@@ -2374,7 +2379,7 @@ export default function DashboardPage() {
               <div className="rounded-xl border border-slate-200 bg-white p-5">
                 <p className="text-sm text-slate-500">საშუალო რეიტინგი</p>
                 <p className="mt-2 text-2xl font-bold text-[#1B2B4B]">
-                  {(freelancerProfile?.average_rating ?? 0).toFixed(1)} ★
+                  {(freelancerProfile?.average_rating ?? 0).toFixed(1)}
                 </p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-5">
@@ -2801,7 +2806,12 @@ export default function DashboardPage() {
                                     მიმდინარეობაში
                                   </button>
                                 ) : null}
-                                {["accepted", "in_progress", "freelancer_done", "hirer_done"].includes(q.status) ? (
+                                {q.status === "freelancer_done" ? (
+                                  <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900">
+                                    ელოდება დამქირავებლის დადასტურებას
+                                  </span>
+                                ) : null}
+                                {["accepted", "in_progress", "hirer_done"].includes(q.status) ? (
                                   <button
                                     type="button"
                                     disabled={listingInquiryBusyId === q.id}
@@ -2899,10 +2909,14 @@ export default function DashboardPage() {
                       <div className="space-y-3">
                         <p className="text-sm font-medium text-[#1B2B4B]">{service.title || "უსათაურო სერვისი"}</p>
                         <p className="text-sm text-slate-600">{service.description || "აღწერა არ არის."}</p>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <p className="text-sm text-slate-600">ფასი: {service.price || "0"}₾</p>
-                          <p className="text-sm text-slate-600">ვადა: {service.deliveryDays || "3"} დღე</p>
-                        </div>
+                        <p className="text-sm text-slate-600">
+                          ფასი:{" "}
+                          {formatListingPrice(
+                            Number(service.price || "0"),
+                            service.priceType,
+                            { negotiable: Number(service.price || "0") === 0 },
+                          )}
+                        </p>
                         <label className="inline-flex items-center gap-2 text-sm text-slate-700">
                           <input
                             type="checkbox"
@@ -3308,7 +3322,7 @@ export default function DashboardPage() {
                               onClick={() => void markHirerListingInquiryDone(q)}
                               className="shrink-0 rounded-lg border border-emerald-600/40 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 disabled:opacity-50"
                             >
-                              დასრულება
+                              {q.status === "freelancer_done" ? "დადასტურება" : "დასრულება"}
                             </button>
                           ) : null}
                           {q.status === "completed" ? (
@@ -3500,7 +3514,7 @@ export default function DashboardPage() {
                                       onClick={() => void markHirerListingInquiryDone(q)}
                                       className="rounded-lg border border-emerald-600/40 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 disabled:opacity-50"
                                     >
-                                      დასრულება
+                                      {q.status === "freelancer_done" ? "დადასტურება" : "დასრულება"}
                                     </button>
                                   ) : null}
                                 </div>

@@ -64,15 +64,8 @@ export default function CVGeneratorPage() {
 
         if (cancelled) return
 
-        const fpRow = fpRes.data as Record<string, unknown> | null
-        if (fpRow && typeof fpRow === "object") {
-          console.log("[cv-generator] freelancer_profiles columns:", Object.keys(fpRow))
-          console.log("[cv-generator] freelancer_profiles row:", fpRow)
-        } else {
-          console.log("[cv-generator] freelancer_profiles: no row for user_id", user.id)
-        }
-
         let savedCv: Record<string, unknown> | null = null
+        const fpRow = fpRes.data as Record<string, unknown> | null
         if (cvResponse.ok) {
           const payload = await cvResponse.json().catch(() => null)
           const maybeCv = payload?.cv

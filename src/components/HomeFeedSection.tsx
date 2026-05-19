@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { loadHomeFeed, type HomeFeedItem, type HomeFreelancerServiceItem, type HomeJobListingItem } from "../lib/homeFeed.ts"
+import { formatJobBudget, formatListingPrice } from "../lib/listingPrice.ts"
 import { ViewCountEyeIcon } from "./ViewCountEyeIcon.tsx"
+import VipBadge from "./VipBadge.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
+import { formatCityForDisplay } from "../lib/marketplaceFilters.ts"
 
 function getInitials(fullName: string) {
   const parts = fullName.trim().split(" ").filter(Boolean)
@@ -23,10 +26,7 @@ function formatRelativeTime(dateString: string) {
 }
 
 function jobBudgetLabel(job: HomeJobListingItem) {
-  const format = (value: number | null) => (value ?? 0).toLocaleString("en-US")
-  if (job.budgetType === "hourly") return `₾${job.budgetMin ?? 0}/საათი`
-  if (job.budgetType === "monthly") return `₾${format(job.budgetMin)}/თვე`
-  return `₾${format(job.budgetMin)} - ₾${format(job.budgetMax)}`
+  return formatJobBudget(job.budgetMin, job.budgetMax, job.budgetType)
 }
 
 function locationGlyph(type: string) {
@@ -39,11 +39,6 @@ const LOCATION_LABELS: Record<string, string> = {
   hybrid: "შერეული",
   anywhere: "ნებისმიერი",
   on_site: "ადგილზე",
-}
-
-function ratingStars(value: number) {
-  const rounded = Math.round(value)
-  return `${"★".repeat(Math.max(0, rounded))}${"☆".repeat(Math.max(0, 5 - rounded))}`
 }
 
 function showHirerRatingValue(value: number) {
@@ -68,17 +63,10 @@ const PAGE_SIZE = 20
 function FreelancerFeedCard({ item }: { item: HomeFreelancerServiceItem }) {
   const negotiable = item.priceNegotiable
   return (
-    <li className="relative flex h-full min-h-0 max-w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-4 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#0088FF] hover:shadow-[-4px_0_12px_rgba(0,136,255,0.25)]">
-      {item.vipFeatured ? (
-        <span className="absolute right-4 top-4 z-10 rounded-full bg-[#F59E0B] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
-          VIP
-        </span>
-      ) : null}
-
-      <div className={`flex min-h-0 flex-1 flex-col ${item.vipFeatured ? "pr-14" : ""}`}>
+    <li className="flex h-full min-h-0 max-w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-4 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#0088FF] hover:shadow-[-4px_0_12px_rgba(0,136,255,0.25)]">
+      <div className="flex min-h-0 flex-1 flex-col">
         <p className="text-xs font-medium text-slate-500">ფრილანსერი · სერვისი</p>
         <div className="mt-1 flex items-center gap-2 text-sm font-semibold text-amber-500">
-          <span className="tracking-tight">{ratingStars(item.averageRating)}</span>
           <span className="text-gray-900">{item.averageRating.toFixed(1)}</span>
         </div>
 
@@ -99,7 +87,10 @@ function FreelancerFeedCard({ item }: { item: HomeFreelancerServiceItem }) {
             )}
           </span>
           <div className="min-w-0 text-left">
-            <p className="truncate font-bold text-gray-900 group-hover:text-[#0088FF]">{item.fullName}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="truncate font-bold text-gray-900 group-hover:text-[#0088FF]">{item.fullName}</p>
+              {item.vipFeatured ? <VipBadge /> : null}
+            </div>
             <p className="truncate text-xs text-slate-500">{item.professionalTitle || "ფრილანსერი"}</p>
           </div>
         </Link>
@@ -116,11 +107,12 @@ function FreelancerFeedCard({ item }: { item: HomeFreelancerServiceItem }) {
           </div>
         ) : null}
         <div className="mt-4 flex flex-wrap content-start gap-2 border-t border-slate-100 pt-4">
-          <span className={metaPillFreelancerClass}>{negotiable ? "შეთანხმებით" : `${item.price.toLocaleString("ka-GE")} ₾`}</span>
-          {!negotiable ? <span className={metaPillFreelancerClass}>{item.deliveryDays} სამუშაო დღე</span> : null}
+          <span className={metaPillFreelancerClass}>
+            {formatListingPrice(item.price, item.priceType, { negotiable })}
+          </span>
           <span className={`${metaPillFreelancerClass} gap-1`}>
             <ViewCountEyeIcon className="h-3.5 w-3.5 shrink-0 text-[#374151]" />
-            {item.viewsCount} ნახვა
+            {item.viewsCount}
           </span>
         </div>
       </div>
@@ -145,18 +137,11 @@ function FreelancerFeedCard({ item }: { item: HomeFreelancerServiceItem }) {
 function JobListingFeedCard({ item }: { item: HomeJobListingItem }) {
   const showRating = showHirerRatingValue(item.hirerAverageRating)
   return (
-    <li className="relative flex h-full min-h-0 max-w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-4 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#0088FF] hover:shadow-[-4px_0_12px_rgba(0,136,255,0.25)]">
-      {item.vipFeatured ? (
-        <span className="absolute right-4 top-4 z-10 rounded-full bg-[#F59E0B] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
-          VIP
-        </span>
-      ) : null}
-
-      <div className={`flex min-h-0 flex-1 flex-col ${item.vipFeatured ? "pr-14" : ""}`}>
+    <li className="flex h-full min-h-0 max-w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-4 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#0088FF] hover:shadow-[-4px_0_12px_rgba(0,136,255,0.25)]">
+      <div className="flex min-h-0 flex-1 flex-col">
         <p className="text-xs font-medium text-slate-500">დამქირავებლის განცხადება</p>
         {showRating ? (
           <div className="mt-1 flex items-center gap-2 text-sm font-semibold text-amber-500">
-            <span className="tracking-tight">{ratingStars(item.hirerAverageRating)}</span>
             <span className="text-gray-900">{item.hirerAverageRating.toFixed(1)}</span>
           </div>
         ) : null}
@@ -177,9 +162,14 @@ function JobListingFeedCard({ item }: { item: HomeJobListingItem }) {
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="font-bold text-gray-900">{item.companyName}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-bold text-gray-900">{item.companyName}</p>
+                  {item.vipFeatured ? <VipBadge /> : null}
+                </div>
                 <p className={`mt-0.5 text-xs text-slate-500 ${wrapText}`}>
-                  {item.city ?? "ლოკაცია უცნობია"} · {formatRelativeTime(item.createdAt)}
+                  {[formatCityForDisplay(item.city), formatRelativeTime(item.createdAt)]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </p>
               </div>
               {item.isUrgent ? (

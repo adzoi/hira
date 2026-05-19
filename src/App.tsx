@@ -5,13 +5,25 @@ import { Link, Route, Routes, useLocation, useNavigate, useSearchParams } from "
 import Navbar from "./components/Navbar.tsx"
 import PageLoader from "./components/ui/PageLoader.tsx"
 import NotFoundPage from "./pages/NotFound.tsx"
-import { avatarImageUrl } from "./lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "./lib/supabase"
+import {
+  authCooldownUntil,
+  consumeAuthRateLimit,
+  isAuthRateLimited,
+  signInWithRateLimit,
+} from "./lib/authRateLimit"
+import {
+  LIMITS,
+  validateEmail,
+  validateOptionalTextField,
+  validatePassword,
+  validateTextField,
+} from "./lib/validation.ts"
 import ProtectedRoute from "./components/ProtectedRoute.tsx"
 import LocationFilterSelect from "./components/LocationFilterSelect.tsx"
 import Footer from "./components/Footer.tsx"
 import HomeFeedSection from "./components/HomeFeedSection.tsx"
-import { stripLegacyPricePrefix } from "./lib/listingDescription.ts"
+import mainHeroImage from "../images/main.png"
 
 const DashboardPage = lazy(() => import("./pages/Dashboard.tsx"))
 const BrowsePage = lazy(() => import("./pages/Browse.tsx"))
@@ -32,6 +44,7 @@ const ForgotPasswordPage = lazy(() => import("./pages/ForgotPassword.tsx"))
 const ResetPasswordPage = lazy(() => import("./pages/ResetPassword.tsx"))
 const PayPalCheckoutE2EPage = lazy(() => import("./pages/PayPalCheckoutE2E.tsx"))
 const SavedPage = lazy(() => import("./pages/Saved.tsx"))
+const MessagesPage = lazy(() => import("./pages/Messages.tsx"))
 
 type HomeStats = {
   freelancerCount: number
@@ -39,56 +52,8 @@ type HomeStats = {
   completedCount: number
 }
 
-type HomepageVipRenderableItem = {
-  type: "job" | "freelancer"
-  id: string
-  title?: string
-  name?: string
-  vip_expires_at: string
-  href: string
-  subtitle: string
-  description: string
-  avatarUrl: string | null
-  rating: number
-}
-
 function formatNumber(value: number) {
   return value.toLocaleString("en-US").replace(/,/g, " ")
-}
-
-function shortText(raw: string | null | undefined, max = 100): string {
-  const normalized = String(raw ?? "").replace(/\s+/g, " ").trim()
-  if (!normalized) return "დეტალები განცხადების გვერდზე."
-  if (normalized.length <= max) return normalized
-  return `${normalized.slice(0, Math.max(0, max - 1)).trim()}…`
-}
-
-function gigoriListingDescriptionPlain(raw: string | null | undefined): string {
-  const META_PREFIX = "<!--gigori-meta:"
-  const META_SUFFIX = "-->"
-  let body = String(raw ?? "")
-  if (body.startsWith(META_PREFIX)) {
-    const endIndex = body.indexOf(META_SUFFIX)
-    if (endIndex >= 0) {
-      body = body.slice(endIndex + META_SUFFIX.length).trimStart()
-    }
-  }
-  return stripLegacyPricePrefix(body).replace(/\s+/g, " ").trim()
-}
-
-function initials(value: string): string {
-  const parts = value.trim().split(" ").filter(Boolean)
-  if (parts.length === 0) return "G"
-  return `${parts[0][0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase()
-}
-
-function ratingStars(value: number) {
-  const rounded = Math.round(value)
-  return `${"★".repeat(Math.max(0, rounded))}${"☆".repeat(Math.max(0, 5 - rounded))}`
-}
-
-function showVipCardRating(value: number) {
-  return Number.isFinite(value) && value > 0
 }
 
 /** Only same-site relative paths; blocks protocol-relative URLs. */
@@ -115,12 +80,6 @@ function HomePage() {
     jobCount: 0,
     completedCount: 0,
   })
-  const [homepageVipItems, setHomepageVipItems] = useState<HomepageVipRenderableItem[]>([])
-  const [homepageVipLoading, setHomepageVipLoading] = useState(true)
-  const [homepageVipStartIndex, setHomepageVipStartIndex] = useState(0)
-  /** Which VIP strip we show: hirer job postings vs freelancer listings — opposite of viewer’s role (guest = talent). */
-  const [vipBoxMode, setVipBoxMode] = useState<"job" | "freelancer">("freelancer")
-
   useEffect(() => {
     document.title = "გიგორი — ქართული freelance პლატფორმა"
   }, [])
@@ -151,186 +110,7 @@ function HomePage() {
     loadHomeData()
   }, [])
 
-  useEffect(() => {
-    type HirerNest = null | {
-      id?: string | null
-      user_id?: string | null
-      company_name?: string | null
-      average_rating_given?: number | null
-      profiles?: null | { full_name?: string | null; avatar_url?: string | null }
-    }
-    type FreelancerNest = null | {
-      user_id?: string | null
-      slug?: string | null
-      professional_title?: string | null
-      average_rating?: number | null
-      is_public?: boolean | null
-      profiles?: null | { full_name?: string | null; avatar_url?: string | null }
-    }
-
-    const loadHomepageVip = async () => {
-      if (!supabase) {
-        setHomepageVipItems([])
-        setHomepageVipStartIndex(0)
-        setVipBoxMode("freelancer")
-        setHomepageVipLoading(false)
-        return
-      }
-      const nowIso = new Date().toISOString()
-
-      let userType: "freelancer" | "hirer" | null = null
-      if (isSupabaseConfigured) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
-        if (user) {
-          const { data: profile } = await supabase.from("profiles").select("user_type").eq("id", user.id).maybeSingle()
-          if (profile?.user_type === "freelancer") userType = "freelancer"
-          else if (profile?.user_type === "hirer") userType = "hirer"
-        }
-      }
-
-      // Freelancers seek work → hirer VIP jobs; hirers & guests seek talent → freelancer VIP listings (never mix).
-      const showHirerJobVip = userType === "freelancer"
-      setVipBoxMode(showHirerJobVip ? "job" : "freelancer")
-
-      if (showHirerJobVip) {
-        const { data: vipJobsData, error: vipJobsErr } = await supabase
-          .from("jobs")
-          .select(
-            `
-          id,
-          title,
-          description,
-          hirer_profile_id,
-          vip_expires_at,
-          hirer_profiles (
-            id,
-            user_id,
-            company_name,
-            average_rating_given,
-            profiles:profiles!hirer_profiles_user_id_fkey (
-              full_name,
-              avatar_url
-            )
-          )
-        `,
-          )
-          .eq("status", "open")
-          .eq("is_vip", true)
-          .gt("vip_expires_at", nowIso)
-          .order("vip_expires_at", { ascending: false })
-          .limit(12)
-
-        if (vipJobsErr) console.warn(vipJobsErr)
-
-        const jobItems: HomepageVipRenderableItem[] = (vipJobsData ?? []).map((row) => {
-          const hpRaw = (row as { hirer_profiles?: HirerNest | HirerNest[] }).hirer_profiles
-          const hp = Array.isArray(hpRaw) ? hpRaw[0] : hpRaw
-          const profile = hp?.profiles
-          const companyName = hp?.company_name?.trim() || profile?.full_name?.trim() || "დამქირავებელი"
-          const desc = String((row as { description?: string | null }).description ?? "").replace(/\s+/g, " ").trim()
-          const rating = Number(hp?.average_rating_given ?? 0)
-          const expires = String((row as { vip_expires_at?: string | null }).vip_expires_at ?? nowIso)
-          return {
-            type: "job",
-            id: String((row as { id: string }).id),
-            title: String((row as { title?: string | null }).title ?? "").trim() || "სამუშაო",
-            name: companyName,
-            vip_expires_at: expires,
-            subtitle: "დამქირავებელი",
-            description: shortText(desc),
-            avatarUrl: profile?.avatar_url ?? null,
-            rating: Number.isFinite(rating) ? rating : 0,
-            href: `/job/${encodeURIComponent(String((row as { id: string }).id))}`,
-          } satisfies HomepageVipRenderableItem
-        })
-
-        setHomepageVipItems(jobItems)
-      } else {
-        const { data: vipServicesData, error: vipServicesErr } = await supabase
-          .from("services")
-          .select(
-            `
-          id,
-          title,
-          description,
-          vip_expires_at,
-          freelancer_profiles (
-            user_id,
-            slug,
-            professional_title,
-            average_rating,
-            is_public,
-            profiles:profiles!freelancer_profiles_user_id_fkey (
-              full_name,
-              avatar_url
-            )
-          )
-        `,
-          )
-          .eq("is_active", true)
-          .eq("is_vip", true)
-          .gt("vip_expires_at", nowIso)
-          .order("vip_expires_at", { ascending: false })
-          .limit(12)
-
-        if (vipServicesErr) console.warn(vipServicesErr)
-
-        const freelancerItems: HomepageVipRenderableItem[] = []
-        for (const row of vipServicesData ?? []) {
-          const fpRaw = (row as { freelancer_profiles?: FreelancerNest | FreelancerNest[] }).freelancer_profiles
-          const fp = Array.isArray(fpRaw) ? fpRaw[0] : fpRaw
-          if (!fp?.slug || fp.is_public === false) continue
-          const prof = fp.profiles
-          const rating = Number(fp.average_rating ?? 0)
-          const descPlain = gigoriListingDescriptionPlain((row as { description?: string | null }).description)
-          const expires = String((row as { vip_expires_at?: string | null }).vip_expires_at ?? nowIso)
-          freelancerItems.push({
-            type: "freelancer",
-            id: String((row as { id: string }).id),
-            title: String((row as { title?: string | null }).title ?? "").trim() || "სერვისი",
-            name: prof?.full_name?.trim() || "ფრილანსერი",
-            vip_expires_at: expires,
-            subtitle: fp.professional_title?.trim() || "ფრილანსერი",
-            description: shortText(descPlain),
-            avatarUrl: prof?.avatar_url ?? null,
-            rating: Number.isFinite(rating) ? rating : 0,
-            href: `/listing/${encodeURIComponent(String((row as { id: string }).id))}`,
-          } satisfies HomepageVipRenderableItem)
-        }
-
-        setHomepageVipItems(freelancerItems)
-      }
-
-      setHomepageVipStartIndex(0)
-      setHomepageVipLoading(false)
-    }
-
-    void (async () => {
-      setHomepageVipLoading(true)
-      await loadHomepageVip()
-    })()
-  }, [])
-
-  useEffect(() => {
-    if (homepageVipItems.length <= 3) return
-    const timerId = window.setInterval(() => {
-      setHomepageVipStartIndex((prev) => (prev + 1) % homepageVipItems.length)
-    }, 30_000)
-    return () => window.clearInterval(timerId)
-  }, [homepageVipItems])
-
   const showStatsBar = stats.freelancerCount >= 10
-
-  useEffect(() => {
-    setHomepageVipStartIndex(0)
-  }, [homepageVipItems.length])
-
-  const visibleHomepageVipItems = useMemo(() => {
-    if (homepageVipItems.length <= 3) return homepageVipItems
-    return Array.from({ length: 3 }, (_, idx) => homepageVipItems[(homepageVipStartIndex + idx) % homepageVipItems.length])
-  }, [homepageVipItems, homepageVipStartIndex])
 
   const handleSearch = () => {
     const trimmed = searchText.trim()
@@ -376,73 +156,12 @@ function HomePage() {
             </div>
           </div>
 
-          <div className="relative min-h-0 rounded-2xl border border-white/15 bg-[#006ACC] p-4">
-            <p className="mb-2 text-sm font-bold uppercase tracking-wide text-white">
-              {vipBoxMode === "job" ? "VIP სამუშაოები" : "VIP ფრილანსერები"}
-            </p>
-            <div className="space-y-2">
-              {homepageVipLoading ? (
-                Array.from({ length: 3 }).map((_, index) => (
-                  <div key={index} className="relative rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm">
-                    <div className="flex gap-3">
-                      <div className="h-10 w-10 shrink-0 animate-pulse rounded-full bg-slate-200" />
-                      <div className="min-w-0 flex-1 space-y-2 pr-10">
-                        <div className="h-4 w-36 animate-pulse rounded bg-slate-200" />
-                        <div className="h-3 w-24 animate-pulse rounded bg-slate-100" />
-                        <div className="h-4 w-full animate-pulse rounded bg-slate-100" />
-                        <div className="h-3 w-full animate-pulse rounded bg-slate-100" />
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : homepageVipItems.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-white/40 bg-white/10 p-6 text-center shadow-sm">
-                  <p className="text-sm font-semibold text-white">ამ ფილტრისთვის VIP განცხადებები არ არის.</p>
-                </div>
-              ) : (
-                visibleHomepageVipItems.map((item) => (
-                  <Link
-                    key={`${item.type}-${item.id}`}
-                    to={item.href}
-                    className="relative block overflow-hidden rounded-xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-3 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#0088FF] hover:shadow-[-4px_0_12px_rgba(0,136,255,0.25)]"
-                  >
-                    <span className="absolute right-3 top-3 z-10 rounded-full bg-[#F59E0B] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
-                      VIP
-                    </span>
-                    <div className="flex gap-3 pr-14">
-                      <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-[11px] font-bold text-[#1B2B4B]">
-                        {item.avatarUrl ? (
-                          <img
-                            src={avatarImageUrl(supabase, item.avatarUrl) ?? item.avatarUrl}
-                            alt=""
-                            loading="lazy"
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          initials(item.name ?? item.subtitle)
-                        )}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-bold text-gray-900">{item.name || item.subtitle}</p>
-                        {showVipCardRating(item.rating) ? (
-                          <p className="mt-1 text-sm font-semibold text-amber-500">
-                            <span className="tracking-tight">{ratingStars(item.rating)}</span>{" "}
-                            <span className="text-gray-900">{item.rating.toFixed(1)}</span>
-                          </p>
-                        ) : null}
-                        <p className={`line-clamp-1 text-sm font-bold text-gray-900 ${showVipCardRating(item.rating) ? "mt-2" : "mt-1"}`}>
-                          {item.title || item.name || (item.type === "job" ? "VIP Job" : "VIP Freelancer")}
-                        </p>
-                        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-600">{item.description}</p>
-                        <span className="mt-2 inline-flex max-w-full items-center rounded-full border border-[#D1D5DB] bg-white px-2.5 py-0.5 text-[11px] font-medium text-[#374151]">
-                          {item.type === "job" ? "სამუშაო" : "ფრილანსერი"}
-                        </span>
-                      </div>
-                    </div>
-                  </Link>
-                ))
-              )}
-            </div>
+          <div className="flex min-h-0 items-center justify-center">
+            <img
+              src={mainHeroImage}
+              alt="გიგორი — ფრილანს პლატფორმა"
+              className="h-auto w-full max-w-lg rounded-2xl object-contain drop-shadow-lg lg:max-w-none"
+            />
           </div>
         </div>
       </section>
@@ -488,6 +207,8 @@ function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [cooldownUntil, setCooldownUntil] = useState<number | null>(null)
+  const [cooldownSeconds, setCooldownSeconds] = useState(0)
   const reason = searchParams.get("reason")
   const redirectRaw = searchParams.get("redirect")
   const passwordResetDone =
@@ -499,6 +220,27 @@ function LoginPage() {
     document.title = "შესვლა — გიგორი"
   }, [])
 
+  useEffect(() => {
+    if (!cooldownUntil) {
+      setCooldownSeconds(0)
+      return
+    }
+
+    const updateCountdown = () => {
+      const remainingMs = cooldownUntil - Date.now()
+      if (remainingMs <= 0) {
+        setCooldownUntil(null)
+        setCooldownSeconds(0)
+        return
+      }
+      setCooldownSeconds(Math.ceil(remainingMs / 1000))
+    }
+
+    updateCountdown()
+    const timerId = window.setInterval(updateCountdown, 1000)
+    return () => window.clearInterval(timerId)
+  }, [cooldownUntil])
+
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError("")
@@ -508,26 +250,33 @@ function LoginPage() {
       return
     }
 
-    if (!email.trim() || !password.trim()) {
-      setError("გთხოვთ შეავსოთ ელფოსტა და პაროლი.")
+    const emailResult = validateEmail(email)
+    if (!emailResult.ok) {
+      setError(emailResult.message)
+      return
+    }
+    const passwordResult = validatePassword(password)
+    if (!passwordResult.ok) {
+      setError(passwordResult.message)
       return
     }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setError("ელფოსტის ფორმატი არასწორია.")
+    if (cooldownUntil && Date.now() < cooldownUntil) {
+      const secondsLeft = Math.ceil((cooldownUntil - Date.now()) / 1000)
+      setError(`ზედმეტი მცდელობები დაფიქსირდა. სცადე ${secondsLeft} წამში.`)
       return
     }
 
     setIsSubmitting(true)
-    const { error: loginError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    })
+    const { error: loginError } = await signInWithRateLimit(emailResult.value, passwordResult.value)
     setIsSubmitting(false)
 
     if (loginError) {
       const message = loginError.message.toLowerCase()
-      if (message.includes("invalid login credentials")) {
+      if (isAuthRateLimited(loginError.status, loginError.message)) {
+        setCooldownUntil(authCooldownUntil())
+        setError("ზედმეტი მცდელობები დაფიქსირდა. გთხოვ, სცადე 15 წუთში.")
+      } else if (message.includes("invalid login credentials")) {
         setError("ელფოსტა ან პაროლი არასწორია.")
       } else if (message.includes("invalid email")) {
         setError("ელფოსტის ფორმატი არასწორია.")
@@ -643,10 +392,14 @@ function LoginPage() {
 
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || cooldownSeconds > 0}
               className="h-11 w-full rounded-lg bg-[#0088FF] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC] disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {isSubmitting ? "მიმდინარეობს..." : "შესვლა"}
+              {isSubmitting
+                ? "მიმდინარეობს..."
+                : cooldownSeconds > 0
+                  ? `სცადე ${cooldownSeconds} წამში`
+                  : "შესვლა"}
             </button>
           </form>
 
@@ -707,7 +460,6 @@ function RegisterPage() {
 
   const handleRegister = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    console.log("signUp called at:", new Date().toISOString())
     setError("")
 
     if (isSubmitting || registerInFlightRef.current) {
@@ -730,33 +482,47 @@ function RegisterPage() {
       return
     }
 
-    if (!fullName.trim() || !email.trim() || !password.trim() || !confirmPassword.trim() || !city.trim()) {
-      setError("გთხოვთ შეავსოთ ყველა სავალდებულო ველი.")
+    const fullNameResult = validateTextField(fullName, {
+      min: LIMITS.fullNameMin,
+      max: LIMITS.fullName,
+      label: "სახელი",
+    })
+    if (!fullNameResult.ok) {
+      setError(fullNameResult.message)
       return
     }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setError("გთხოვთ მიუთითოთ სწორი ელფოსტა (მაგ: user@example.com).")
+    const emailResult = validateEmail(email)
+    if (!emailResult.ok) {
+      setError(emailResult.message)
       return
     }
-
-    if (password.length < 6) {
-      setError("პაროლი უნდა შეიცავდეს მინიმუმ 6 სიმბოლოს.")
+    const passwordResult = validatePassword(password)
+    if (!passwordResult.ok) {
+      setError(passwordResult.message)
       return
     }
-
-    if (password !== confirmPassword) {
+    if (passwordResult.value !== confirmPassword) {
       setError("პაროლები ერთმანეთს არ ემთხვევა.")
+      return
+    }
+    const cityResult = validateTextField(city, { max: LIMITS.city, label: "ქალაქი" })
+    if (!cityResult.ok) {
+      setError(cityResult.message)
+      return
+    }
+    const phoneResult = validateOptionalTextField(phone, { max: LIMITS.phone, label: "ტელეფონი" })
+    if (!phoneResult.ok) {
+      setError(phoneResult.message)
       return
     }
 
     const formData = {
-      full_name: fullName.trim(),
-      email: email.trim(),
-      password,
+      full_name: fullNameResult.value,
+      email: emailResult.value,
+      password: passwordResult.value,
       confirm_password: confirmPassword,
-      city: city.trim(),
-      phone: phone.trim(),
+      city: cityResult.value,
+      phone: phoneResult.value ?? "",
       user_type: userType,
     }
 
@@ -773,12 +539,17 @@ function RegisterPage() {
       },
     }
 
-    console.log("Supabase signUp payload:", signUpPayload)
-
     setIsSubmitting(true)
     registerInFlightRef.current = true
     try {
-      const { error: registerError } = await supabase.auth.signUp(signUpPayload)
+      const rateCheck = await consumeAuthRateLimit("register", formData.email)
+      if (!rateCheck.ok) {
+        setCooldownUntil(authCooldownUntil(rateCheck.retryAfterSeconds))
+        setError(`ზედმეტი მცდელობები დაფიქსირდა. გთხოვ, სცადე ${rateCheck.retryAfterSeconds} წამში.`)
+        return
+      }
+
+      const { data: signUpData, error: registerError } = await supabase.auth.signUp(signUpPayload)
 
       if (registerError) {
         console.error("Supabase signUp error:", {
@@ -791,9 +562,9 @@ function RegisterPage() {
           setError("ეს ელფოსტა უკვე გამოყენებულია.")
         } else if (message.includes("invalid email")) {
           setError("ელფოსტის ფორმატი არასწორია.")
-        } else if (message.includes("rate limit") || registerError.status === 429) {
-          setCooldownUntil(Date.now() + 60_000)
-          setError("ზედმეტი მცდელობები დაფიქსირდა. გთხოვ, სცადე 60 წამში.")
+        } else if (isAuthRateLimited(registerError.status, registerError.message)) {
+          setCooldownUntil(authCooldownUntil())
+          setError("ზედმეტი მცდელობები დაფიქსირდა. გთხოვ, სცადე 15 წუთში.")
         } else if (message.includes("email signups are disabled")) {
           setError("ელფოსტით რეგისტრაცია გათიშულია Supabase პროექტში.")
         } else if (message.includes("password")) {
@@ -802,6 +573,20 @@ function RegisterPage() {
           setError(`რეგისტრაცია ვერ მოხერხდა: ${registerError.message}`)
         }
         return
+      }
+
+      const newUserId = signUpData.user?.id
+      if (newUserId && (formData.phone || formData.city)) {
+        const profilePatch: { phone?: string | null; city?: string | null } = {}
+        if (formData.phone) profilePatch.phone = formData.phone
+        if (formData.city) profilePatch.city = formData.city
+        const { error: profilePatchError } = await supabase
+          .from("profiles")
+          .update(profilePatch)
+          .eq("id", newUserId)
+        if (profilePatchError) {
+          console.warn("Profile phone/city sync after signUp:", profilePatchError.message)
+        }
       }
 
       navigate("/onboarding")
@@ -1027,6 +812,22 @@ function App() {
           element={
             <ProtectedRoute>
               <SavedPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/messages"
+          element={
+            <ProtectedRoute>
+              <MessagesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/messages/:conversationId"
+          element={
+            <ProtectedRoute>
+              <MessagesPage />
             </ProtectedRoute>
           }
         />

@@ -13,6 +13,7 @@ import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { jobVacancyStats } from "../lib/jobVacancies.ts"
 import { formatCityForDisplay, jobMatchesUnifiedLocation } from "../lib/marketplaceFilters.ts"
 import { jobVipIsActive } from "../lib/vipJobTiers.ts"
+import VipBadge from "../components/VipBadge.tsx"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import {
   catalogSelectionMatchesEntity,
@@ -21,7 +22,8 @@ import {
   effectiveCatalogFilterId,
   type CategoryBranchRow,
 } from "../lib/marketplaceCategoryTree.ts"
-import { ViewCountEyeIcon } from "../components/ViewCountEyeIcon.tsx"
+import { formatJobBudget, PRICE_TYPE_LABELS } from "../lib/listingPrice.ts"
+import { LIMITS } from "../lib/validation.ts"
 
 type SortOption = "newest" | "budget_high" | "budget_low" | "applicants" | "deadline"
 type BudgetType = "fixed" | "hourly" | "monthly"
@@ -619,11 +621,7 @@ export default function JobsPage() {
 
   const jobsHasMore = jobsNextOffset < jobsTotal
 
-  const budgetTypeLabels: Record<BudgetType, string> = {
-    fixed: "ფიქსირებული",
-    hourly: "საათობრივი",
-    monthly: "თვიური",
-  }
+  const budgetTypeLabels = PRICE_TYPE_LABELS
 
   const locationLabelsLegacy: Record<string, string> = {
     remote: "დისტანციური",
@@ -835,12 +833,7 @@ export default function JobsPage() {
     })
   }, [filteredJobs, sortBy])
 
-  const budgetLabel = (job: JobItem) => {
-    const format = (value: number | null) => (value ?? 0).toLocaleString("en-US")
-    if (job.budgetType === "hourly") return `₾${job.budgetMin ?? 0}/საათი`
-    if (job.budgetType === "monthly") return `₾${format(job.budgetMin)}/თვე`
-    return `₾${format(job.budgetMin)} - ₾${format(job.budgetMax)}`
-  }
+  const budgetLabel = (job: JobItem) => formatJobBudget(job.budgetMin, job.budgetMax, job.budgetType)
 
   const locationIcon = (type: string) => (type === "remote" ? "🌐" : "📍")
 
@@ -859,7 +852,7 @@ export default function JobsPage() {
             title=""
             showPageHeader={false}
             searchValue={searchText}
-            onSearchChange={setSearchText}
+            onSearchChange={(value) => setSearchText(value.slice(0, LIMITS.search))}
             searchPlaceholder="სათაური, აღწერა, უნარები, კატეგორია..."
             categorySlot={jobsCategoryFilterSlot}
             locationDisplay={appliedLocationFilter}
@@ -979,15 +972,9 @@ export default function JobsPage() {
                 {sortedJobs.map((job) => (
                   <article
                     key={job.id}
-                    className="relative flex w-full max-w-full flex-col rounded-2xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-4 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#0088FF] hover:shadow-[-4px_0_12px_rgba(0,136,255,0.25)]"
+                    className="flex w-full max-w-full flex-col rounded-2xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-4 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#0088FF] hover:shadow-[-4px_0_12px_rgba(0,136,255,0.25)]"
                   >
-                    {job.vipActive ? (
-                      <span className="absolute right-4 top-4 z-10 rounded-full bg-[#F59E0B] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
-                        VIP
-                      </span>
-                    ) : null}
-
-                    <div className={`flex items-start gap-3 ${job.vipActive ? "pr-14" : ""}`}>
+                    <div className="flex items-start gap-3">
                       {job.companyAvatar ? (
                         <img
                           src={avatarImageUrl(supabase, job.companyAvatar) ?? job.companyAvatar}
@@ -1003,9 +990,14 @@ export default function JobsPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="font-bold text-gray-900">{job.companyName}</p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-bold text-gray-900">{job.companyName}</p>
+                              {job.vipActive ? <VipBadge /> : null}
+                            </div>
                             <p className="mt-0.5 text-xs text-slate-500">
-                              {formatCityForDisplay(job.city) ?? job.city ?? "ქალაქი უცნობია"} • {formatRelativeTime(job.createdAt)}
+                              {[formatCityForDisplay(job.city), formatRelativeTime(job.createdAt)]
+                                .filter(Boolean)
+                                .join(" · ")}
                             </p>
                           </div>
                           {job.isUrgent ? (
@@ -1042,25 +1034,8 @@ export default function JobsPage() {
                     <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
                       <span className="shrink-0 text-sm font-semibold text-gray-900">{budgetLabel(job)}</span>
                       <span className={metaPillClass}>
-                        {durationLabels[(job.durationType as DurationType) ?? "one_time"] ?? job.durationType}
-                      </span>
-                      <span className={metaPillClass}>
                         {locationIcon(job.locationType)} {locationLabelsLegacy[job.locationType] ?? job.locationType}
                       </span>
-                      <span className={metaPillClass}>
-                        💼 {job.applicantsCount} განმცხადებელი
-                      </span>
-                      <span className={`${metaPillClass} gap-1`}>
-                        <ViewCountEyeIcon className="h-3.5 w-3.5 shrink-0 text-[#374151]" />
-                        {job.viewsCount} ნახვა
-                      </span>
-                      {job.vacancyFull ? (
-                        <span className={`${metaPillClass} font-medium text-amber-800`}>დაკომლექტებული</span>
-                      ) : (
-                        <span className={metaPillClass}>
-                          {job.vacancyRemaining} თავისუფალი ადგილი
-                        </span>
-                      )}
                       {job.applicationDeadline ? (
                         <span
                           className={`${metaPillClass} ${
