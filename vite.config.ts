@@ -16,7 +16,7 @@ function securityHeadersPlugin() {
       forDev = config.command === 'serve'
     },
     transformIndexHtml(html: string) {
-      const csp = buildContentSecurityPolicy({ dev: forDev })
+      const csp = buildContentSecurityPolicy({ dev: forDev, forMeta: true })
       const tag = `    <meta http-equiv="Content-Security-Policy" content="${csp}" />\n`
       if (html.includes('http-equiv="Content-Security-Policy"')) return html
       return html.replace('<head>', `<head>\n${tag}`)

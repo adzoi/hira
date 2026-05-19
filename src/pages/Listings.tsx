@@ -439,21 +439,14 @@ export default function ListingsPage() {
       setError("")
       try {
         const offset = append ? listingsNextOffsetRef.current : 0
-        const page = Math.floor(offset / LISTINGS_PAGE_SIZE) + 1
-        const category = serverCategoryForFetch
-        const { data, error: fnErr } = await supabase.functions.invoke("get-listings-page", {
-          body: { category, page },
+        const { data, error: rpcErr } = await supabase.rpc("get_listings_page", {
+          p_search: null,
+          p_limit: LISTINGS_PAGE_SIZE,
+          p_offset: offset,
         })
-        if (fnErr) throw fnErr
-        if (!data || typeof data !== "object" || !("ok" in data) || (data as { ok?: unknown }).ok !== true) {
-          const errMsg =
-            data && typeof data === "object" && "error" in data
-              ? String((data as { error?: unknown }).error)
-              : "მონაცემების ჩატვირთვა ვერ მოხერხდა."
-          throw new Error(errMsg)
-        }
+        if (rpcErr) throw rpcErr
 
-        const payload = (data as { data: unknown }).data as null | {
+        const payload = data as null | {
           services?: unknown
           categories?: unknown
           skills?: unknown

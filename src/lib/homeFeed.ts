@@ -195,17 +195,10 @@ export async function loadHomeFeed(): Promise<HomeFeedItem[]> {
     return [...MOCK_SERVICES, ...MOCK_JOB_LISTINGS].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
   }
 
-  const { data, error } = await supabase.functions.invoke("get-home-feed")
+  const { data, error } = await supabase.rpc("get_home_feed")
   if (error) throw error
-  if (!data || typeof data !== "object" || !("ok" in data) || (data as { ok?: unknown }).ok !== true) {
-    const errMsg =
-      data && typeof data === "object" && "error" in data
-        ? String((data as { error?: unknown }).error)
-        : "მთავარი ლენტა ვერ ჩაიტვირთა."
-    throw new Error(errMsg)
-  }
 
-  const payload = (data as { data: unknown }).data as null | { services?: unknown[]; jobs?: unknown[] }
+  const payload = data as null | { services?: unknown[]; jobs?: unknown[] }
   const serviceRows = Array.isArray(payload?.services) ? payload!.services! : []
   const jobRows = Array.isArray(payload?.jobs) ? payload!.jobs! : []
 

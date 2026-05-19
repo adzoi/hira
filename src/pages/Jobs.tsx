@@ -498,21 +498,16 @@ export default function JobsPage() {
       setError("")
       try {
         const offset = append ? jobsNextOffsetRef.current : 0
-        const page = Math.floor(offset / JOBS_PAGE_SIZE) + 1
         const category = serverCategoryForFetch
-        const { data, error: fnErr } = await supabase.functions.invoke("get-jobs-page", {
-          body: { category, page },
+        const { data, error: rpcErr } = await supabase.rpc("get_jobs_page", {
+          p_search: null,
+          p_limit: JOBS_PAGE_SIZE,
+          p_offset: offset,
+          p_category_id: category === "all" ? null : category,
         })
-        if (fnErr) throw fnErr
-        if (!data || typeof data !== "object" || !("ok" in data) || (data as { ok?: unknown }).ok !== true) {
-          const errMsg =
-            data && typeof data === "object" && "error" in data
-              ? String((data as { error?: unknown }).error)
-              : "მონაცემები ვერ ჩაიტვირთა."
-          throw new Error(errMsg)
-        }
+        if (rpcErr) throw rpcErr
 
-        const payload = (data as { data: unknown }).data as Record<string, unknown> | null
+        const payload = data as Record<string, unknown> | null
         const jobRows = Array.isArray(payload?.jobs) ? (payload.jobs as unknown[]) : []
         const categoryRows = Array.isArray(payload?.categories) ? (payload.categories as unknown[]) : []
         const totalRaw = payload?.total_count ?? payload?.total

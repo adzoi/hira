@@ -1,11 +1,15 @@
 /** Shared security headers for production static server, Vite preview, and build output. */
 
+/** Directives that must be sent via HTTP headers, not `<meta http-equiv="Content-Security-Policy">`. */
+const META_UNSUPPORTED_DIRECTIVES = new Set(["frame-ancestors"])
+
 /**
- * @param {{ dev?: boolean }} [opts]
+ * @param {{ dev?: boolean; forMeta?: boolean }} [opts]
  * @returns {string}
  */
 export function buildContentSecurityPolicy(opts = {}) {
   const dev = Boolean(opts.dev)
+  const forMeta = Boolean(opts.forMeta)
   const scriptSrc = [
     "'self'",
     "'unsafe-inline'",
@@ -14,7 +18,7 @@ export function buildContentSecurityPolicy(opts = {}) {
   ]
   if (dev) scriptSrc.push("'unsafe-eval'")
 
-  return [
+  const directives = [
     "default-src 'self'",
     `script-src ${scriptSrc.join(" ")}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.paypal.com https://*.paypalobjects.com",
@@ -28,7 +32,15 @@ export function buildContentSecurityPolicy(opts = {}) {
     "form-action 'self' https://*.paypal.com",
     "frame-ancestors 'none'",
     "upgrade-insecure-requests",
-  ].join("; ")
+  ]
+
+  if (forMeta) {
+    return directives
+      .filter((directive) => !META_UNSUPPORTED_DIRECTIVES.has(directive.split(/\s+/)[0]))
+      .join("; ")
+  }
+
+  return directives.join("; ")
 }
 
 /** @param {{ dev?: boolean }} [opts] */
