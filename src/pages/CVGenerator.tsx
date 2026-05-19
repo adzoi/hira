@@ -6,6 +6,7 @@ import { buildCvFromProfileData } from "../lib/cvFromProfile.ts"
 import { useToast } from "../components/ui/ToastProvider.tsx"
 import { supabaseEdgeHeaders } from "../lib/supabaseEdgeHeaders.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
+import { getAuthenticatedSession } from "../lib/supabaseAuth.ts"
 
 type CvPayload = Record<string, unknown>
 
@@ -39,16 +40,8 @@ export default function CVGeneratorPage() {
         return
       }
       try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
-        if (!user) {
-          navigate("/login?redirect=%2Fcv-generator")
-          return
-        }
-
-        const session = (await supabase.auth.getSession()).data.session
-        if (!session?.access_token) {
+        const { user, session } = await getAuthenticatedSession(supabase)
+        if (!user || !session?.access_token) {
           navigate("/login?redirect=%2Fcv-generator")
           return
         }

@@ -2,6 +2,7 @@
 
 -- ── profile_visits: bind visitor_user_id to auth.uid() ───────────────────────
 DROP POLICY IF EXISTS "Anyone can insert a profile visit" ON public.profile_visits;
+DROP POLICY IF EXISTS "Valid profile visit insert" ON public.profile_visits;
 
 CREATE POLICY "Valid profile visit insert"
   ON public.profile_visits

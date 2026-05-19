@@ -1346,6 +1346,10 @@ export interface Database {
         }
         Returns: undefined
       }
+      get_job_hirer_contact_for_applicant: {
+        Args: { p_job_id: string }
+        Returns: { email: string; phone: string | null }[]
+      }
       get_home_feed: {
         Args: Record<PropertyKey, never>
         Returns: Json

@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from "./supabase.ts"
+import { getAuthenticatedSession } from "./supabaseAuth.ts"
 
 type RecordFreelancerVisitArgs = {
   kind: "freelancer"
@@ -18,10 +19,8 @@ export type RecordProfileVisitArgs = RecordFreelancerVisitArgs | RecordHirerVisi
 export async function recordProfileVisit(args: RecordProfileVisitArgs): Promise<void> {
   if (!isSupabaseConfigured || !supabase) return
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-  const visitor_user_id = session?.user?.id ?? null
+  const { user } = await getAuthenticatedSession(supabase)
+  const visitor_user_id = user?.id ?? null
 
   if (visitor_user_id && visitor_user_id === args.profileOwnerUserId) return
 

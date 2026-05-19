@@ -23,7 +23,7 @@ import {
   type CategoryBranchRow,
 } from "../lib/marketplaceCategoryTree.ts"
 import { formatJobBudget, PRICE_TYPE_LABELS } from "../lib/listingPrice.ts"
-import { LIMITS } from "../lib/validation.ts"
+import { normalizeSearchInput } from "../lib/validation.ts"
 
 type SortOption = "newest" | "budget_high" | "budget_low" | "applicants" | "deadline"
 type BudgetType = "fixed" | "hourly" | "monthly"
@@ -852,7 +852,7 @@ export default function JobsPage() {
             title=""
             showPageHeader={false}
             searchValue={searchText}
-            onSearchChange={(value) => setSearchText(value.slice(0, LIMITS.search))}
+            onSearchChange={(value) => setSearchText(normalizeSearchInput(value))}
             searchPlaceholder="სათაური, აღწერა, უნარები, კატეგორია..."
             categorySlot={jobsCategoryFilterSlot}
             locationDisplay={appliedLocationFilter}

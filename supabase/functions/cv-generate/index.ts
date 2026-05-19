@@ -1,14 +1,8 @@
 import { enforceRateLimit } from "../_shared/rateLimit.ts"
+import { corsHeadersFor } from "../_shared/cors.ts"
 
-const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Content-Type": "application/json",
-}
-
-function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: corsHeaders })
+function jsonResponse(req: Request, body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: corsHeadersFor(req) })
 }
 
 /**
@@ -16,16 +10,16 @@ function jsonResponse(body: unknown, status = 200) {
  * This endpoint remains as a clear 410 for legacy clients.
  */
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders })
+  if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeadersFor(req) })
 
   const rateLimited = await enforceRateLimit(
     req,
     { prefix: "rl:cv-generate", requests: 10, window: "1 m" },
-    corsHeaders,
+    corsHeadersFor(req),
   )
   if (rateLimited) return rateLimited
 
-  return jsonResponse(
+  return jsonResponse(req, 
     {
       errors: [
         "AI CV generation is disabled. Open /cv-generator to build your CV from your profile.",

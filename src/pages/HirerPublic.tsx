@@ -13,6 +13,7 @@ import StartConversationButton from "../components/StartConversationButton.tsx"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { formatCityForDisplay } from "../lib/marketplaceFilters.ts"
+import { safeExternalHref } from "../lib/validation.ts"
 import { formatJobBudget } from "../lib/listingPrice.ts"
 import ProfilePendingOffers from "../components/ProfilePendingOffers.tsx"
 import {
@@ -671,11 +672,11 @@ export default function HirerPublicPage() {
                   </>
                 )}
               </p>
-              {hirer.websiteUrl ? (
+              {safeExternalHref(hirer.websiteUrl) ? (
                 <a
-                  href={hirer.websiteUrl.startsWith("http") ? hirer.websiteUrl : `https://${hirer.websiteUrl}`}
+                  href={safeExternalHref(hirer.websiteUrl)!}
                   target="_blank"
-                  rel="noreferrer noopener"
+                  rel="noopener noreferrer"
                   className="mt-2 inline-block text-sm font-semibold text-[#D4A843] underline"
                 >
                   ვებგვერდი

@@ -8,6 +8,7 @@ import {
   XBrandIcon,
   YouTubeBrandIcon,
 } from "./SocialBrandIcons.tsx"
+import { safeExternalHref } from "../lib/validation.ts"
 
 export type FreelancerSocialUrls = {
   linkedin_url?: string | null
@@ -44,9 +45,9 @@ function ExternalLinkArrowIcon({ className }: { className?: string }) {
 function buildLinks(urls: FreelancerSocialUrls): SocialLinkDef[] {
   const out: SocialLinkDef[] = []
   const push = (href: string | null | undefined, label: string, icon: ReactNode, className?: string) => {
-    const trimmed = (href ?? "").trim()
-    if (!trimmed) return
-    out.push({ href: trimmed, label, icon, className })
+    const safeHref = safeExternalHref(href)
+    if (!safeHref) return
+    out.push({ href: safeHref, label, icon, className })
   }
 
   push(urls.linkedin_url, "LinkedIn", <LinkedInBrandIcon className="h-4 w-4" />)
@@ -77,7 +78,7 @@ export default function SocialProfileLinks({ urls, className }: { urls: Freelanc
           key={link.label}
           href={link.href}
           target="_blank"
-          rel="noreferrer"
+          rel="noopener noreferrer"
           className={link.className ?? linkClass}
         >
           {link.icon}

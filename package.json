@@ -6,16 +6,15 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "start": "node server.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
     "@paypal/react-paypal-js": "^9.2.0",
     "@supabase/supabase-js": "^2.105.1",
-    "jspdf": "^4.2.1",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-router-dom": "^7.14.2"

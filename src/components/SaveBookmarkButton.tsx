@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { fetchSavedState, toggleSavedItem, type SavedResourceType } from "../lib/savedItems.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase.ts"
+import { getAuthenticatedSession } from "../lib/supabaseAuth.ts"
 
 type SaveBookmarkButtonProps = {
   resourceType: SavedResourceType
@@ -46,10 +47,8 @@ export default function SaveBookmarkButton({
     }
     let cancelled = false
     void (async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      const uid = session?.user?.id ?? null
+      const { user } = await getAuthenticatedSession(supabase)
+      const uid = user?.id ?? null
       if (cancelled) return
       setUserId(uid)
       if (!uid) {

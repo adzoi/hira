@@ -132,13 +132,15 @@ const VipTierPayPalPanel = memo(function VipTierPayPalPanel({
    * without calling `onPaid()` until both capture + activation succeed.
    */
   const invokeActivate = useCallback(async (orderID: string): Promise<void> => {
-    console.log("[VIPUpgrade] invokeActivate request:", {
-      orderID,
-      job_id: jobId,
-      listing_type: listingType,
-      tier,
-      function: "activate-vip",
-    })
+    if (PAYPAL_E2E_DIAG) {
+      console.log("[VIPUpgrade] invokeActivate request:", {
+        orderID,
+        job_id: jobId,
+        listing_type: listingType,
+        tier,
+        function: "activate-vip",
+      })
+    }
 
     if (PAYPAL_E2E_DIAG && e2eSkipServerActivation) {
       console.log("[E2E] Skipping activate-vip (diagnostic checkout)")
@@ -172,7 +174,7 @@ const VipTierPayPalPanel = memo(function VipTierPayPalPanel({
         }
       }
       console.error("[VIPUpgrade] invokeActivate response status:", error.context?.status ?? "unknown")
-    } else {
+    } else if (PAYPAL_E2E_DIAG) {
       console.log("[VIPUpgrade] invokeActivate response status:", "ok")
       console.log("[VIPUpgrade] invokeActivate response body:", data)
     }
@@ -267,9 +269,13 @@ const VipTierPayPalPanel = memo(function VipTierPayPalPanel({
           }
 
           try {
+          if (PAYPAL_E2E_DIAG) {
             console.log("[VIPUpgrade] invokeActivate starting, orderID:", data.orderID)
+          }
             const result = await invokeActivate(trimmedOrderId)
+          if (PAYPAL_E2E_DIAG) {
             console.log("[VIPUpgrade] invokeActivate result:", JSON.stringify(result))
+          }
             onPaid()
           } catch (err) {
             console.error("[VIPUpgrade] invokeActivate failed:", err)

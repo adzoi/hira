@@ -1,15 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import { enforceRateLimit } from "../_shared/rateLimit.ts"
+import { corsHeadersFor } from "../_shared/cors.ts"
 
-const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
-  "Content-Type": "application/json",
-}
-
-function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: corsHeaders })
+function jsonResponse(req: Request, body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: corsHeadersFor(req) })
 }
 
 function getBearerToken(req: Request): string | null {
@@ -21,13 +15,13 @@ function getBearerToken(req: Request): string | null {
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders })
-  if (req.method !== "GET") return jsonResponse({ errors: ["Method not allowed"] }, 405)
+  if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeadersFor(req) })
+  if (req.method !== "GET") return jsonResponse(req, { errors: ["Method not allowed"] }, 405)
 
   const rateLimited = await enforceRateLimit(
     req,
     { prefix: "rl:cv-get", requests: 60, window: "1 m" },
-    corsHeaders,
+    corsHeadersFor(req),
   )
   if (rateLimited) return rateLimited
 
@@ -35,7 +29,7 @@ Deno.serve(async (req: Request) => {
   const serviceRoleKey =
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SERVICE_ROLE_KEY") ?? ""
   if (!supabaseUrl || !serviceRoleKey) {
-    return jsonResponse({ errors: ["Missing Supabase environment variables."] }, 500)
+    return jsonResponse(req, { errors: ["Missing Supabase environment variables."] }, 500)
   }
 
   const supabaseClient = createClient(supabaseUrl, serviceRoleKey, {
@@ -47,7 +41,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     if (slug) {
-      if (slug.length < 2) return jsonResponse({ errors: ["Slug must be at least 2 characters."] }, 400)
+      if (slug.length < 2) return jsonResponse(req, { errors: ["Slug must be at least 2 characters."] }, 400)
 
       const { data: publicCV, error: publicError } = await supabaseClient
         .from("user_cvs")
@@ -56,9 +50,9 @@ Deno.serve(async (req: Request) => {
         .eq("is_public", true)
         .maybeSingle()
 
-      if (publicError) return jsonResponse({ errors: [publicError.message] }, 500)
-      if (!publicCV) return jsonResponse({ errors: ["CV not found"] }, 404)
-      return jsonResponse({ cv: publicCV }, 200)
+      if (publicError) return jsonResponse(req, { errors: [publicError.message] }, 500)
+      if (!publicCV) return jsonResponse(req, { errors: ["CV not found"] }, 404)
+      return jsonResponse(req, { cv: publicCV }, 200)
     }
 
     if (userId) {
@@ -69,14 +63,14 @@ Deno.serve(async (req: Request) => {
         .eq("is_public", true)
         .eq("is_visible_on_profile", true)
         .maybeSingle()
-      if (publicVisibleError) return jsonResponse({ errors: [publicVisibleError.message] }, 500)
-      return jsonResponse({ cv: publicVisibleCv ?? null }, 200)
+      if (publicVisibleError) return jsonResponse(req, { errors: [publicVisibleError.message] }, 500)
+      return jsonResponse(req, { cv: publicVisibleCv ?? null }, 200)
     }
 
     const token = getBearerToken(req)
-    if (!token) return jsonResponse({ errors: ["Unauthorized"] }, 401)
+    if (!token) return jsonResponse(req, { errors: ["Unauthorized"] }, 401)
     const { data: authData, error: authError } = await supabaseClient.auth.getUser(token)
-    if (authError || !authData.user) return jsonResponse({ errors: ["Unauthorized"] }, 401)
+    if (authError || !authData.user) return jsonResponse(req, { errors: ["Unauthorized"] }, 401)
 
     const { data: ownCV, error: ownError } = await supabaseClient
       .from("user_cvs")
@@ -86,13 +80,13 @@ Deno.serve(async (req: Request) => {
 
     if (ownError) {
       const code = typeof ownError.code === "string" ? ownError.code : ""
-      if (code === "PGRST116") return jsonResponse({ cv: null }, 200)
-      return jsonResponse({ errors: [ownError.message] }, 500)
+      if (code === "PGRST116") return jsonResponse(req, { cv: null }, 200)
+      return jsonResponse(req, { errors: [ownError.message] }, 500)
     }
 
-    return jsonResponse({ cv: ownCV ?? null }, 200)
+    return jsonResponse(req, { cv: ownCV ?? null }, 200)
   } catch (error) {
-    return jsonResponse(
+    return jsonResponse(req, 
       { errors: [error instanceof Error ? error.message : "Unknown error"] },
       500,
     )

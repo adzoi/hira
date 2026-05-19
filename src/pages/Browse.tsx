@@ -21,7 +21,7 @@ import {
 import FreelancerAvailabilityIndicator from "../components/FreelancerAvailabilityIndicator.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
-import { LIMITS, sanitizeDisplayText } from "../lib/validation.ts"
+import { LIMITS, normalizeSearchInput, sanitizeDisplayText } from "../lib/validation.ts"
 
 type SortOption = "rating" | "price_asc" | "price_desc" | "newest" | "completed"
 type Availability = "full_time" | "part_time" | "weekends"
@@ -634,7 +634,7 @@ export default function BrowsePage() {
                   onChange={(event) => {
                     const value = event.target.value
                     if (value.length <= MAX_SEARCH_LENGTH) {
-                      setSearchText(value)
+                      setSearchText(normalizeSearchInput(value))
                     }
                   }}
                   className="h-10 w-full rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#0088FF]"

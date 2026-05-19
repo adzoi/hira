@@ -9,6 +9,7 @@ import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { formatCityForDisplay, matchesLocationFilter } from "../lib/marketplaceFilters.ts"
+import { normalizeSearchInput, safeExternalHref } from "../lib/validation.ts"
 
 type HirerRow = {
   id: string
@@ -472,7 +473,7 @@ export default function HirersPage() {
               <div className="min-w-[220px] flex-[0_1_320px]">
                 <input
                   value={searchText}
-                  onChange={(event) => setSearchText(event.target.value)}
+                  onChange={(event) => setSearchText(normalizeSearchInput(event.target.value))}
                   className="h-10 w-full rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#0088FF]"
                   placeholder="კომპანია, ინდუსტრია, ქალაქი ან აღწერა"
                 />
@@ -678,11 +679,11 @@ export default function HirersPage() {
                         <p className="mt-2 text-xs text-slate-500">საკონტაქტო: {h.contactName}</p>
 
                         <div className="mt-2 flex flex-wrap gap-2">
-                          {h.websiteUrl ? (
+                          {safeExternalHref(h.websiteUrl) ? (
                             <a
-                              href={h.websiteUrl.startsWith("http") ? h.websiteUrl : `https://${h.websiteUrl}`}
+                              href={safeExternalHref(h.websiteUrl)!}
                               target="_blank"
-                              rel="noreferrer noopener"
+                              rel="noopener noreferrer"
                               className={`${websiteChipClass} hover:border-[#0088FF] hover:text-[#0088FF]`}
                             >
                               ვებგვერდი

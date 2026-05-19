@@ -108,8 +108,22 @@ export default function JobDetailPage() {
   const [submitSuccess, setSubmitSuccess] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [viewerUserId, setViewerUserId] = useState<string | null>(null)
+  const [hirerContact, setHirerContact] = useState<{ email: string; phone: string | null } | null>(null)
   const [vipModalOpen, setVipModalOpen] = useState(false)
   const trackedJobViewRef = useRef<string | null>(null)
+
+  const loadHirerContact = async (jobId: string) => {
+    if (!supabase) return null
+    const { data, error } = await supabase.rpc("get_job_hirer_contact_for_applicant", { p_job_id: jobId })
+    if (error || !data || !Array.isArray(data) || data.length === 0) return null
+    const row = data[0] as { email?: string | null; phone?: string | null }
+    const email = typeof row.email === "string" ? row.email : ""
+    const phone = row.phone != null ? String(row.phone) : null
+    if (!email && !phone) return null
+    const contact = { email, phone }
+    setHirerContact(contact)
+    return contact
+  }
 
   useEffect(() => {
     document.title = "სამუშაოები — გიგორი"
@@ -158,6 +172,7 @@ export default function JobDetailPage() {
       setFreelancerProfileId(null)
       setAuthedUserType("guest")
       setViewerUserId(null)
+      setHirerContact(null)
 
       try {
         const { data: jobRow, error: jobError } = await supabase
@@ -171,7 +186,7 @@ export default function JobDetailPage() {
               user_id,
               company_name,
               jobs_posted_count,
-              profiles:profiles!hirer_profiles_user_id_fkey (full_name, avatar_url, city, member_since, email, phone)
+              profiles:profiles!hirer_profiles_user_id_fkey (full_name, avatar_url, city, member_since)
             ),
             job_skills (
               skills (id, name)
@@ -267,8 +282,8 @@ export default function JobDetailPage() {
           hirer_city: hirerP?.city != null ? String(hirerP.city) : null,
           hirer_member_since:
             hirerP?.member_since != null ? String(hirerP.member_since) : new Date().toISOString(),
-          hirer_email: hirerP?.email != null ? String(hirerP.email) : "",
-          hirer_phone: hirerP?.phone != null ? String(hirerP.phone) : null,
+          hirer_email: "",
+          hirer_phone: null,
           contact_preference: String(rowUnknown.contact_preference ?? ""),
           is_vip: Boolean(rowUnknown.is_vip),
           vip_tier: rowUnknown.vip_tier != null ? String(rowUnknown.vip_tier) : null,
@@ -337,12 +352,17 @@ export default function JobDetailPage() {
             if (!appliedError && applied) {
               setAlreadyApplied(true)
               setJobApplicationId(applied.id)
+              await loadHirerContact(mappedJob.id)
             } else {
               setJobApplicationId(null)
+              setHirerContact(null)
             }
           }
         } else if (profile.user_type === "hirer") {
           setAuthedUserType("hirer")
+          if (user.id === mappedJob.hirer_user_id) {
+            await loadHirerContact(mappedJob.id)
+          }
         } else {
           setAuthedUserType("guest")
         }
@@ -370,6 +390,8 @@ export default function JobDetailPage() {
 
   const isJobOwner =
     Boolean(job) && authedUserType === "hirer" && Boolean(viewerUserId) && viewerUserId === job!.hirer_user_id
+
+  const canViewHirerContact = Boolean(hirerContact) && (alreadyApplied || isJobOwner)
 
   const vacancySnap = job ? jobVacancyStats(job.vacancies, job.accepted_count) : null
 
@@ -421,10 +443,11 @@ export default function JobDetailPage() {
 
       setAlreadyApplied(true)
       if (inserted?.id) setJobApplicationId(inserted.id)
+      const contactRow = await loadHirerContact(job.id)
       const contact = formatHirerContactForApplicant({
         contactPreference: job.contact_preference,
-        email: job.hirer_email,
-        phone: job.hirer_phone,
+        email: contactRow?.email ?? "",
+        phone: contactRow?.phone ?? null,
       })
       setSubmitSuccess(`განცხადება გაგზავნილია! დამქირავებელი დაგიკავშირდება: ${contact}`)
       pushToast({ type: "success", message: "განცხადება გაგზავნილია" })
@@ -437,11 +460,11 @@ export default function JobDetailPage() {
   }
 
   const copyContact = async () => {
-    if (!job) return
+    if (!job || !hirerContact) return
     const value = hirerContactCopyText({
       contactPreference: job.contact_preference,
-      email: job.hirer_email,
-      phone: job.hirer_phone,
+      email: hirerContact.email,
+      phone: hirerContact.phone,
     })
     if (!value) return
     await navigator.clipboard.writeText(value)
@@ -674,9 +697,11 @@ export default function JobDetailPage() {
                 </div>
               </div>
               <p className="mt-3 text-sm text-slate-600">განთავსებული განცხადებები: {job.hirer_jobs_posted_count}</p>
-              <button type="button" onClick={copyContact} className="mt-3 inline-flex h-10 items-center rounded-lg border border-slate-300 px-3 text-sm font-semibold text-[#1B2B4B]">
-                საკონტაქტო ინფორმაციის კოპირება
-              </button>
+              {canViewHirerContact ? (
+                <button type="button" onClick={copyContact} className="mt-3 inline-flex h-10 items-center rounded-lg border border-slate-300 px-3 text-sm font-semibold text-[#1B2B4B]">
+                  საკონტაქტო ინფორმაციის კოპირება
+                </button>
+              ) : null}
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <SaveBookmarkButton variant="icon" resourceType="hirer" resourceId={job.hirer_profile_id} />
                 {!isJobOwner && job.hirer_user_id ? (

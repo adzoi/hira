@@ -1,22 +1,16 @@
 import { enforceRateLimit, getRedis } from "../_shared/rateLimit.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
+import { corsHeadersFor } from "../_shared/cors.ts"
 
 declare const Deno: {
   serve: (handler: (req: Request) => Response | Promise<Response>) => void
   env: { get: (key: string) => string | undefined }
 }
 
-const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-  "Content-Type": "application/json",
-}
-
-function jsonResponse(body: unknown, status = 200) {
+function jsonResponse(req: Request, body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: corsHeaders,
+    headers: corsHeadersFor(req),
   })
 }
 
@@ -310,22 +304,22 @@ function isCachedVipPayload(v: unknown): v is { ok: true; items: VipFeedItem[] }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders })
+    return new Response(null, { status: 200, headers: corsHeadersFor(req) })
   }
   if (req.method !== "POST" && req.method !== "GET") {
-    return jsonResponse({ ok: false, error: "Method not allowed" }, 405)
+    return jsonResponse(req, { ok: false, error: "Method not allowed" }, 405)
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
   if (!supabaseUrl || !serviceRoleKey) {
-    return jsonResponse({ ok: false, error: "Missing Supabase env" }, 500)
+    return jsonResponse(req, { ok: false, error: "Missing Supabase env" }, 500)
   }
 
   const rateLimited = await enforceRateLimit(
     req,
     { prefix: "rl:homepage-vip", requests: 10, window: "10 s" },
-    corsHeaders,
+    corsHeadersFor(req),
   )
   if (rateLimited) return rateLimited
 
@@ -362,7 +356,7 @@ Deno.serve(async (req) => {
           }
         }
         if (isCachedVipPayload(parsed)) {
-          return jsonResponse(parsed)
+          return jsonResponse(req, parsed)
         }
       }
     } catch {
@@ -376,7 +370,7 @@ Deno.serve(async (req) => {
 
   const data = await fetchHomepageVipData(admin, limit)
   if (!data.ok) {
-    return jsonResponse({ ok: false, error: data.error }, 500)
+    return jsonResponse(req, { ok: false, error: data.error }, 500)
   }
 
   if (redis) {
@@ -387,5 +381,5 @@ Deno.serve(async (req) => {
     }
   }
 
-  return jsonResponse(data)
+  return jsonResponse(req, data)
 })

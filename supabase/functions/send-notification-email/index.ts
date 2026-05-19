@@ -134,6 +134,8 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return jsonResponse(req, { error: "Method not allowed" }, 405)
 
   if (!isAuthorized(req)) return jsonResponse(req, { error: "Unauthorized" }, 401)
+
+  const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() ?? ""
   const resendKey = Deno.env.get("RESEND_API_KEY")?.trim() ?? ""
   const gmailUser = Deno.env.get("GMAIL_SMTP_USER")?.trim() ?? ""
   const gmailAppPassword = Deno.env.get("GMAIL_SMTP_APP_PASSWORD")?.trim() ?? ""
@@ -158,7 +160,7 @@ Deno.serve(async (req: Request) => {
       required: false,
       label: "title",
     })
-    if (!titleResult.ok) return jsonResponse({ error: titleResult.message }, 400)
+    if (!titleResult.ok) return jsonResponse(req, { error: titleResult.message }, 400)
   }
   if (parsed.body != null && typeof parsed.body === "string" && parsed.body.trim()) {
     const bodyResult = validateTextField(parsed.body, {
@@ -166,7 +168,7 @@ Deno.serve(async (req: Request) => {
       required: false,
       label: "body",
     })
-    if (!bodyResult.ok) return jsonResponse({ error: bodyResult.message }, 400)
+    if (!bodyResult.ok) return jsonResponse(req, { error: bodyResult.message }, 400)
   }
 
   const linkRaw = parsed.link != null ? String(parsed.link).trim().slice(0, 2048) : ""
@@ -174,12 +176,12 @@ Deno.serve(async (req: Request) => {
   const rateLimited = await enforceRateLimit(
     req,
     { prefix: "rl:send-notification-email", requests: 10, window: "1 m", key: userId, failClosed: true },
-    corsHeaders,
+    corsHeadersFor(req),
   )
   if (rateLimited) return rateLimited
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim() ?? ""
-  if (!supabaseUrl || !serviceRole) return jsonResponse({ error: "Server misconfigured" }, 500)
+  if (!supabaseUrl || !serviceRole) return jsonResponse(req, { error: "Server misconfigured" }, 500)
 
   const admin = createClient(supabaseUrl, serviceRole, {
     auth: { autoRefreshToken: false, persistSession: false },
@@ -191,11 +193,11 @@ Deno.serve(async (req: Request) => {
     .eq("id", userId)
     .maybeSingle()
 
-  if (profileErr) return jsonResponse({ error: "Profile lookup failed" }, 500)
-  if (!profile?.is_active) return jsonResponse({ ok: true, skipped: "inactive_profile" })
+  if (profileErr) return jsonResponse(req, { error: "Profile lookup failed" }, 500)
+  if (!profile?.is_active) return jsonResponse(req, { ok: true, skipped: "inactive_profile" })
 
   const { data: adminUser, error: authErr } = await admin.auth.admin.getUserById(userId)
-  if (authErr || !adminUser?.user?.email) return jsonResponse({ error: "User email not found" }, 404)
+  if (authErr || !adminUser?.user?.email) return jsonResponse(req, { error: "User email not found" }, 404)
 
   const email = adminUser.user.email.trim()
   const siteUrl = (Deno.env.get("PUBLIC_SITE_URL") ?? Deno.env.get("SITE_URL") ?? "").replace(/\/$/, "")
@@ -224,17 +226,17 @@ Deno.serve(async (req: Request) => {
     const r = await sendWithResend({ resendKey, from, to: email, subject: "Gigori - New Notification", html })
     if (!r.ok) {
       console.error("[send-notification-email] Resend:", r.status, r.detail)
-      return jsonResponse({ error: "Resend failed", detail: r.detail }, 502)
+      return jsonResponse(req, { error: "Resend failed", detail: r.detail }, 502)
     }
-    return jsonResponse({ ok: true, transport: "resend" })
+    return jsonResponse(req, { ok: true, transport: "resend" })
   }
 
   const fromHeader = Deno.env.get("GMAIL_SMTP_FROM")?.trim() || `Gigori <${gmailUser}>`
   const g = await sendWithGmailSmtp({ to: email, gmailUser, gmailAppPassword, fromHeader })
   if (!g.ok) {
     console.error("[send-notification-email] Gmail SMTP:", g.detail)
-    return jsonResponse({ error: "SMTP send failed", detail: g.detail }, 502)
+    return jsonResponse(req, { error: "SMTP send failed", detail: g.detail }, 502)
   }
 
-  return jsonResponse({ ok: true, transport: "gmail_smtp" })
+  return jsonResponse(req, { ok: true, transport: "gmail_smtp" })
 })

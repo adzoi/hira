@@ -1,15 +1,11 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
 import { enforceRateLimit } from "../_shared/rateLimit.ts"
+import { corsHeadersFor } from "../_shared/cors.ts"
 
-const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-}
-
-function jsonResponse(body: unknown, status = 200) {
+function jsonResponse(req: Request, body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsHeadersFor(req), "Content-Type": "application/json" },
   })
 }
 
@@ -145,23 +141,23 @@ function orderReferenceId(order: Record<string, unknown>): string | null {
 Deno.serve(async (req: Request) => {
   try {
     if (req.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: corsHeaders })
+      return new Response(null, { status: 204, headers: corsHeadersFor(req) })
     }
 
     if (req.method !== "POST") {
-      return jsonResponse({ error: "Method not allowed" }, 405)
+      return jsonResponse(req, { error: "Method not allowed" }, 405)
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim() ?? ""
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")?.trim() ?? ""
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() ?? ""
     if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey) {
-      return jsonResponse({ error: "Server misconfigured" }, 500)
+      return jsonResponse(req, { error: "Server misconfigured" }, 500)
     }
 
     const authHeader = req.headers.get("Authorization") ?? ""
     if (!authHeader.startsWith("Bearer ")) {
-      return jsonResponse({ error: "Unauthorized" }, 401)
+      return jsonResponse(req, { error: "Unauthorized" }, 401)
     }
 
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
@@ -172,13 +168,13 @@ Deno.serve(async (req: Request) => {
       error: userErr,
     } = await userClient.auth.getUser()
     if (userErr || !user) {
-      return jsonResponse({ error: "Unauthorized" }, 401)
+      return jsonResponse(req, { error: "Unauthorized" }, 401)
     }
 
     const rateLimited = await enforceRateLimit(
       req,
       { prefix: "rl:paypal-capture", requests: 5, window: "1 m", key: user.id, failClosed: true },
-      corsHeaders,
+      corsHeadersFor(req),
     )
     if (rateLimited) return rateLimited
 
@@ -186,7 +182,7 @@ Deno.serve(async (req: Request) => {
     try {
       payload = (await req.json()) as Record<string, unknown>
     } catch {
-      return jsonResponse({ error: "Invalid JSON body" }, 400)
+      return jsonResponse(req, { error: "Invalid JSON body" }, 400)
     }
 
     const orderID = typeof payload.orderID === "string" ? payload.orderID.trim() : ""
@@ -196,13 +192,13 @@ Deno.serve(async (req: Request) => {
       : "job"
 
     if (!orderID) {
-      return jsonResponse({ error: "orderID is required" }, 400)
+      return jsonResponse(req, { error: "orderID is required" }, 400)
     }
     if (!listingId) {
-      return jsonResponse({ error: "job_id is required" }, 400)
+      return jsonResponse(req, { error: "job_id is required" }, 400)
     }
     if (listingType !== "job" && listingType !== "freelancer") {
-      return jsonResponse({ error: "Invalid listing_type" }, 400)
+      return jsonResponse(req, { error: "Invalid listing_type" }, 400)
     }
 
     const admin = createClient(supabaseUrl, serviceRoleKey, {
@@ -211,14 +207,14 @@ Deno.serve(async (req: Request) => {
 
     const ownsListing = await verifyListingOwnership(admin, user.id, listingId, listingType)
     if (!ownsListing) {
-      return jsonResponse({ error: "Forbidden" }, 403)
+      return jsonResponse(req, { error: "Forbidden" }, 403)
     }
 
     const paypalApiBase = (Deno.env.get("PAYPAL_API_BASE") ?? "https://api-m.sandbox.paypal.com").replace(/\/$/, "")
     const paypalClientId = Deno.env.get("PAYPAL_CLIENT_ID") ?? ""
     const paypalSecret = paypalClientSecret()
     if (!paypalClientId || !paypalSecret) {
-      return jsonResponse({ error: "PayPal not configured" }, 500)
+      return jsonResponse(req, { error: "PayPal not configured" }, 500)
     }
 
     const accessToken = await paypalAccessToken(paypalApiBase, paypalClientId, paypalSecret)
@@ -226,22 +222,22 @@ Deno.serve(async (req: Request) => {
 
     const referenceId = orderReferenceId(order)
     if (referenceId !== listingId) {
-      return jsonResponse({ error: "Order does not match listing" }, 403)
+      return jsonResponse(req, { error: "Order does not match listing" }, 403)
     }
 
     const orderStatus = String(order.status ?? "")
     if (orderStatus === "COMPLETED") {
-      return jsonResponse(order, 200)
+      return jsonResponse(req, order, 200)
     }
     if (orderStatus !== "APPROVED" && orderStatus !== "CREATED") {
-      return jsonResponse({ error: "Order is not capturable" }, 400)
+      return jsonResponse(req, { error: "Order is not capturable" }, 400)
     }
 
     const captureResponse = await paypalCaptureOrder(paypalApiBase, accessToken, orderID)
-    return jsonResponse(captureResponse, 200)
+    return jsonResponse(req, captureResponse, 200)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error("[paypal-capture] unhandled error:", message)
-    return jsonResponse({ error: message }, 500)
+    return jsonResponse(req, { error: message }, 500)
   }
 })

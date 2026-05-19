@@ -13,6 +13,7 @@ import {
 } from "../lib/notifications.ts"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { supabase } from "../lib/supabase"
+import { getAuthenticatedSession } from "../lib/supabaseAuth.ts"
 import { sanitizeInternalPath } from "../lib/validation.ts"
 
 const navLinks = [
@@ -150,11 +151,9 @@ export default function Navbar() {
     const client = supabase
     if (!client) return
     const refresh = async () => {
-      const {
-        data: { session },
-      } = await client.auth.getSession()
-      const authed = Boolean(session?.user)
-      const uid = session?.user?.id ?? null
+      const { user, session } = await getAuthenticatedSession(client)
+      const authed = Boolean(user && session)
+      const uid = user?.id ?? null
       setIsAuthed(authed)
       setUserId(uid)
       if (!authed || !uid) {
@@ -345,10 +344,10 @@ export default function Navbar() {
     }
 
     const {
-      data: { session },
-    } = await supabase.auth.getSession()
+      data: { user },
+    } = await supabase.auth.getUser()
 
-    if (!session) {
+    if (!user) {
       navigate("/login?reason=post-job")
       return
     }

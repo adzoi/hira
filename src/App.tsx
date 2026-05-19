@@ -14,6 +14,7 @@ import {
 } from "./lib/authRateLimit"
 import {
   LIMITS,
+  normalizeSearchInput,
   validateEmail,
   validateOptionalTextField,
   validatePassword,
@@ -113,7 +114,7 @@ function HomePage() {
   const showStatsBar = stats.freelancerCount >= 10
 
   const handleSearch = () => {
-    const trimmed = searchText.trim()
+    const trimmed = normalizeSearchInput(searchText)
     if (!trimmed) {
       navigate("/browse")
       return
@@ -806,7 +807,9 @@ function App() {
           }
         />
         <Route path="/register" element={<RegisterPage />} />
-        <Route path="/checkout" element={<PayPalCheckoutE2EPage />} />
+        {(import.meta.env.DEV || import.meta.env.VITE_PAYPAL_E2E_DIAG === "1") ? (
+          <Route path="/checkout" element={<PayPalCheckoutE2EPage />} />
+        ) : null}
         <Route
           path="/saved"
           element={

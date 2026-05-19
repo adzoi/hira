@@ -24,7 +24,7 @@ import {
 } from "../lib/marketplaceCategoryTree.ts"
 import { ViewCountEyeIcon } from "../components/ViewCountEyeIcon.tsx"
 import VipBadge from "../components/VipBadge.tsx"
-import { LIMITS, validateInquiryMessage, validateMoneyAmount } from "../lib/validation.ts"
+import { normalizeSearchInput, validateInquiryMessage, validateMoneyAmount } from "../lib/validation.ts"
 type ListingMeta = { categoryId: string | null; subcategoryId: string | null; tags: string[] }
 type Availability = "full_time" | "part_time" | "weekends"
 type SkillItem = { id: string; name: string; category_id: string | null }
@@ -886,7 +886,7 @@ export default function ListingsPage() {
               <div className="h-10 w-[13.5rem] shrink-0">
                 <input
                   value={searchText}
-                  onChange={(event) => setSearchText(event.target.value.slice(0, LIMITS.search))}
+                  onChange={(event) => setSearchText(normalizeSearchInput(event.target.value))}
                   className="h-10 w-full rounded-full border border-slate-300 bg-white px-2.5 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:border-[#0088FF] focus:ring-2 focus:ring-inset focus:ring-[#0088FF]"
                   placeholder="ძიება"
                 />

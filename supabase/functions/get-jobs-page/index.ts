@@ -3,21 +3,15 @@ import { enforceRateLimit, getRedis } from "../_shared/rateLimit.ts"
 import { normalizeCategory, parsePage, readJsonBody } from "../_shared/validation.ts"
 // @ts-ignore: Deno remote module resolution is handled at runtime.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
-
-const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-  "Content-Type": "application/json",
-}
+import { corsHeadersFor } from "../_shared/cors.ts"
 
 const CACHE_TTL = 30
 const PAGE_SIZE = 20
 
-function jsonResponse(body: unknown, status = 200) {
+function jsonResponse(req: Request, body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: corsHeaders,
+    headers: corsHeadersFor(req),
   })
 }
 
@@ -76,22 +70,22 @@ async function parseParams(req: Request): Promise<{ category: string; page: numb
 
 denoRuntime.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders })
+    return new Response(null, { status: 200, headers: corsHeadersFor(req) })
   }
   if (req.method !== "POST" && req.method !== "GET") {
-    return jsonResponse({ ok: false, error: "Method not allowed" }, 405)
+    return jsonResponse(req, { ok: false, error: "Method not allowed" }, 405)
   }
 
   const supabaseUrl = getEnv("SUPABASE_URL")
   const serviceRoleKey = getEnv("SUPABASE_SERVICE_ROLE_KEY")
   if (!supabaseUrl || !serviceRoleKey) {
-    return jsonResponse({ ok: false, error: "Missing Supabase env" }, 500)
+    return jsonResponse(req, { ok: false, error: "Missing Supabase env" }, 500)
   }
 
   const rateLimited = await enforceRateLimit(
     req,
     { prefix: "rl:jobs-page", requests: 20, window: "10 s" },
-    corsHeaders,
+    corsHeadersFor(req),
   )
   if (rateLimited) return rateLimited
 
@@ -113,7 +107,7 @@ denoRuntime.serve(async (req) => {
           }
         }
         if (isCachedSuccessPayload(parsed)) {
-          return jsonResponse(parsed)
+          return jsonResponse(req, parsed)
         }
       }
     } catch {
@@ -136,7 +130,7 @@ denoRuntime.serve(async (req) => {
   })
 
   if (error) {
-    return jsonResponse({ ok: false, error: error.message }, 500)
+    return jsonResponse(req, { ok: false, error: error.message }, 500)
   }
 
   const body: SuccessPayload = { ok: true, data }
@@ -149,5 +143,5 @@ denoRuntime.serve(async (req) => {
     }
   }
 
-  return jsonResponse(body)
+  return jsonResponse(req, body)
 })

@@ -2,17 +2,11 @@
 import { enforceRateLimit, getRedis } from "../_shared/rateLimit.ts"
 // @ts-ignore: URL imports are resolved at Supabase Edge runtime (Deno), not by local TS server.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
+import { corsHeadersFor } from "../_shared/cors.ts"
 
 declare const Deno: {
   serve: (handler: (req: Request) => Response | Promise<Response>) => void
   env: { get: (key: string) => string | undefined }
-}
-
-const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-  "Content-Type": "application/json",
 }
 
 const CACHE_TTL = 60
@@ -21,8 +15,8 @@ const CACHE_KEY = "home:feed:v2"
 const RATE_LIMIT_REQUESTS = 10
 const RATE_LIMIT_WINDOW = "10 s"
 
-function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: corsHeaders })
+function jsonResponse(req: Request, body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: corsHeadersFor(req) })
 }
 
 type SuccessPayload = { ok: true; data: unknown }
@@ -35,22 +29,22 @@ function isCachedSuccessPayload(v: unknown): v is SuccessPayload {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders })
+    return new Response(null, { status: 200, headers: corsHeadersFor(req) })
   }
   if (req.method !== "POST" && req.method !== "GET") {
-    return jsonResponse({ ok: false, error: "Method not allowed" }, 405)
+    return jsonResponse(req, { ok: false, error: "Method not allowed" }, 405)
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
   if (!supabaseUrl || !serviceRoleKey) {
-    return jsonResponse({ ok: false, error: "Missing Supabase env" }, 500)
+    return jsonResponse(req, { ok: false, error: "Missing Supabase env" }, 500)
   }
 
   const rateLimited = await enforceRateLimit(
     req,
     { prefix: "rl:home-feed", requests: RATE_LIMIT_REQUESTS, window: RATE_LIMIT_WINDOW },
-    corsHeaders,
+    corsHeadersFor(req),
   )
   if (rateLimited) return rateLimited
 
@@ -64,7 +58,7 @@ Deno.serve(async (req) => {
         if (typeof cached === "string") {
           try { parsed = JSON.parse(cached) } catch { parsed = null }
         }
-        if (isCachedSuccessPayload(parsed)) return jsonResponse(parsed)
+        if (isCachedSuccessPayload(parsed)) return jsonResponse(req, parsed)
       }
     } catch {
       /* Redis read failed — fall through to RPC */
@@ -76,7 +70,7 @@ Deno.serve(async (req) => {
   })
 
   const { data, error } = await admin.rpc("get_home_feed")
-  if (error) return jsonResponse({ ok: false, error: error.message }, 500)
+  if (error) return jsonResponse(req, { ok: false, error: error.message }, 500)
 
   const body: SuccessPayload = { ok: true, data }
 
@@ -88,5 +82,5 @@ Deno.serve(async (req) => {
     }
   }
 
-  return jsonResponse(body)
+  return jsonResponse(req, body)
 })

@@ -17,15 +17,8 @@ declare const Deno: {
   }
 }
 
-const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, PATCH, OPTIONS",
-  "Content-Type": "application/json",
-}
-
-function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: corsHeaders })
+function jsonResponse(req: Request, body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: corsHeadersFor(req) })
 }
 
 function getBearerToken(req: Request): string | null {
@@ -76,16 +69,16 @@ function sanitizeCvField(key: string, value: unknown): unknown {
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders })
+  if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeadersFor(req) })
   if (req.method !== "POST" && req.method !== "PATCH") {
-    return jsonResponse({ errors: ["Method not allowed"] }, 405)
+    return jsonResponse(req, { errors: ["Method not allowed"] }, 405)
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
   const serviceRoleKey =
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SERVICE_ROLE_KEY") ?? ""
   if (!supabaseUrl || !serviceRoleKey) {
-    return jsonResponse({ errors: ["Missing Supabase environment variables."] }, 500)
+    return jsonResponse(req, { errors: ["Missing Supabase environment variables."] }, 500)
   }
 
   const supabaseClient = createClient(supabaseUrl, serviceRoleKey, {
@@ -94,22 +87,20 @@ Deno.serve(async (req: Request) => {
 
   try {
     const token = getBearerToken(req)
-    if (!token) return jsonResponse({ errors: ["Unauthorized"] }, 401)
-    console.log("[cv-update] incoming auth header present:", Boolean(token))
+    if (!token) return jsonResponse(req, { errors: ["Unauthorized"] }, 401)
     const { data: authData, error: authError } = await supabaseClient.auth.getUser(token)
-    if (authError || !authData.user) return jsonResponse({ errors: ["Unauthorized"] }, 401)
-    console.log("[cv-update] authenticated user_id:", authData.user.id)
+    if (authError || !authData.user) return jsonResponse(req, { errors: ["Unauthorized"] }, 401)
 
     const rateLimited = await enforceRateLimit(
       req,
       { prefix: "rl:cv-update", requests: 30, window: "1 m", key: authData.user.id },
-      corsHeaders,
+      corsHeadersFor(req),
     )
     if (rateLimited) return rateLimited
 
     const parsed = await readJsonBody(req)
     if (!parsed.ok) {
-      return jsonResponse({ errors: [parsed.error] }, parsed.status)
+      return jsonResponse(req, { errors: [parsed.error] }, parsed.status)
     }
     const body = parsed.value
     const allowedColumns = new Set([
@@ -138,9 +129,8 @@ Deno.serve(async (req: Request) => {
     }
 
     if (Object.keys(sanitizedBody).length === 0) {
-      return jsonResponse({ errors: ["No valid fields provided for update."] }, 400)
+      return jsonResponse(req, { errors: ["No valid fields provided for update."] }, 400)
     }
-    console.log("[cv-update] sanitized fields:", Object.keys(sanitizedBody))
 
     if ("full_name" in sanitizedBody || "email" in sanitizedBody) {
       const { data: existingCv, error: existingError } = await supabaseClient
@@ -148,7 +138,7 @@ Deno.serve(async (req: Request) => {
         .select("full_name,email")
         .eq("user_id", authData.user.id)
         .maybeSingle()
-      if (existingError) return jsonResponse({ errors: [existingError.message] }, 500)
+      if (existingError) return jsonResponse(req, { errors: [existingError.message] }, 500)
 
       const merged = {
         full_name: sanitizedBody.full_name ?? existingCv?.full_name ?? "",
@@ -156,7 +146,7 @@ Deno.serve(async (req: Request) => {
         work_experience: [] as unknown[],
       }
       const validationErrors = validateCvPayload(merged)
-      if (validationErrors.length > 0) return jsonResponse({ errors: validationErrors }, 400)
+      if (validationErrors.length > 0) return jsonResponse(req, { errors: validationErrors }, 400)
     }
 
     const upsertPayload = { user_id: authData.user.id, ...sanitizedBody }
@@ -167,13 +157,12 @@ Deno.serve(async (req: Request) => {
       .single()
 
     if (updateError) {
-      console.log("[cv-update] upsert error:", updateError)
-      return jsonResponse({ errors: [updateError.message] }, 500)
+      console.error("[cv-update] upsert error:", updateError.message)
+      return jsonResponse(req, { errors: [updateError.message] }, 500)
     }
-    console.log("[cv-update] upsert success user_id:", authData.user.id)
-    return jsonResponse({ success: true, cv: updatedCV }, 200)
+    return jsonResponse(req, { success: true, cv: updatedCV }, 200)
   } catch (error) {
-    return jsonResponse(
+    return jsonResponse(req, 
       { errors: [error instanceof Error ? error.message : "Unknown error"] },
       500,
     )
