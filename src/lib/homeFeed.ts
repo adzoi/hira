@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from "./supabase"
+import { clearStaleAuthSession, isRejectedJwtPostgrestError } from "./supabaseAuth.ts"
 import { jobVacancyStats } from "./jobVacancies.ts"
 import { jobVipIsActive } from "./vipJobTiers.ts"
 import { parseListingPreview } from "./listingDescription.ts"
@@ -195,7 +196,15 @@ export async function loadHomeFeed(): Promise<HomeFeedItem[]> {
     return [...MOCK_SERVICES, ...MOCK_JOB_LISTINGS].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
   }
 
-  const { data, error } = await supabase.rpc("get_home_feed")
+  const client = supabase
+
+  const fetchFeed = () => client.rpc("get_home_feed")
+
+  let { data, error } = await fetchFeed()
+  if (isRejectedJwtPostgrestError(error)) {
+    await clearStaleAuthSession(client)
+    ;({ data, error } = await fetchFeed())
+  }
   if (error) throw error
 
   const payload = data as null | { services?: unknown[]; jobs?: unknown[] }

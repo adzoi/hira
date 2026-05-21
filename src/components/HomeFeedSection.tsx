@@ -259,6 +259,11 @@ export default function HomeFeedSection() {
           setItems(data)
           setVisibleCount(PAGE_SIZE)
         }
+      } catch {
+        if (!cancelled) {
+          setItems([])
+          setVisibleCount(PAGE_SIZE)
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }

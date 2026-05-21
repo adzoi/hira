@@ -12,6 +12,7 @@ import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { formatListingPrice } from "../lib/listingPrice.ts"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
+import { clearStaleAuthSession, isRejectedJwtPostgrestError } from "../lib/supabaseAuth.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { mergeFreelancerCompletedWorkCounts } from "../lib/freelancerCompletedWorkCounts.ts"
 import { formatCityForDisplay, matchesLocationFilter } from "../lib/marketplaceFilters.ts"
@@ -447,12 +448,20 @@ export default function ListingsPage() {
       }
       setError("")
       try {
+        const client = supabase
         const offset = append ? listingsNextOffsetRef.current : 0
-        const { data, error: rpcErr } = await supabase.rpc("get_listings_page", {
-          p_search: null,
-          p_limit: LISTINGS_PAGE_SIZE,
-          p_offset: offset,
-        })
+        const runRpc = () =>
+          client.rpc("get_listings_page", {
+            p_search: null,
+            p_limit: LISTINGS_PAGE_SIZE,
+            p_offset: offset,
+          })
+
+        let { data, error: rpcErr } = await runRpc()
+        if (isRejectedJwtPostgrestError(rpcErr)) {
+          await clearStaleAuthSession(client)
+          ;({ data, error: rpcErr } = await runRpc())
+        }
         if (rpcErr) throw rpcErr
 
         const payload = data as null | {

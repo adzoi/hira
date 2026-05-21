@@ -10,6 +10,7 @@ import MarketplaceCatalogToolbar from "../components/MarketplaceCatalogToolbar.t
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
 import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
+import { clearStaleAuthSession, isRejectedJwtPostgrestError } from "../lib/supabaseAuth.ts"
 import { jobVacancyStats } from "../lib/jobVacancies.ts"
 import { formatCityForDisplay, jobMatchesUnifiedLocation } from "../lib/marketplaceFilters.ts"
 import { jobVipIsActive } from "../lib/vipJobTiers.ts"
@@ -503,14 +504,22 @@ export default function JobsPage() {
       }
       setError("")
       try {
+        const client = supabase
         const offset = append ? jobsNextOffsetRef.current : 0
         const category = serverCategoryForFetch
-        const { data, error: rpcErr } = await supabase.rpc("get_jobs_page", {
-          p_search: null,
-          p_limit: JOBS_PAGE_SIZE,
-          p_offset: offset,
-          p_category_id: category === "all" ? null : category,
-        })
+        const runRpc = () =>
+          client.rpc("get_jobs_page", {
+            p_search: null,
+            p_limit: JOBS_PAGE_SIZE,
+            p_offset: offset,
+            p_category_id: category === "all" ? null : category,
+          })
+
+        let { data, error: rpcErr } = await runRpc()
+        if (isRejectedJwtPostgrestError(rpcErr)) {
+          await clearStaleAuthSession(client)
+          ;({ data, error: rpcErr } = await runRpc())
+        }
         if (rpcErr) throw rpcErr
 
         const payload = data as Record<string, unknown> | null

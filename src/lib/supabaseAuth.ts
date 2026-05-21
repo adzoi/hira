@@ -1,4 +1,57 @@
-import type { Session, SupabaseClient, User } from "@supabase/supabase-js"
+import type { AuthError, Session, SupabaseClient, User } from "@supabase/supabase-js"
+
+/** True when the browser holds a session the auth server no longer accepts. */
+export function isStaleAuthSessionError(error: AuthError | null | undefined): boolean {
+  if (!error) return false
+  const msg = error.message.toLowerCase()
+  return (
+    msg.includes("refresh token") ||
+    msg.includes("invalid jwt") ||
+    msg.includes("jwt expired") ||
+    error.status === 401
+  )
+}
+
+/** PostgREST rejects requests when the attached user JWT cannot be verified. */
+export function isRejectedJwtPostgrestError(error: { code?: string } | null | undefined): boolean {
+  return error?.code === "PGRST301"
+}
+
+/** Drop invalid local auth so public API calls use the anon key again. */
+export async function clearStaleAuthSession(client: SupabaseClient): Promise<void> {
+  await client.auth.signOut({ scope: "local" }).catch(() => {})
+}
+
+function isAccessTokenExpired(session: Session): boolean {
+  const expiresAt = session.expires_at
+  if (!expiresAt) return false
+  return expiresAt * 1000 <= Date.now() + 30_000
+}
+
+/**
+ * On startup (or after a failed refresh), remove dead sessions from localStorage.
+ * Does not weaken server-side auth — only stops sending rejected JWTs on public pages.
+ */
+export async function recoverFromStaleAuthSession(client: SupabaseClient): Promise<void> {
+  const {
+    data: { session },
+  } = await client.auth.getSession()
+  if (!session || !isAccessTokenExpired(session)) return
+
+  const { error } = await client.auth.getUser()
+  if (error && isStaleAuthSessionError(error)) {
+    await clearStaleAuthSession(client)
+  }
+}
+
+let authRecoveryStarted = false
+
+/** Run once before the app mounts so public pages never send a rejected JWT. */
+export function initSupabaseAuth(client: SupabaseClient): Promise<void> {
+  if (authRecoveryStarted) return recoverFromStaleAuthSession(client)
+  authRecoveryStarted = true
+  return recoverFromStaleAuthSession(client)
+}
 
 /** Validates the user with the auth server, then returns the local session for API calls. */
 export async function getAuthenticatedSession(
@@ -8,7 +61,11 @@ export async function getAuthenticatedSession(
     data: { user },
     error,
   } = await client.auth.getUser()
-  if (error || !user) return { user: null, session: null }
+  if (error) {
+    if (isStaleAuthSessionError(error)) await clearStaleAuthSession(client)
+    return { user: null, session: null }
+  }
+  if (!user) return { user: null, session: null }
 
   const {
     data: { session },
