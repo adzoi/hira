@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import Navbar from "../components/Navbar.tsx"
+import ChatIcon from "../components/ui/ChatIcon.tsx"
 import EmptyState from "../components/ui/EmptyState.tsx"
 import ErrorState from "../components/ui/ErrorState.tsx"
 import PageLoader from "../components/ui/PageLoader.tsx"
@@ -19,7 +20,7 @@ import {
 import { subscribeToConversationMessages, subscribeToConversationReads } from "../lib/chatRealtime.ts"
 import { resolveProfilePublicHrefByIds } from "../lib/follows.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase.ts"
-import { validateUuid } from "../lib/validation.ts"
+import { LIMITS, validateUuid } from "../lib/validation.ts"
 
 function formatRelativeTime(iso: string | null): string {
   if (!iso) return ""
@@ -105,34 +106,53 @@ export default function MessagesPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const otherLastReadAtRef = useRef<string | null>(null)
+  const activeIdRef = useRef<string | null>(activeId)
+  const scrollBehaviorRef = useRef<ScrollBehavior>("auto")
+  const startChatInFlightRef = useRef(false)
+
+  const validatedActiveId = useMemo(() => {
+    if (!activeId) return null
+    const result = validateUuid(activeId, "საუბარი")
+    return result.ok ? result.value : null
+  }, [activeId])
+
+  useEffect(() => {
+    activeIdRef.current = validatedActiveId
+  }, [validatedActiveId])
 
   useEffect(() => {
     otherLastReadAtRef.current = otherLastReadAt
   }, [otherLastReadAt])
 
   const activeConversation = useMemo(
-    () => conversations.find((c) => c.id === activeId) ?? null,
-    [conversations, activeId],
+    () => conversations.find((c) => c.id === validatedActiveId) ?? null,
+    [conversations, validatedActiveId],
   )
 
-  const loadConversations = useCallback(async () => {
+  const loadConversations = useCallback(async (opts?: { silent?: boolean }) => {
     if (!isSupabaseConfigured || !supabase) {
       setListError("Supabase არ არის კონფიგურირებული.")
       setConversations([])
       setLoadingList(false)
       return
     }
-    setLoadingList(true)
-    setListError("")
+    if (!opts?.silent) {
+      setLoadingList(true)
+      setListError("")
+    }
     try {
       const list = await fetchConversations(supabase)
       setConversations(list)
       const hrefs = await resolveProfilePublicHrefByIds(list.map((c) => c.otherUserId))
       setProfileHrefs(hrefs)
     } catch (e) {
-      setListError(e instanceof Error ? e.message : "საუბრების ჩატვირთვა ვერ მოხერხდა.")
+      if (!opts?.silent) {
+        setListError(e instanceof Error ? e.message : "საუბრების ჩატვირთვა ვერ მოხერხდა.")
+      }
     } finally {
-      setLoadingList(false)
+      if (!opts?.silent) {
+        setLoadingList(false)
+      }
     }
   }, [])
 
@@ -141,17 +161,29 @@ export default function MessagesPage() {
   }, [loadConversations])
 
   useEffect(() => {
-    if (routeConversationId) {
-      setActiveId(routeConversationId)
+    if (!routeConversationId) {
+      setActiveId(null)
+      setMessages([])
+      setOtherLastReadAt(null)
+      setMeId("")
+      setThreadError("")
+      return
     }
-  }, [routeConversationId])
+    const result = validateUuid(routeConversationId, "საუბარი")
+    if (result.ok === false) {
+      setThreadError(result.message)
+      navigate("/messages", { replace: true })
+      return
+    }
+    setActiveId(result.value)
+  }, [routeConversationId, navigate])
 
   useEffect(() => {
     const withUserRaw = searchParams.get("with")?.trim()
     if (!withUserRaw || !supabase) return
 
     const withUserResult = validateUuid(withUserRaw, "მომხმარებელი")
-    if (!withUserResult.ok) {
+    if (withUserResult.ok === false) {
       setListError(withUserResult.message)
       setSearchParams({}, { replace: true })
       return
@@ -164,7 +196,7 @@ export default function MessagesPage() {
     let jobApplicationId: string | undefined
     if (inquiryRaw) {
       const inquiryResult = validateUuid(inquiryRaw, "შეთავაზება")
-      if (!inquiryResult.ok) {
+      if (inquiryResult.ok === false) {
         setListError(inquiryResult.message)
         setSearchParams({}, { replace: true })
         return
@@ -173,13 +205,16 @@ export default function MessagesPage() {
     }
     if (applicationRaw) {
       const applicationResult = validateUuid(applicationRaw, "განცხადება")
-      if (!applicationResult.ok) {
+      if (applicationResult.ok === false) {
         setListError(applicationResult.message)
         setSearchParams({}, { replace: true })
         return
       }
       jobApplicationId = applicationResult.value
     }
+
+    if (startChatInFlightRef.current) return
+    startChatInFlightRef.current = true
 
     let cancelled = false
     void (async () => {
@@ -196,18 +231,46 @@ export default function MessagesPage() {
         if (!cancelled) {
           setListError(e instanceof Error ? e.message : "საუბრის შექმნა ვერ მოხერხდა.")
         }
+      } finally {
+        if (!cancelled) startChatInFlightRef.current = false
       }
     })()
 
     return () => {
       cancelled = true
+      startChatInFlightRef.current = false
     }
   }, [searchParams, setSearchParams, navigate, loadConversations])
 
+  const bumpConversationInList = useCallback(
+    (conversationId: string, preview: string, at: string, markUnread: boolean) => {
+      const normalizedPreview = preview.replace(/\s+/g, " ").trim()
+      setConversations((prev) => {
+        const updated = prev.map((c) => {
+          if (c.id !== conversationId) return c
+          const unreadCount = markUnread ? c.unreadCount + 1 : 0
+          return {
+            ...c,
+            lastMessagePreview: normalizedPreview,
+            lastMessageAt: at,
+            unread: markUnread,
+            unreadCount,
+          }
+        })
+        const active = updated.find((c) => c.id === conversationId)
+        if (!active) return updated
+        return [active, ...updated.filter((c) => c.id !== conversationId)]
+      })
+    },
+    [],
+  )
+
   const openConversation = useCallback(
     (id: string) => {
-      setActiveId(id)
-      navigate(`/messages/${id}`)
+      const result = validateUuid(id, "საუბარი")
+      if (result.ok === false) return
+      setActiveId(result.value)
+      navigate(`/messages/${result.value}`)
     },
     [navigate],
   )
@@ -218,46 +281,59 @@ export default function MessagesPage() {
     setThreadError("")
     try {
       const { messages: rows, meId: uid, otherLastReadAt: otherRead } = await fetchMessages(supabase, conversationId)
+      if (activeIdRef.current !== conversationId) return
       setMessages(rows)
       setMeId(uid)
       setOtherLastReadAt(otherRead)
       await markConversationRead(supabase, conversationId)
-      setConversations((prev) => prev.map((c) => (c.id === conversationId ? { ...c, unread: false } : c)))
+      if (activeIdRef.current !== conversationId) return
+      setConversations((prev) =>
+        prev.map((c) => (c.id === conversationId ? { ...c, unread: false, unreadCount: 0 } : c)),
+      )
     } catch (e) {
+      if (activeIdRef.current !== conversationId) return
       setThreadError(e instanceof Error ? e.message : "შეტყობინებების ჩატვირთვა ვერ მოხერხდა.")
       setMessages([])
     } finally {
-      setLoadingThread(false)
+      if (activeIdRef.current === conversationId) {
+        setLoadingThread(false)
+      }
     }
   }, [])
 
   useEffect(() => {
-    if (!activeId || !supabase) {
+    if (!validatedActiveId || !supabase) {
       setMessages([])
       return
     }
-    void loadThread(activeId)
-  }, [activeId, loadThread])
+    let cancelled = false
+    void loadThread(validatedActiveId).then(() => {
+      if (!cancelled) scrollBehaviorRef.current = "auto"
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [validatedActiveId, loadThread])
 
   useEffect(() => {
     const client = supabase
-    if (!activeId || !client || !meId) return
+    if (!validatedActiveId || !client || !meId) return
 
-    const messagesChannel = subscribeToConversationMessages(client, activeId, meId, {
+    const messagesChannel = subscribeToConversationMessages(client, validatedActiveId, meId, {
       onInsert: (msg) => {
         setMessages((prev) => {
           if (prev.some((m) => m.id === msg.id)) return prev
           const next = [...prev, msg]
           return applyReadReceipts(next, otherLastReadAtRef.current)
         })
+        bumpConversationInList(validatedActiveId, msg.body, msg.createdAt, false)
         if (!msg.isOwn) {
-          void markConversationRead(client, activeId)
+          void markConversationRead(client, validatedActiveId)
         }
-        void loadConversations()
       },
     })
 
-    const readsChannel = subscribeToConversationReads(client, activeId, {
+    const readsChannel = subscribeToConversationReads(client, validatedActiveId, {
       onReadUpdate: ({ userId, lastReadAt }) => {
         if (userId === meId) return
         setOtherLastReadAt(lastReadAt)
@@ -269,33 +345,28 @@ export default function MessagesPage() {
       void client.removeChannel(messagesChannel)
       void client.removeChannel(readsChannel)
     }
-  }, [activeId, meId, loadConversations])
+  }, [validatedActiveId, meId, bumpConversationInList])
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages, activeId])
+    scrollBehaviorRef.current = "auto"
+  }, [validatedActiveId])
+
+  useEffect(() => {
+    if (messages.length === 0) return
+    messagesEndRef.current?.scrollIntoView({ behavior: scrollBehaviorRef.current })
+    scrollBehaviorRef.current = "smooth"
+  }, [messages])
 
   const handleSend = async () => {
-    if (!supabase || !activeId || sending) return
+    if (!supabase || !validatedActiveId || sending) return
     const text = draft.trim()
     if (!text) return
     setSending(true)
     try {
-      const msg = await sendMessage(supabase, activeId, text)
+      const msg = await sendMessage(supabase, validatedActiveId, text)
       setDraft("")
       setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]))
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === activeId
-            ? {
-                ...c,
-                lastMessagePreview: msg.body,
-                lastMessageAt: msg.createdAt,
-                unread: false,
-              }
-            : c,
-        ),
-      )
+      bumpConversationInList(validatedActiveId, msg.body, msg.createdAt, false)
       composerRef.current?.focus()
     } catch (e) {
       setThreadError(e instanceof Error ? e.message : "გაგზავნა ვერ მოხერხდა.")
@@ -311,7 +382,16 @@ export default function MessagesPage() {
     }
   }
 
-  const showThreadOnMobile = Boolean(activeId)
+  const showThreadOnMobile = Boolean(validatedActiveId)
+
+  useEffect(() => {
+    if (!showThreadOnMobile || window.matchMedia("(min-width: 768px)").matches) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [showThreadOnMobile])
 
   if (!isSupabaseConfigured) {
     return (
@@ -325,15 +405,27 @@ export default function MessagesPage() {
   }
 
   return (
-    <div className="page-enter min-h-screen bg-[#f8f9fc]">
+    <div
+      className={`page-enter flex min-h-dvh flex-col bg-[#f8f9fc ${showThreadOnMobile ? "h-dvh overflow-hidden" : ""}`}
+    >
       <Navbar />
-      <main className="mx-auto max-w-[1200px] px-4 py-6 md:py-8">
-        <header className="mb-4 md:mb-6">
+      <main
+        className={`mx-auto flex w-full max-w-[1200px] min-h-0 flex-1 flex-col ${
+          showThreadOnMobile ? "px-0 pb-0 pt-0 md:px-4 md:py-8" : "px-4 py-6 md:py-8"
+        }`}
+      >
+        <header className={`shrink-0 ${showThreadOnMobile ? "mb-4 hidden md:block md:mb-6" : "mb-4 md:mb-6"}`}>
           <h1 className="text-2xl font-bold text-[#1B2B4B] md:text-3xl">ჩათი</h1>
           <p className="mt-1 text-sm text-slate-600">მიმოწერა დამქირავებლებსა და ფრილანსერებთან</p>
         </header>
 
-        <div className="flex h-[min(72vh,640px)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div
+          className={`flex min-h-0 flex-1 overflow-hidden bg-white shadow-sm md:h-[min(72vh,640px)] md:flex-none ${
+            showThreadOnMobile
+              ? "border-t border-slate-200 md:rounded-2xl md:border"
+              : "h-[min(calc(100dvh-12rem),640px)] rounded-2xl border border-slate-200"
+          }`}
+        >
           <aside
             className={`flex w-full shrink-0 flex-col border-r border-slate-100 md:w-[320px] lg:w-[360px] ${
               showThreadOnMobile ? "hidden md:flex" : "flex"
@@ -342,7 +434,7 @@ export default function MessagesPage() {
             <div className="border-b border-slate-100 px-4 py-3">
               <p className="text-sm font-semibold text-[#1B2B4B]">საუბრები</p>
             </div>
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto overscroll-contain">
               {loadingList ? (
                 <div className="flex justify-center py-12">
                   <PageLoader />
@@ -359,7 +451,7 @@ export default function MessagesPage() {
                 <ul>
                   {conversations.map((c) => {
                     const avatar = supabase ? resolveAvatarSrc(supabase, c.otherAvatarUrl) : null
-                    const selected = c.id === activeId
+                    const selected = c.id === validatedActiveId
                     return (
                       <li key={c.id}>
                         <button
@@ -404,8 +496,10 @@ export default function MessagesPage() {
                               <p className="mt-0.5 text-xs text-slate-400">საუბარი დაიწყეთ</p>
                             )}
                           </div>
-                          {c.unread ? (
-                            <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-[#0088FF]" aria-hidden />
+                          {c.unreadCount > 0 ? (
+                            <span className="mt-1 flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                              {c.unreadCount > 99 ? "99+" : c.unreadCount}
+                            </span>
                           ) : null}
                         </button>
                       </li>
@@ -417,23 +511,18 @@ export default function MessagesPage() {
           </aside>
 
           <section className={`flex min-w-0 flex-1 flex-col ${showThreadOnMobile ? "flex" : "hidden md:flex"}`}>
-            {!activeId ? (
+            {!validatedActiveId ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center text-slate-500">
-                <svg viewBox="0 0 24 24" className="h-12 w-12 text-slate-300" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M8 10h8M8 14h5M6 20h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H9.5L6 8.5V18a2 2 0 0 0 2 2z"
-                  />
-                </svg>
+                <ChatIcon className="h-12 w-12 text-slate-300" />
                 <p className="text-sm font-medium text-slate-600">აირჩიეთ საუბარი ან დაიწყეთ ახალი</p>
               </div>
             ) : (
               <>
-                <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3">
+                <div className="flex shrink-0 items-center gap-3 border-b border-slate-100 px-3 py-3 sm:px-4">
                   <button
                     type="button"
-                    className="rounded-lg px-2 py-1 text-sm text-slate-600 hover:bg-slate-100 md:hidden"
+                    aria-label="საუბრების სიაში დაბრუნება"
+                    className="-ml-1 rounded-lg px-2 py-1.5 text-lg leading-none text-slate-600 hover:bg-slate-100 md:hidden"
                     onClick={() => {
                       setActiveId(null)
                       navigate("/messages")
@@ -469,13 +558,16 @@ export default function MessagesPage() {
                   )}
                 </div>
 
-                <div className="flex-1 overflow-y-auto bg-slate-50/50 px-4 py-4">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-slate-50/50 px-3 py-4 sm:px-4">
                   {loadingThread ? (
                     <div className="flex justify-center py-12">
                       <PageLoader />
                     </div>
                   ) : threadError ? (
-                    <ErrorState message={threadError} onRetry={() => activeId && void loadThread(activeId)} />
+                    <ErrorState
+                      message={threadError}
+                      onRetry={() => validatedActiveId && void loadThread(validatedActiveId)}
+                    />
                   ) : messages.length === 0 ? (
                     <p className="py-8 text-center text-sm text-slate-500">პირველი შეტყობინება გაგზავნეთ.</p>
                   ) : (
@@ -510,24 +602,35 @@ export default function MessagesPage() {
                   )}
                 </div>
 
-                <div className="border-t border-slate-100 bg-white p-3 md:p-4">
-                  <div className="flex gap-2">
+                <div className="shrink-0 border-t border-slate-100 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
+                  <div className="flex items-end gap-2">
                     <textarea
                       ref={composerRef}
                       value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
+                      onChange={(e) => setDraft(e.target.value.slice(0, LIMITS.chatMessage))}
                       onKeyDown={onComposerKeyDown}
-                      rows={2}
+                      rows={1}
+                      maxLength={LIMITS.chatMessage}
                       placeholder="დაწერეთ შეტყობინება…"
-                      className="min-h-[44px] flex-1 resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm text-[#1B2B4B] outline-none focus:border-[#0088FF] focus:ring-2 focus:ring-[#0088FF]/20"
+                      className="max-h-32 min-h-[44px] flex-1 resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-base text-[#1B2B4B] outline-none focus:border-[#0088FF] focus:ring-2 focus:ring-[#0088FF]/20 sm:text-sm"
                     />
                     <button
                       type="button"
                       disabled={sending || !draft.trim()}
+                      aria-label="გაგზავნა"
                       onClick={() => void handleSend()}
-                      className="flex h-11 shrink-0 items-center justify-center self-end rounded-xl bg-[#0088FF] px-4 text-sm font-semibold text-white transition hover:bg-[#006ACC] disabled:cursor-not-allowed disabled:opacity-50"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#0088FF] text-sm font-semibold text-white transition hover:bg-[#006ACC] disabled:cursor-not-allowed disabled:opacity-50 sm:h-11 sm:w-auto sm:px-4"
                     >
-                      {sending ? "…" : "გაგზავნა"}
+                      {sending ? (
+                        "…"
+                      ) : (
+                        <>
+                          <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5 sm:hidden" fill="currentColor">
+                            <path d="M3.4 20.4 22 12 3.4 3.6l2.8 7.2L17 12l-10.8 1.2-2.8 7.2z" />
+                          </svg>
+                          <span className="hidden sm:inline">გაგზავნა</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>

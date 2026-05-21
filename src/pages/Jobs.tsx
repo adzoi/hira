@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { unstable_batchedUpdates } from "react-dom"
-import { Link } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import Navbar from "../components/Navbar.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import EmptyState from "../components/ui/EmptyState.tsx"
@@ -288,6 +288,7 @@ function mapRpcRowsToJobs(jobRows: unknown[]): JobItem[] {
 }
 
 export default function JobsPage() {
+  const [searchParams] = useSearchParams()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [jobsTotal, setJobsTotal] = useState(0)
@@ -451,6 +452,11 @@ export default function JobsPage() {
       document.title = "გიგორი"
     }
   }, [])
+
+  useEffect(() => {
+    const query = searchParams.get("q")
+    if (query) setSearchText(normalizeSearchInput(query))
+  }, [searchParams])
 
   useEffect(() => {
     if (!advancedDropdownOpen) return

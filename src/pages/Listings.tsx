@@ -330,7 +330,7 @@ export default function ListingsPage() {
   const submitListingInquiry = async () => {
     if (!isSupabaseConfigured || !supabase || !inquiryListing) return
     const msgResult = validateInquiryMessage(inquiryMessage)
-    if (!msgResult.ok) {
+    if (msgResult.ok === false) {
       setInquiryFormError(msgResult.message)
       return
     }
@@ -339,8 +339,12 @@ export default function ListingsPage() {
     const rawB = inquiryBudget.trim()
     if (rawB) {
       const budgetResult = validateMoneyAmount(rawB, { min: 0, label: "შემოთავაზებული თანხა" })
-      if (!budgetResult.ok || budgetResult.value == null) {
-        setInquiryFormError(budgetResult.ok ? "შემოთავაზებული თანხა არასწორია." : budgetResult.message)
+      if (budgetResult.ok === false) {
+        setInquiryFormError(budgetResult.message)
+        return
+      }
+      if (budgetResult.value == null) {
+        setInquiryFormError("შემოთავაზებული თანხა არასწორია.")
         return
       }
       proposed = budgetResult.value
@@ -393,6 +397,11 @@ export default function ListingsPage() {
       document.title = "გიგორი"
     }
   }, [])
+
+  useEffect(() => {
+    const query = searchParams.get("q")
+    if (query) setSearchText(normalizeSearchInput(query))
+  }, [searchParams])
 
   useEffect(() => {
     if (!advancedDropdownOpen) return

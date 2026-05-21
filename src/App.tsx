@@ -76,6 +76,7 @@ function sanitizeLoginRedirect(raw: string | null): string | null {
 function HomePage() {
   const navigate = useNavigate()
   const [searchText, setSearchText] = useState("")
+  const [viewerType, setViewerType] = useState<"freelancer" | "hirer" | null>(null)
   const [stats, setStats] = useState<HomeStats>({
     freelancerCount: 0,
     jobCount: 0,
@@ -83,6 +84,25 @@ function HomePage() {
   })
   useEffect(() => {
     document.title = "გიგორი — ქართული freelance პლატფორმა"
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const loadViewerType = async () => {
+      if (!isSupabaseConfigured || !supabase) return
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (cancelled || !user) return
+      const { data: profile } = await supabase.from("profiles").select("user_type").eq("id", user.id).maybeSingle()
+      if (cancelled) return
+      const ut = profile?.user_type
+      if (ut === "freelancer" || ut === "hirer") setViewerType(ut)
+    }
+    void loadViewerType()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
@@ -115,11 +135,12 @@ function HomePage() {
 
   const handleSearch = () => {
     const trimmed = normalizeSearchInput(searchText)
+    const searchPath = viewerType === "freelancer" ? "/jobs" : "/listings"
     if (!trimmed) {
-      navigate("/browse")
+      navigate(searchPath)
       return
     }
-    navigate(`/browse?q=${encodeURIComponent(trimmed)}`)
+    navigate(`${searchPath}?q=${encodeURIComponent(trimmed)}`)
   }
 
   return (
@@ -252,12 +273,12 @@ function LoginPage() {
     }
 
     const emailResult = validateEmail(email)
-    if (!emailResult.ok) {
+    if (emailResult.ok === false) {
       setError(emailResult.message)
       return
     }
     const passwordResult = validatePassword(password)
-    if (!passwordResult.ok) {
+    if (passwordResult.ok === false) {
       setError(passwordResult.message)
       return
     }
@@ -488,17 +509,17 @@ function RegisterPage() {
       max: LIMITS.fullName,
       label: "სახელი",
     })
-    if (!fullNameResult.ok) {
+    if (fullNameResult.ok === false) {
       setError(fullNameResult.message)
       return
     }
     const emailResult = validateEmail(email)
-    if (!emailResult.ok) {
+    if (emailResult.ok === false) {
       setError(emailResult.message)
       return
     }
     const passwordResult = validatePassword(password)
-    if (!passwordResult.ok) {
+    if (passwordResult.ok === false) {
       setError(passwordResult.message)
       return
     }
@@ -507,12 +528,12 @@ function RegisterPage() {
       return
     }
     const cityResult = validateTextField(city, { max: LIMITS.city, label: "ქალაქი" })
-    if (!cityResult.ok) {
+    if (cityResult.ok === false) {
       setError(cityResult.message)
       return
     }
     const phoneResult = validateOptionalTextField(phone, { max: LIMITS.phone, label: "ტელეფონი" })
-    if (!phoneResult.ok) {
+    if (phoneResult.ok === false) {
       setError(phoneResult.message)
       return
     }
@@ -544,7 +565,7 @@ function RegisterPage() {
     registerInFlightRef.current = true
     try {
       const rateCheck = await consumeAuthRateLimit("register", formData.email)
-      if (!rateCheck.ok) {
+      if (rateCheck.ok === false) {
         setCooldownUntil(authCooldownUntil(rateCheck.retryAfterSeconds))
         setError(`ზედმეტი მცდელობები დაფიქსირდა. გთხოვ, სცადე ${rateCheck.retryAfterSeconds} წამში.`)
         return

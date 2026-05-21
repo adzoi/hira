@@ -1,5 +1,6 @@
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js"
 import type { ChatMessage } from "./chat.ts"
+import { validateUuid } from "./validation.ts"
 
 export type MessageRealtimeHandlers = {
   onInsert: (message: ChatMessage) => void
@@ -9,15 +10,22 @@ export type ConversationReadRealtimeHandlers = {
   onReadUpdate: (payload: { userId: string; lastReadAt: string }) => void
 }
 
+function requireConversationIdForRealtime(conversationId: string): string {
+  const result = validateUuid(conversationId, "საუბარი")
+  if (!result.ok) throw new Error(result.message)
+  return result.value
+}
+
 export function subscribeToConversationMessages(
   client: SupabaseClient,
   conversationId: string,
   meId: string,
   handlers: MessageRealtimeHandlers,
 ): RealtimeChannel {
-  const filter = `conversation_id=eq.${conversationId}`
+  const convId = requireConversationIdForRealtime(conversationId)
+  const filter = `conversation_id=eq.${convId}`
   return client
-    .channel(`messages:${conversationId}`)
+    .channel(`messages:${convId}`)
     .on(
       "postgres_changes",
       {
@@ -48,9 +56,10 @@ export function subscribeToConversationReads(
   conversationId: string,
   handlers: ConversationReadRealtimeHandlers,
 ): RealtimeChannel {
-  const filter = `conversation_id=eq.${conversationId}`
+  const convId = requireConversationIdForRealtime(conversationId)
+  const filter = `conversation_id=eq.${convId}`
   return client
-    .channel(`conversation-reads:${conversationId}`)
+    .channel(`conversation-reads:${convId}`)
     .on(
       "postgres_changes",
       {

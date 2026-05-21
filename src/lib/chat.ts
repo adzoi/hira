@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { avatarImageUrl } from "./storageImageUrl.ts"
-import { LIMITS, validateTextField, validateUuid } from "./validation.ts"
+import { assertField, LIMITS, validateTextField, validateUuid } from "./validation.ts"
 
 export type ChatMessage = {
   id: string
@@ -31,6 +31,7 @@ export type ChatConversation = {
   lastMessagePreview: string | null
   lastMessageAt: string | null
   unread: boolean
+  unreadCount: number
   contextLabel: string | null
 }
 
@@ -60,36 +61,113 @@ function otherParticipantId(
   return conversation.participant_low === me ? conversation.participant_high : conversation.participant_low
 }
 
+function requireConversationId(conversationId: string): string {
+  return assertField(validateUuid(conversationId, "საუბარი"))
+}
+
 export async function getOrCreateConversation(
   client: SupabaseClient,
   otherUserId: string,
   opts?: { jobApplicationId?: string; serviceInquiryId?: string },
 ): Promise<string> {
-  const otherResult = validateUuid(otherUserId, "მომხმარებელი")
-  if (!otherResult.ok) throw new Error(otherResult.message)
+  const validatedOtherUserId = assertField(validateUuid(otherUserId, "მომხმარებელი"))
 
   let jobApplicationId: string | null = null
   if (opts?.jobApplicationId) {
-    const appResult = validateUuid(opts.jobApplicationId, "განცხადება")
-    if (!appResult.ok) throw new Error(appResult.message)
-    jobApplicationId = appResult.value
+    jobApplicationId = assertField(validateUuid(opts.jobApplicationId, "განცხადება"))
   }
 
   let serviceInquiryId: string | null = null
   if (opts?.serviceInquiryId) {
-    const inquiryResult = validateUuid(opts.serviceInquiryId, "შეთავაზება")
-    if (!inquiryResult.ok) throw new Error(inquiryResult.message)
-    serviceInquiryId = inquiryResult.value
+    serviceInquiryId = assertField(validateUuid(opts.serviceInquiryId, "შეთავაზება"))
   }
 
   const { data, error } = await client.rpc("get_or_create_conversation", {
-    p_other_user_id: otherResult.value,
+    p_other_user_id: validatedOtherUserId,
     p_job_application_id: jobApplicationId,
     p_service_inquiry_id: serviceInquiryId,
   })
   if (error) throw error
   if (!data) throw new Error("Conversation could not be created")
   return String(data)
+}
+
+type InboxMessageStats = {
+  latestByConv: Map<string, { body: string; created_at: string; sender_id: string }>
+  unreadCountMap: Map<string, number>
+}
+
+async function fetchInboxMessageStats(
+  client: SupabaseClient,
+  convIds: string[],
+  userId: string,
+): Promise<InboxMessageStats> {
+  const latestByConv = new Map<string, { body: string; created_at: string; sender_id: string }>()
+  const unreadCountMap = new Map<string, number>()
+  if (convIds.length === 0) return { latestByConv, unreadCountMap }
+
+  const statsRes = await client.rpc("get_chat_inbox_message_stats")
+  if (!statsRes.error && statsRes.data) {
+    for (const row of statsRes.data) {
+      const cid = String(row.conversation_id)
+      unreadCountMap.set(cid, Number(row.unread_count) || 0)
+      if (row.last_body != null && row.last_created_at != null && row.last_sender_id != null) {
+        latestByConv.set(cid, {
+          body: String(row.last_body),
+          created_at: String(row.last_created_at),
+          sender_id: String(row.last_sender_id),
+        })
+      }
+    }
+    return { latestByConv, unreadCountMap }
+  }
+
+  if (statsRes.error) {
+    console.warn("[chat] inbox stats rpc unavailable, using client fallback:", statsRes.error.message)
+  }
+
+  const [readsRes, latestMsgsRes, otherMsgsRes] = await Promise.all([
+    client
+      .from("conversation_reads")
+      .select("conversation_id, last_read_at")
+      .eq("user_id", userId)
+      .in("conversation_id", convIds),
+    client
+      .from("messages")
+      .select("conversation_id, body, created_at, sender_id")
+      .in("conversation_id", convIds)
+      .order("created_at", { ascending: false }),
+    client
+      .from("messages")
+      .select("conversation_id, created_at")
+      .in("conversation_id", convIds)
+      .neq("sender_id", userId),
+  ])
+
+  const readMap = new Map<string, string>()
+  for (const r of readsRes.data ?? []) {
+    readMap.set(String(r.conversation_id), String(r.last_read_at))
+  }
+
+  for (const m of latestMsgsRes.data ?? []) {
+    const cid = String(m.conversation_id)
+    if (!latestByConv.has(cid)) {
+      latestByConv.set(cid, {
+        body: String(m.body),
+        created_at: String(m.created_at),
+        sender_id: String(m.sender_id),
+      })
+    }
+  }
+
+  for (const m of otherMsgsRes.data ?? []) {
+    const cid = String(m.conversation_id)
+    const lastReadAt = readMap.get(cid)
+    if (lastReadAt && new Date(String(m.created_at)) <= new Date(lastReadAt)) continue
+    unreadCountMap.set(cid, (unreadCountMap.get(cid) ?? 0) + 1)
+  }
+
+  return { latestByConv, unreadCountMap }
 }
 
 export async function fetchConversations(client: SupabaseClient): Promise<ChatConversation[]> {
@@ -121,36 +199,14 @@ export async function fetchConversations(client: SupabaseClient): Promise<ChatCo
 
   const convIds = convRows.map((c) => String((c as { id: string }).id))
 
-  const [profilesRes, readsRes, latestMsgsRes] = await Promise.all([
+  const [profilesRes, { latestByConv, unreadCountMap }] = await Promise.all([
     client.from("profiles").select("id, full_name, avatar_url").in("id", otherIds),
-    client.from("conversation_reads").select("conversation_id, last_read_at").eq("user_id", user.id).in("conversation_id", convIds),
-    client
-      .from("messages")
-      .select("conversation_id, body, created_at, sender_id")
-      .in("conversation_id", convIds)
-      .order("created_at", { ascending: false }),
+    fetchInboxMessageStats(client, convIds, user.id),
   ])
 
   const profileMap = new Map<string, { full_name: string | null; avatar_url: string | null }>()
   for (const p of profilesRes.data ?? []) {
     profileMap.set(String(p.id), { full_name: p.full_name, avatar_url: p.avatar_url })
-  }
-
-  const readMap = new Map<string, string>()
-  for (const r of readsRes.data ?? []) {
-    readMap.set(String(r.conversation_id), String(r.last_read_at))
-  }
-
-  const latestByConv = new Map<string, { body: string; created_at: string; sender_id: string }>()
-  for (const m of latestMsgsRes.data ?? []) {
-    const cid = String(m.conversation_id)
-    if (!latestByConv.has(cid)) {
-      latestByConv.set(cid, {
-        body: String(m.body),
-        created_at: String(m.created_at),
-        sender_id: String(m.sender_id),
-      })
-    }
   }
 
   return convRows.map((raw) => {
@@ -173,12 +229,9 @@ export async function fetchConversations(client: SupabaseClient): Promise<ChatCo
     const otherId = otherParticipantId(c, user.id)
     const prof = profileMap.get(otherId)
     const latest = latestByConv.get(c.id)
-    const lastReadAt = readMap.get(c.id)
     const lastActivity = latest?.created_at ?? c.last_message_at
-    const unread =
-      latest != null &&
-      latest.sender_id !== user.id &&
-      (!lastReadAt || new Date(latest.created_at) > new Date(lastReadAt))
+    const unreadCount = unreadCountMap.get(c.id) ?? 0
+    const unread = unreadCount > 0
 
     const jobApps = c.job_applications
     const jobRow = Array.isArray(jobApps) ? jobApps[0] : jobApps
@@ -204,6 +257,7 @@ export async function fetchConversations(client: SupabaseClient): Promise<ChatCo
       lastMessagePreview: latest ? latest.body.replace(/\s+/g, " ").trim() : null,
       lastMessageAt: lastActivity,
       unread,
+      unreadCount,
       contextLabel,
     }
   })
@@ -214,10 +268,11 @@ export async function fetchOtherParticipantLastReadAt(
   conversationId: string,
   meId: string,
 ): Promise<string | null> {
+  const convId = requireConversationId(conversationId)
   const { data: conv, error: convErr } = await client
     .from("conversations")
     .select("participant_low, participant_high")
-    .eq("id", conversationId)
+    .eq("id", convId)
     .maybeSingle()
   if (convErr || !conv) return null
 
@@ -228,7 +283,7 @@ export async function fetchOtherParticipantLastReadAt(
   const { data: readRow, error: readErr } = await client
     .from("conversation_reads")
     .select("last_read_at")
-    .eq("conversation_id", conversationId)
+    .eq("conversation_id", convId)
     .eq("user_id", otherId)
     .maybeSingle()
   if (readErr) {
@@ -242,6 +297,7 @@ export async function fetchMessages(
   client: SupabaseClient,
   conversationId: string,
 ): Promise<{ messages: ChatMessage[]; meId: string; otherLastReadAt: string | null }> {
+  const convId = requireConversationId(conversationId)
   const {
     data: { user },
     error: userErr,
@@ -252,10 +308,10 @@ export async function fetchMessages(
     client
       .from("messages")
       .select("id, conversation_id, sender_id, body, created_at")
-      .eq("conversation_id", conversationId)
+      .eq("conversation_id", convId)
       .order("created_at", { ascending: true })
       .limit(200),
-    fetchOtherParticipantLastReadAt(client, conversationId, user.id),
+    fetchOtherParticipantLastReadAt(client, convId, user.id),
   ])
 
   if (messagesRes.error) throw messagesRes.error
@@ -278,13 +334,14 @@ export async function fetchMessages(
 }
 
 export async function sendMessage(client: SupabaseClient, conversationId: string, body: string): Promise<ChatMessage> {
-  const validated = validateTextField(body, {
-    min: LIMITS.chatMessageMin,
-    max: LIMITS.chatMessage,
-    label: "შეტყობინება",
-  })
-  if (!validated.ok) throw new Error(validated.message)
-  const trimmed = validated.value
+  const convId = requireConversationId(conversationId)
+  const trimmed = assertField(
+    validateTextField(body, {
+      min: LIMITS.chatMessageMin,
+      max: LIMITS.chatMessage,
+      label: "შეტყობინება",
+    }),
+  )
 
   const {
     data: { user },
@@ -295,7 +352,7 @@ export async function sendMessage(client: SupabaseClient, conversationId: string
   const { data, error } = await client
     .from("messages")
     .insert({
-      conversation_id: conversationId,
+      conversation_id: convId,
       sender_id: user.id,
       body: trimmed,
     })
@@ -318,7 +375,7 @@ export async function sendMessage(client: SupabaseClient, conversationId: string
 
 export async function fetchUnreadConversationCount(client: SupabaseClient): Promise<number> {
   const list = await fetchConversations(client)
-  return list.filter((c) => c.unread).length
+  return list.reduce((sum, c) => sum + c.unreadCount, 0)
 }
 
 export function applyReadReceipts(messages: ChatMessage[], otherLastReadAt: string | null): ChatMessage[] {
@@ -330,6 +387,7 @@ export function applyReadReceipts(messages: ChatMessage[], otherLastReadAt: stri
 }
 
 export async function markConversationRead(client: SupabaseClient, conversationId: string): Promise<void> {
+  const convId = requireConversationId(conversationId)
   const {
     data: { user },
     error: userErr,
@@ -338,7 +396,7 @@ export async function markConversationRead(client: SupabaseClient, conversationI
 
   const { error } = await client.from("conversation_reads").upsert(
     {
-      conversation_id: conversationId,
+      conversation_id: convId,
       user_id: user.id,
       last_read_at: new Date().toISOString(),
     },

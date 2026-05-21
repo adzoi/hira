@@ -1328,6 +1328,16 @@ export interface Database {
         Args: Record<PropertyKey, never>
         Returns: unknown
       }
+      get_chat_inbox_message_stats: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          conversation_id: string
+          unread_count: number
+          last_body: string | null
+          last_created_at: string | null
+          last_sender_id: string | null
+        }[]
+      }
       get_or_create_conversation: {
         Args: {
           p_other_user_id: string

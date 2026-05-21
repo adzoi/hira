@@ -19,7 +19,7 @@ COMMENT ON COLUMN public.services.price_type IS
 -- get_home_feed: expose price_type instead of delivery_days
 DROP FUNCTION IF EXISTS public.get_home_feed();
 
-CREATE OR REPLACE FUNCTION public.get_home_feed()
+CREATE OR REPLACE FUNCTION public.get_home_feed() 
 RETURNS json
 LANGUAGE plpgsql
 STABLE

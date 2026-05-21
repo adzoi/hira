@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom"
 import type { Json } from "../lib/database.types"
 import { fetchUnreadConversationCount } from "../lib/chat.ts"
 import { subscribeToChatInbox } from "../lib/chatRealtime.ts"
+import ChatIcon from "./ui/ChatIcon.tsx"
 import {
   fetchNotifications,
   markAllAsRead,
@@ -378,7 +379,7 @@ export default function Navbar() {
   return (
     <>
     <header className={`sticky top-0 z-40 border-b border-slate-200 bg-white font-sans ${isScrolled ? "shadow-sm" : ""}`}>
-      <div className="mx-auto flex w-full max-w-none items-center justify-between pl-20 pr-6 py-3 md:pr-8">
+      <div className="mx-auto flex w-full max-w-none items-center justify-between px-4 py-3 md:pl-20 md:pr-8">
         <Link to="/" className="inline-flex items-center" aria-label="მთავარი">
           <img src="/images/logo.png" alt="გიგორი" className="h-[52px] w-auto object-contain" />
         </Link>
@@ -442,15 +443,9 @@ export default function Navbar() {
                   : "border-slate-300 bg-white text-slate-500 hover:border-slate-400 hover:text-slate-700"
               }`}
             >
-              <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M8 10h8M8 14h5M6 20h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H9.5L6 8.5V18a2 2 0 0 0 2 2z"
-                />
-              </svg>
+              <ChatIcon className="h-5 w-5" />
               {unreadChatCount > 0 ? (
-                <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#0088FF] px-1 text-[10px] font-bold text-white ring-2 ring-white">
+                <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
                   {unreadChatCount > 99 ? "99+" : unreadChatCount}
                 </span>
               ) : null}
@@ -644,6 +639,20 @@ export default function Navbar() {
           ))}
           {isAuthed ? (
             <>
+              <Link
+                to="/messages"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`flex items-center justify-between rounded-md px-3 py-3 text-sm font-semibold ${
+                  location.pathname.startsWith("/messages") ? "bg-amber-50 text-[#1B2B4B]" : "text-[#1B2B4B]"
+                }`}
+              >
+                <span>ჩათი</span>
+                {unreadChatCount > 0 ? (
+                  <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">
+                    {unreadChatCount > 99 ? "99+" : unreadChatCount}
+                  </span>
+                ) : null}
+              </Link>
               <button
                 type="button"
                 onClick={() => {
