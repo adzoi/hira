@@ -9,8 +9,8 @@ import SkeletonCard from "../components/ui/SkeletonCard.tsx"
 import MarketplaceCatalogToolbar from "../components/MarketplaceCatalogToolbar.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
 import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
-import { isSupabaseConfigured, supabase } from "../lib/supabase"
-import { clearStaleAuthSession, isRejectedJwtPostgrestError } from "../lib/supabaseAuth.ts"
+import { isSupabaseConfigured, supabase, formatSupabaseClientError } from "../lib/supabase"
+import { withRejectedJwtRetry } from "../lib/supabaseAuth.ts"
 import { jobVacancyStats } from "../lib/jobVacancies.ts"
 import { formatCityForDisplay, jobMatchesUnifiedLocation } from "../lib/marketplaceFilters.ts"
 import { jobVipIsActive } from "../lib/vipJobTiers.ts"
@@ -515,11 +515,7 @@ export default function JobsPage() {
             p_category_id: category === "all" ? null : category,
           })
 
-        let { data, error: rpcErr } = await runRpc()
-        if (isRejectedJwtPostgrestError(rpcErr)) {
-          await clearStaleAuthSession(client)
-          ;({ data, error: rpcErr } = await runRpc())
-        }
+        const { data, error: rpcErr } = await withRejectedJwtRetry(client, runRpc)
         if (rpcErr) throw rpcErr
 
         const payload = data as Record<string, unknown> | null
@@ -571,37 +567,43 @@ export default function JobsPage() {
 
         if (!append && !subcategoriesFetchedRef.current) {
           subcategoriesFetchedRef.current = true
-          if (!supabase) return
-          const subRows = await fetchAllRowsByRange((from, to) => {
-            if (!supabase) return
-            return supabase
-              .from("subcategories")
-              .select("id,name_ka,category_id")
-              .eq("is_active", true)
-              .order("name_ka")
-              .range(from, to)
-          })
-          unstable_batchedUpdates(() => {
-            setSubcategoryNamesById(
-              new Map(
-                subRows.map((r) => {
-                  const row = r as { id?: string; name_ka?: string }
-                  return [String(row.id ?? ""), String(row.name_ka ?? "")] as const
-                }),
-              ),
+          try {
+            const subRows = await fetchAllRowsByRange(
+              (from, to) =>
+                client
+                  .from("subcategories")
+                  .select("id,name_ka,category_id")
+                  .eq("is_active", true)
+                  .order("name_ka")
+                  .range(from, to),
+              500,
+              client,
             )
-            setSubcategoryParentById(
-              new Map(
-                subRows.map((r) => {
-                  const row = r as { id?: string; category_id?: string | null }
-                  return [String(row.id ?? ""), String(row.category_id ?? "")] as const
-                }),
-              ),
-            )
-          })
+            unstable_batchedUpdates(() => {
+              setSubcategoryNamesById(
+                new Map(
+                  subRows.map((r) => {
+                    const row = r as { id?: string; name_ka?: string }
+                    return [String(row.id ?? ""), String(row.name_ka ?? "")] as const
+                  }),
+                ),
+              )
+              setSubcategoryParentById(
+                new Map(
+                  subRows.map((r) => {
+                    const row = r as { id?: string; category_id?: string | null }
+                    return [String(row.id ?? ""), String(row.category_id ?? "")] as const
+                  }),
+                ),
+              )
+            })
+          } catch (subcategoryError) {
+            console.warn("[jobs] subcategory filters unavailable:", subcategoryError)
+          }
         }
       } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : "მონაცემები ვერ ჩაიტვირთა.")
+        console.error("[jobs] catalog load failed:", loadError)
+        setError(formatSupabaseClientError(loadError, "მონაცემები ვერ ჩაიტვირთა."))
       } finally {
         setLoading(false)
         setLoadingMore(false)

@@ -1,4 +1,5 @@
-import type { PostgrestError } from "@supabase/supabase-js"
+import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js"
+import { clearStaleAuthSession, isRejectedJwtPostgrestError } from "./supabaseAuth.ts"
 
 type PagedChunk<T> = { data: T[] | null; error: PostgrestError | null }
 
@@ -11,16 +12,37 @@ export const SUPABASE_RANGE_PAGE_SIZE = 500
  *
  * `fetchChunk` should return a PostgREST builder chain ending in `.range(from, to)` (thenable).
  */
+async function fetchChunkWithOptionalAuthRecovery<T>(
+  client: SupabaseClient | undefined,
+  fetchChunk: (from: number, to: number) => unknown,
+  from: number,
+  to: number,
+): Promise<PagedChunk<T>> {
+  const run = () => {
+    const pending = fetchChunk(from, to) as PromiseLike<PagedChunk<T>> | undefined
+    if (!pending) throw new Error("Paged query did not return a result.")
+    return pending
+  }
+
+  let { data, error } = await run()
+  if (client && isRejectedJwtPostgrestError(error)) {
+    await clearStaleAuthSession(client)
+    ;({ data, error } = await run())
+  }
+  return { data, error }
+}
+
 export async function fetchAllRowsByRange<T>(
   fetchChunk: (from: number, to: number) => unknown,
   pageSize = SUPABASE_RANGE_PAGE_SIZE,
+  client?: SupabaseClient,
 ): Promise<T[]> {
   if (pageSize < 1) throw new Error("pageSize must be >= 1")
   const out: T[] = []
   let from = 0
   for (;;) {
     const to = from + pageSize - 1
-    const { data, error } = await (fetchChunk(from, to) as PromiseLike<PagedChunk<T>>)
+    const { data, error } = await fetchChunkWithOptionalAuthRecovery<T>(client, fetchChunk, from, to)
     if (error) throw error
     const rows = data ?? []
     out.push(...rows)

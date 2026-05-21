@@ -22,10 +22,17 @@ export async function clearStaleAuthSession(client: SupabaseClient): Promise<voi
   await client.auth.signOut({ scope: "local" }).catch(() => {})
 }
 
-function isAccessTokenExpired(session: Session): boolean {
-  const expiresAt = session.expires_at
-  if (!expiresAt) return false
-  return expiresAt * 1000 <= Date.now() + 30_000
+/** Retry a Supabase call once after clearing a rejected browser JWT. */
+export async function withRejectedJwtRetry<T extends { error: { code?: string } | null }>(
+  client: SupabaseClient,
+  fn: () => PromiseLike<T>,
+): Promise<T> {
+  let result = await fn()
+  if (isRejectedJwtPostgrestError(result.error)) {
+    await clearStaleAuthSession(client)
+    result = await fn()
+  }
+  return result
 }
 
 /**
@@ -36,7 +43,7 @@ export async function recoverFromStaleAuthSession(client: SupabaseClient): Promi
   const {
     data: { session },
   } = await client.auth.getSession()
-  if (!session || !isAccessTokenExpired(session)) return
+  if (!session) return
 
   const { error } = await client.auth.getUser()
   if (error && isStaleAuthSessionError(error)) {

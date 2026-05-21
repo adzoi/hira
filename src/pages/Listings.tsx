@@ -12,8 +12,8 @@ import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { formatListingPrice } from "../lib/listingPrice.ts"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
-import { clearStaleAuthSession, isRejectedJwtPostgrestError } from "../lib/supabaseAuth.ts"
-import { isSupabaseConfigured, supabase } from "../lib/supabase"
+import { withRejectedJwtRetry } from "../lib/supabaseAuth.ts"
+import { isSupabaseConfigured, supabase, formatSupabaseClientError } from "../lib/supabase"
 import { mergeFreelancerCompletedWorkCounts } from "../lib/freelancerCompletedWorkCounts.ts"
 import { formatCityForDisplay, matchesLocationFilter } from "../lib/marketplaceFilters.ts"
 import {
@@ -457,11 +457,7 @@ export default function ListingsPage() {
             p_offset: offset,
           })
 
-        let { data, error: rpcErr } = await runRpc()
-        if (isRejectedJwtPostgrestError(rpcErr)) {
-          await clearStaleAuthSession(client)
-          ;({ data, error: rpcErr } = await runRpc())
-        }
+        const { data, error: rpcErr } = await withRejectedJwtRetry(client, runRpc)
         if (rpcErr) throw rpcErr
 
         const payload = data as null | {
@@ -588,32 +584,37 @@ export default function ListingsPage() {
           }),
         )
         if (!append) {
-          if (!supabase) return
-          const subRows = await fetchAllRowsByRange((from, to) => {
-            if (!supabase) return;
-            return supabase
-              .from("subcategories")
-              .select("id,name_ka,category_id")
-              .eq("is_active", true)
-              .order("name_ka")
-              .range(from, to)
-          })
-          setSubcategoryNamesById(
-            new Map(
-              subRows.map((r) => {
-                const row = r as { id?: string; name_ka?: string }
-                return [String(row.id ?? ""), String(row.name_ka ?? "")] as const
-              }),
-            ),
-          )
-          setSubcategoryParentById(
-            new Map(
-              subRows.map((r) => {
-                const row = r as { id?: string; category_id?: string | null }
-                return [String(row.id ?? ""), String(row.category_id ?? "")] as const
-              }),
-            ),
-          )
+          try {
+            const subRows = await fetchAllRowsByRange(
+              (from, to) =>
+                client
+                  .from("subcategories")
+                  .select("id,name_ka,category_id")
+                  .eq("is_active", true)
+                  .order("name_ka")
+                  .range(from, to),
+              500,
+              client,
+            )
+            setSubcategoryNamesById(
+              new Map(
+                subRows.map((r) => {
+                  const row = r as { id?: string; name_ka?: string }
+                  return [String(row.id ?? ""), String(row.name_ka ?? "")] as const
+                }),
+              ),
+            )
+            setSubcategoryParentById(
+              new Map(
+                subRows.map((r) => {
+                  const row = r as { id?: string; category_id?: string | null }
+                  return [String(row.id ?? ""), String(row.category_id ?? "")] as const
+                }),
+              ),
+            )
+          } catch (subcategoryError) {
+            console.warn("[listings] subcategory filters unavailable:", subcategoryError)
+          }
         }
         setSkills(
           skillsPayload.map((sk) => {
@@ -626,11 +627,8 @@ export default function ListingsPage() {
           }),
         )
       } catch (e) {
-        const message =
-          e && typeof e === "object" && "message" in e
-            ? String((e as { message: unknown }).message)
-            : "მონაცემების ჩატვირთვა ვერ მოხერხდა."
-        setError(message)
+        console.error("[listings] catalog load failed:", e)
+        setError(formatSupabaseClientError(e, "მონაცემების ჩატვირთვა ვერ მოხერხდა."))
         if (!append) setListings([])
       } finally {
         setLoading(false)
