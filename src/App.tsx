@@ -24,6 +24,7 @@ import ProtectedRoute from "./components/ProtectedRoute.tsx"
 import LocationFilterSelect from "./components/LocationFilterSelect.tsx"
 import Footer from "./components/Footer.tsx"
 import HomeFeedSection from "./components/HomeFeedSection.tsx"
+import { useHomeStatsQuery } from "./lib/queries/useHomeStatsQuery.ts"
 import mainHeroImage from "../images/main.png"
 
 const DashboardPage = lazy(() => import("./pages/Dashboard.tsx"))
@@ -47,12 +48,6 @@ const PayPalCheckoutE2EPage = lazy(() => import("./pages/PayPalCheckoutE2E.tsx")
 const SavedPage = lazy(() => import("./pages/Saved.tsx"))
 const MessagesPage = lazy(() => import("./pages/Messages.tsx"))
 
-type HomeStats = {
-  freelancerCount: number
-  jobCount: number
-  completedCount: number
-}
-
 function formatNumber(value: number) {
   return value.toLocaleString("en-US").replace(/,/g, " ")
 }
@@ -72,16 +67,11 @@ function sanitizeLoginRedirect(raw: string | null): string | null {
   return decoded
 }
 
-
 function HomePage() {
   const navigate = useNavigate()
   const [searchText, setSearchText] = useState("")
   const [viewerType, setViewerType] = useState<"freelancer" | "hirer" | null>(null)
-  const [stats, setStats] = useState<HomeStats>({
-    freelancerCount: 0,
-    jobCount: 0,
-    completedCount: 0,
-  })
+  const { data: stats = { freelancerCount: 0, jobCount: 0, completedCount: 0 } } = useHomeStatsQuery()
   useEffect(() => {
     document.title = "გიგორი — ქართული freelance პლატფორმა"
   }, [])
@@ -103,32 +93,6 @@ function HomePage() {
     return () => {
       cancelled = true
     }
-  }, [])
-
-  useEffect(() => {
-    const loadHomeData = async () => {
-      if (!supabase) {
-        return
-      }
-
-      const [freelancerRes, jobsRes, completedRes] = await Promise.all([
-        supabase
-          .from("freelancer_profiles")
-          .select("*", { count: "exact", head: true })
-          .eq("is_public", true)
-          .limit(1),
-        supabase.from("jobs").select("*", { count: "exact", head: true }).limit(1),
-        supabase.from("completed_jobs").select("*", { count: "exact", head: true }).limit(1),
-      ])
-
-      setStats({
-        freelancerCount: freelancerRes.count ?? 0,
-        jobCount: jobsRes.count ?? 0,
-        completedCount: completedRes.count ?? 0,
-      })
-    }
-
-    loadHomeData()
   }, [])
 
   const showStatsBar = stats.freelancerCount >= 10

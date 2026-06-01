@@ -1,5 +1,5 @@
+import { fetchHomeFeedPayload } from "./marketplaceEdge.ts"
 import { isSupabaseConfigured, supabase } from "./supabase"
-import { withRejectedJwtRetry } from "./supabaseAuth.ts"
 import { jobVacancyStats } from "./jobVacancies.ts"
 import { jobVipIsActive } from "./vipJobTiers.ts"
 import { parseListingPreview } from "./listingDescription.ts"
@@ -196,14 +196,7 @@ export async function loadHomeFeed(): Promise<HomeFeedItem[]> {
     return [...MOCK_SERVICES, ...MOCK_JOB_LISTINGS].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
   }
 
-  const client = supabase
-
-  const fetchFeed = () => client.rpc("get_home_feed")
-
-  const { data, error } = await withRejectedJwtRetry(client, fetchFeed)
-  if (error) throw error
-
-  const payload = data as null | { services?: unknown[]; jobs?: unknown[] }
+  const payload = (await fetchHomeFeedPayload()) as null | { services?: unknown[]; jobs?: unknown[] }
   const serviceRows = Array.isArray(payload?.services) ? payload!.services! : []
   const jobRows = Array.isArray(payload?.jobs) ? payload!.jobs! : []
 

@@ -11,7 +11,7 @@ const PAGE_SIZE = 20
 function jsonResponse(req: Request, body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: corsHeadersFor(req),
+    headers: corsHeadersFor(req, { "Content-Type": "application/json" }),
   })
 }
 
@@ -21,17 +21,6 @@ function isCachedSuccessPayload(v: unknown): v is SuccessPayload {
   if (!v || typeof v !== "object") return false
   const o = v as Record<string, unknown>
   return o.ok === true && "data" in o
-}
-
-function parsePage(raw: string | null): number {
-  const n = Number.parseInt(raw ?? "1", 10)
-  if (!Number.isFinite(n) || n < 1) return 1
-  return Math.floor(n)
-}
-
-function normalizeCategory(raw: string | null | undefined): string {
-  const s = String(raw ?? "").trim()
-  return s.length > 0 ? s : "all"
 }
 
 type DenoLike = {

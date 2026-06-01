@@ -1,9 +1,9 @@
 import type { MouseEvent } from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
+import { useQueryClient } from "@tanstack/react-query"
 import type { Json } from "../lib/database.types"
-import { fetchUnreadConversationCount } from "../lib/chat.ts"
-import { subscribeToChatInbox } from "../lib/chatRealtime.ts"
+import { useUnreadCounts } from "../hooks/useUnreadCounts.ts"
 import ChatIcon from "./ui/ChatIcon.tsx"
 import {
   fetchNotifications,
@@ -101,6 +101,7 @@ function truncateNotificationBody(text: string | null, max = 60): string | null 
 export default function Navbar() {
   const navigate = useNavigate()
   const location = useLocation()
+  const queryClient = useQueryClient()
   const [isAuthed, setIsAuthed] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false) // avatar dropdown
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -110,13 +111,12 @@ export default function Navbar() {
   const [userId, setUserId] = useState<string | null>(null)
   const [publicProfileHref, setPublicProfileHref] = useState<string | null>(null)
   const [userType, setUserType] = useState<"freelancer" | "hirer" | null>(null)
-  const [unreadChatCount, setUnreadChatCount] = useState(0)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [detailNotification, setDetailNotification] = useState<AppNotification | null>(null)
   const notificationsRef = useRef<HTMLDivElement>(null)
 
-  const unreadCount = useMemo(() => notifications.filter((n) => !n.is_read).length, [notifications])
+  const { unreadNotifications, unreadMessages } = useUnreadCounts(userId)
 
   const postListingOrJob = useMemo(() => {
     if (userType === "freelancer") {
@@ -164,13 +164,11 @@ export default function Navbar() {
         setUserType(null)
         setNotifications([])
         setNotificationsOpen(false)
-        setUnreadChatCount(0)
         return
       }
-      const [{ data }, list, chatUnread] = await Promise.all([
+      const [{ data }, list] = await Promise.all([
         client.from("profiles").select("avatar_url, full_name, user_type").eq("id", uid).maybeSingle(),
         fetchNotifications(client),
-        fetchUnreadConversationCount(client),
       ])
       setAvatarUrl(data?.avatar_url ?? null)
       setFullName(data?.full_name ?? "")
@@ -189,7 +187,6 @@ export default function Navbar() {
         setPublicProfileHref(null)
       }
       setNotifications(list)
-      setUnreadChatCount(chatUnread)
     }
 
     refresh()
@@ -202,10 +199,7 @@ export default function Navbar() {
   useEffect(() => {
     const client = supabase
     if (!client || !userId || !isAuthed) return
-    void Promise.all([fetchNotifications(client), fetchUnreadConversationCount(client)]).then(([list, chatUnread]) => {
-      setNotifications(list)
-      setUnreadChatCount(chatUnread)
-    })
+    void fetchNotifications(client).then(setNotifications)
   }, [location.pathname, userId, isAuthed])
 
   useEffect(() => {
@@ -231,17 +225,29 @@ export default function Navbar() {
     }
   }, [userId, isAuthed])
 
-  useEffect(() => {
-    const client = supabase
-    if (!client || !userId || !isAuthed) return
-    const refreshChatUnread = () => {
-      void fetchUnreadConversationCount(client).then(setUnreadChatCount)
-    }
-    const channel = subscribeToChatInbox(client, userId, refreshChatUnread)
-    return () => {
-      client.removeChannel(channel)
-    }
-  }, [userId, isAuthed])
+  const clearNotificationsUnreadCount = () => {
+    if (!supabase || !userId) return
+    void supabase
+      .from("profiles")
+      .update({ unread_notifications_count: 0 })
+      .eq("id", userId)
+      .then(() => {
+        void queryClient.invalidateQueries({ queryKey: ["unread-counts", userId] })
+      })
+  }
+
+  const toggleNotificationsPanel = () => {
+    setNotificationsOpen((v) => {
+      const opening = !v
+      if (opening) {
+        if (supabase) {
+          void fetchNotifications(supabase).then(setNotifications)
+        }
+        clearNotificationsUnreadCount()
+      }
+      return opening
+    })
+  }
 
   const initials = useMemo(() => {
     const parts = fullName.trim().split(" ").filter(Boolean)
@@ -275,7 +281,7 @@ export default function Navbar() {
   }, [detailNotification, notificationsOpen])
 
   const markNotificationRead = async (row: AppNotification) => {
-    if (!supabase || row.is_read) return
+    if (!supabase || !userId || row.is_read) return
     try {
       await markAsRead(supabase, row.id)
       setNotifications((prev) => prev.map((n) => (n.id === row.id ? { ...n, is_read: true } : n)))
@@ -285,7 +291,7 @@ export default function Navbar() {
   }
 
   const handleMarkAllNotificationsRead = async () => {
-    if (!supabase) return
+    if (!supabase || !userId) return
     try {
       await markAllAsRead(supabase)
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })))
@@ -444,9 +450,9 @@ export default function Navbar() {
               }`}
             >
               <ChatIcon className="h-5 w-5" />
-              {unreadChatCount > 0 ? (
+              {unreadMessages > 0 ? (
                 <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
-                  {unreadChatCount > 99 ? "99+" : unreadChatCount}
+                  {unreadMessages > 99 ? "99+" : unreadMessages}
                 </span>
               ) : null}
             </Link>
@@ -455,23 +461,15 @@ export default function Navbar() {
                 type="button"
                 aria-expanded={notificationsOpen}
                 aria-haspopup="menu"
-                onClick={() =>
-                  setNotificationsOpen((v) => {
-                    const opening = !v
-                    if (opening && supabase) {
-                      void fetchNotifications(supabase).then(setNotifications)
-                    }
-                    return opening
-                  })
-                }
+                onClick={() => toggleNotificationsPanel()}
                 className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 transition hover:border-slate-400 hover:text-slate-700"
               >
                 <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.4-1.4a2 2 0 0 1-.6-1.4V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5m6 0a3 3 0 0 1-6 0m6 0H9" />
                 </svg>
-                {unreadCount > 0 ? (
+                {unreadNotifications > 0 ? (
                   <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
-                    {unreadCount > 99 ? "99+" : unreadCount}
+                    {unreadNotifications > 99 ? "99+" : unreadNotifications}
                   </span>
                 ) : null}
               </button>
@@ -647,9 +645,9 @@ export default function Navbar() {
                 }`}
               >
                 <span>ჩათი</span>
-                {unreadChatCount > 0 ? (
+                {unreadMessages > 0 ? (
                   <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">
-                    {unreadChatCount > 99 ? "99+" : unreadChatCount}
+                    {unreadMessages > 99 ? "99+" : unreadMessages}
                   </span>
                 ) : null}
               </Link>
@@ -657,13 +655,13 @@ export default function Navbar() {
                 type="button"
                 onClick={() => {
                   setMobileMenuOpen(false)
-                  setNotificationsOpen((v) => !v)
+                  toggleNotificationsPanel()
                 }}
                 className="flex items-center justify-between rounded-md px-3 py-3 text-sm font-semibold text-[#1B2B4B]"
               >
                 <span>შეტყობინებები</span>
-                {unreadCount > 0 ? (
-                  <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">{unreadCount > 99 ? "99+" : unreadCount}</span>
+                {unreadNotifications > 0 ? (
+                  <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span>
                 ) : null}
               </button>
               <Link to="/dashboard" onClick={() => setMobileMenuOpen(false)} className="rounded-md px-3 py-3 text-sm font-semibold text-[#1B2B4B]">

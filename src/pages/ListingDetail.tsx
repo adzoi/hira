@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import Navbar from "../components/Navbar"
 import { ViewCountEyeIcon } from "../components/ViewCountEyeIcon.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import StartConversationButton from "../components/StartConversationButton.tsx"
 import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
-import { formatListingPrice, normalizeListingPriceType } from "../lib/listingPrice.ts"
+import { formatListingPrice } from "../lib/listingPrice.ts"
+import { fetchListingDetail, type ListingDetail } from "../lib/queries/fetchListingDetail.ts"
+import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
+import { queryKeys } from "../lib/queryKeys.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { avatarImageUrl, serviceImageDetailUrl, serviceImageThumbnailUrl } from "../lib/storageImageUrl.ts"
 import { validateInquiryMessage, validateMoneyAmount } from "../lib/validation.ts"
@@ -42,32 +46,28 @@ function parseListingDescription(raw: string | null): { description: string; met
   }
 }
 
-type ListingDetail = {
-  id: string
-  freelancerProfileId: string
-  title: string
-  descriptionRaw: string | null
-  price: number
-  priceType: string
-  createdAt: string
-  imageUrls: string[]
-  fullName: string
-  professionalTitle: string
-  avatarUrl: string | null
-  freelancerSlug: string
-  freelancerUserId: string
-  averageRating: number
-  viewsCount: number
-  isAcceptingNewWork: boolean
-}
-
 export default function ListingDetailPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { id } = useParams()
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
+  const {
+    data: item = null,
+    isLoading: loading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: queryKeys.listingDetail(id ?? ""),
+    queryFn: () => fetchListingDetail(id!),
+    enabled: Boolean(id) && isSupabaseConfigured,
+  })
+  const error = !id
+    ? "ლისტინგი ვერ მოიძებნა."
+    : !isSupabaseConfigured
+      ? "მონაცემთა ბაზა არ არის კონფიგურირებული."
+      : isError
+        ? queryErrorMessage(queryError, "ჩატვირთვა ვერ მოხერხდა.")
+        : ""
   const [selectedImage, setSelectedImage] = useState(0)
-  const [item, setItem] = useState<ListingDetail | null>(null)
   const [viewerType, setViewerType] = useState<"hirer" | "freelancer" | null>(null)
   const [viewerFreelancerProfileId, setViewerFreelancerProfileId] = useState<string | null>(null)
   const [viewerHirerProfileId, setViewerHirerProfileId] = useState<string | null>(null)
@@ -78,92 +78,6 @@ export default function ListingDetailPage() {
   const [offerSubmitting, setOfferSubmitting] = useState(false)
   const [subcategoryLabel, setSubcategoryLabel] = useState<string | null>(null)
   const trackedListingViewRef = useRef<string | null>(null)
-
-  useEffect(() => {
-    const run = async () => {
-      if (!id) {
-        setError("ლისტინგი ვერ მოიძებნა.")
-        setLoading(false)
-        return
-      }
-      if (!isSupabaseConfigured || !supabase) {
-        setError("მონაცემთა ბაზა არ არის კონფიგურირებული.")
-        setLoading(false)
-        return
-      }
-
-      setLoading(true)
-      setError("")
-      try {
-        const { data, error: qErr } = await supabase
-          .from("services")
-          .select(
-            `
-            id,
-            freelancer_profile_id,
-            title,
-            description,
-            price,
-            price_type,
-            views_count,
-            created_at,
-            image_urls,
-            freelancer_profiles (
-              slug,
-              professional_title,
-              average_rating,
-              is_accepting_new_work,
-              profiles:profiles!freelancer_profiles_user_id_fkey (
-                id,
-                full_name,
-                avatar_url
-              )
-            )
-          `,
-          )
-          .eq("id", id)
-          .eq("is_active", true)
-          .single()
-        if (qErr || !data) throw new Error("ლისტინგი ვერ მოიძებნა.")
-
-        const fpJoined = data.freelancer_profiles as unknown
-        const fp = (Array.isArray(fpJoined) ? fpJoined[0] : fpJoined) as {
-          slug: string | null
-          professional_title: string | null
-          average_rating: number | null
-          is_accepting_new_work?: boolean | null
-          profiles: { id: string; full_name: string | null; avatar_url: string | null } | null
-        } | null
-        if (!fp?.slug) throw new Error("ლისტინგი ვერ მოიძებნა.")
-
-        setItem({
-          id: data.id,
-          freelancerProfileId: String(data.freelancer_profile_id ?? ""),
-          title: data.title ?? "სერვისი",
-          descriptionRaw: data.description,
-          price: Number(data.price ?? 0),
-          priceType: normalizeListingPriceType((data as { price_type?: string | null }).price_type),
-          createdAt: data.created_at ?? new Date().toISOString(),
-          imageUrls: Array.isArray((data as { image_urls?: unknown }).image_urls)
-            ? ((data as { image_urls: unknown[] }).image_urls.map((x) => String(x)).filter(Boolean).slice(0, 3))
-            : [],
-          fullName: fp.profiles?.full_name?.trim() || "ფრილანსერი",
-          professionalTitle: fp.professional_title?.trim() || "ფრილანსერი",
-          avatarUrl: fp.profiles?.avatar_url ?? null,
-          freelancerSlug: fp.slug,
-          freelancerUserId: String(fp.profiles?.id ?? ""),
-          averageRating: Number(fp.average_rating ?? 0),
-          viewsCount: Number((data as { views_count?: number | null }).views_count ?? 0),
-          isAcceptingNewWork: fp.is_accepting_new_work !== false,
-        })
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "ჩატვირთვა ვერ მოხერხდა.")
-      } finally {
-        setLoading(false)
-      }
-    }
-    void run()
-  }, [id])
 
   useEffect(() => {
     const loadViewer = async () => {
@@ -233,19 +147,21 @@ export default function ListingDetailPage() {
     const serviceId = item.id
     void (async () => {
       try {
-        const { data, error } = await supabase.rpc("increment_service_views", { p_service_id: serviceId })
-        if (error) {
-          if (import.meta.env.DEV) console.warn("[ListingDetail] increment_service_views:", error.message)
+        const { data: viewCount, error: viewError } = await supabase.rpc("increment_service_views", { p_service_id: serviceId })
+        if (viewError) {
+          if (import.meta.env.DEV) console.warn("[ListingDetail] increment_service_views:", viewError.message)
           return
         }
-        const next = Number(data ?? 0)
+        const next = Number(viewCount ?? 0)
         if (!Number.isFinite(next)) return
-        setItem((prev) => (prev && prev.id === serviceId ? { ...prev, viewsCount: next } : prev))
+        queryClient.setQueryData<ListingDetail>(queryKeys.listingDetail(serviceId), (prev) =>
+          prev && prev.id === serviceId ? { ...prev, viewsCount: next } : prev,
+        )
       } catch {
         /* non-blocking */
       }
     })()
-  }, [id, item?.id])
+  }, [id, item?.id, queryClient])
 
   const parsed = useMemo(() => parseListingDescription(item?.descriptionRaw ?? ""), [item?.descriptionRaw])
 

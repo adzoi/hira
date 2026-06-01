@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 import Navbar from "../components/Navbar"
 import { filterProfileLanguageOptions } from "../lib/profileLanguages.ts"
 import {
@@ -7,8 +8,11 @@ import {
   type FreelancerEducationDegreeLevel,
 } from "../lib/freelancerEducation.ts"
 import OptionalSocialUrlField from "../components/OptionalSocialUrlField.tsx"
-import { parseFreelancerSocialFields, socialFormFromDbRow } from "../lib/freelancerSocialFields.ts"
+import { parseFreelancerSocialFields } from "../lib/freelancerSocialFields.ts"
 import { avatarPublicUrl } from "../lib/storageImageUrl.ts"
+import { fetchOnboarding } from "../lib/queries/fetchOnboarding.ts"
+import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
+import { queryKeys } from "../lib/queryKeys.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { LIMITS, validateOptionalUrl, validateTextField } from "../lib/validation.ts"
 
@@ -37,9 +41,9 @@ type EducationForm = {
 
 export default function OnboardingPage() {
   const navigate = useNavigate()
-  const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
+  const [authReady, setAuthReady] = useState(false)
 
   const [userId, setUserId] = useState("")
   const [userType, setUserType] = useState<"freelancer" | "hirer" | "">("")
@@ -87,132 +91,83 @@ export default function OnboardingPage() {
   const [industry, setIndustry] = useState("")
   const [companyWebsite, setCompanyWebsite] = useState("")
 
+  const {
+    data: onboardingData,
+    isLoading: loading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: queryKeys.onboarding(userId),
+    queryFn: () => fetchOnboarding(userId),
+    enabled: authReady && Boolean(userId) && isSupabaseConfigured,
+  })
+
   useEffect(() => {
-    const init = async () => {
+    void (async () => {
       if (!isSupabaseConfigured || !supabase) {
         setError("Supabase არ არის კონფიგურირებული.")
-        setLoading(false)
+        setAuthReady(true)
         return
       }
-      try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
-        if (!user) {
-          navigate("/login", { replace: true })
-          return
-        }
-
-        const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single()
-        if (!profile) throw new Error("პროფილი ვერ მოიძებნა.")
-        setUserId(user.id)
-        setUserType(profile.user_type as "freelancer" | "hirer")
-        setAvatarUrl(profile.avatar_url ?? "")
-        setAvatarPreview(profile.avatar_url ?? "")
-
-        if (profile.user_type === "freelancer") {
-          const [{ data: fp }, { data: skillsData }, { data: categoriesData }] = await Promise.all([
-            supabase.from("freelancer_profiles").select("*").eq("user_id", user.id).maybeSingle(),
-            supabase.from("skills").select("id,name,category_id").eq("is_approved", true).order("name"),
-            supabase
-              .from("categories")
-              .select("id,name_ka,parent_id")
-              .eq("is_active", true)
-              .order("sort_order", { ascending: true }),
-          ])
-
-          if (fp?.is_profile_complete) {
-            const readySlug = typeof fp.slug === "string" && fp.slug.trim() ? fp.slug.trim() : ""
-            navigate(readySlug ? `/freelancer/${encodeURIComponent(readySlug)}` : "/profile", { replace: true })
-            return
-          }
-
-          if (fp) {
-            setFreelancerProfileId(fp.id)
-            setFreelancerSlug(fp.slug)
-            setProfessionalTitle(fp.professional_title ?? "")
-            setBio(fp.bio ?? "")
-            setAvailability((fp.availability as "full_time" | "part_time" | "weekends" | "") ?? "")
-            setLanguages(fp.languages ?? [])
-            const social = socialFormFromDbRow(fp)
-            setLinkedinUrl(social.linkedinUrl)
-            setGithubUrl(social.githubUrl)
-            setPortfolioUrl(social.portfolioUrl)
-            setFacebookUrl(social.facebookUrl)
-            setInstagramUrl(social.instagramUrl)
-            setTiktokUrl(social.tiktokUrl)
-            setYoutubeUrl(social.youtubeUrl)
-            setXUrl(social.xUrl)
-            setNoLinkedinProfile(social.noLinkedinProfile)
-            setNoGithubProfile(social.noGithubProfile)
-            setNoPortfolioWebsite(social.noPortfolioWebsite)
-            setNoFacebookProfile(social.noFacebookProfile)
-            setNoInstagramProfile(social.noInstagramProfile)
-            setNoTiktokProfile(social.noTiktokProfile)
-            setNoYoutubeProfile(social.noYoutubeProfile)
-            setNoXProfile(social.noXProfile)
-
-            const [{ data: selectedSkills }] = await Promise.all([
-              supabase.from("freelancer_skills").select("skill_id").eq("freelancer_profile_id", fp.id),
-            ])
-            setSelectedSkillIds((selectedSkills ?? []).map((x) => x.skill_id))
-            const { data: existingExperience } = await supabase
-              .from("experience")
-              .select("title,organization,start_date,end_date,description")
-              .eq("freelancer_profile_id", fp.id)
-              .order("start_date", { ascending: false })
-            if (existingExperience && existingExperience.length > 0) {
-              setExperiences(
-                existingExperience.slice(0, 10).map((item) => ({
-                  title: item.title ?? "",
-                  organization: item.organization ?? "",
-                  start_date: item.start_date ?? "",
-                  end_date: item.end_date ?? "",
-                  is_present: !item.end_date,
-                  description: item.description ?? "",
-                })),
-              )
-            }
-            const { data: existingEducation } = await supabase
-              .from("freelancer_education")
-              .select("institution,degree_level,field_of_study,end_date")
-              .eq("freelancer_profile_id", fp.id)
-              .order("end_date", { ascending: false })
-            if (existingEducation && existingEducation.length > 0) {
-              setEducations(
-                existingEducation.slice(0, 10).map((item) => ({
-                  institution: item.institution ?? "",
-                  degree_level: (item.degree_level as FreelancerEducationDegreeLevel) ?? "",
-                  field_of_study: item.field_of_study ?? "",
-                  end_date: item.end_date ?? "",
-                })),
-              )
-            }
-          }
-
-          setSkills(skillsData ?? [])
-          setSkillCategories((categoriesData ?? []) as SkillCategoryRow[])
-        } else {
-          const { data: hp } = await supabase.from("hirer_profiles").select("*").eq("user_id", user.id).maybeSingle()
-          if (hp?.company_name && hp?.description && hp?.industry) {
-            navigate("/dashboard", { replace: true })
-            return
-          }
-          if (hp) {
-            setCompanyName(hp.company_name ?? "")
-            setCompanyDescription(hp.description ?? "")
-            setIndustry(hp.industry ?? "")
-            setCompanyWebsite(hp.website_url ?? "")
-          }
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "ონბორდინგის ჩატვირთვა ვერ მოხერხდა.")
-      } finally {
-        setLoading(false)
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        navigate("/login", { replace: true })
+        return
       }
-    }
-    init()
+      setUserId(user.id)
+      setAuthReady(true)
+    })()
   }, [navigate])
+
+  useEffect(() => {
+    if (!onboardingData) return
+    if (onboardingData.redirect) {
+      navigate(onboardingData.redirect, { replace: true })
+      return
+    }
+    setUserType(onboardingData.userType)
+    setAvatarUrl(onboardingData.avatarUrl)
+    setAvatarPreview(onboardingData.avatarUrl)
+    setFreelancerProfileId(onboardingData.freelancerProfileId)
+    setFreelancerSlug(onboardingData.freelancerSlug)
+    setProfessionalTitle(onboardingData.professionalTitle)
+    setBio(onboardingData.bio)
+    setAvailability(onboardingData.availability)
+    setLanguages(onboardingData.languages)
+    setLinkedinUrl(onboardingData.linkedinUrl)
+    setGithubUrl(onboardingData.githubUrl)
+    setPortfolioUrl(onboardingData.portfolioUrl)
+    setFacebookUrl(onboardingData.facebookUrl)
+    setInstagramUrl(onboardingData.instagramUrl)
+    setTiktokUrl(onboardingData.tiktokUrl)
+    setYoutubeUrl(onboardingData.youtubeUrl)
+    setXUrl(onboardingData.xUrl)
+    setNoLinkedinProfile(onboardingData.noLinkedinProfile)
+    setNoGithubProfile(onboardingData.noGithubProfile)
+    setNoPortfolioWebsite(onboardingData.noPortfolioWebsite)
+    setNoFacebookProfile(onboardingData.noFacebookProfile)
+    setNoInstagramProfile(onboardingData.noInstagramProfile)
+    setNoTiktokProfile(onboardingData.noTiktokProfile)
+    setNoYoutubeProfile(onboardingData.noYoutubeProfile)
+    setNoXProfile(onboardingData.noXProfile)
+    setSkills(onboardingData.skills)
+    setSkillCategories(onboardingData.skillCategories)
+    setSelectedSkillIds(onboardingData.selectedSkillIds)
+    setExperiences(onboardingData.experiences)
+    setEducations(onboardingData.educations)
+    setCompanyName(onboardingData.companyName)
+    setCompanyDescription(onboardingData.companyDescription)
+    setIndustry(onboardingData.industry)
+    setCompanyWebsite(onboardingData.companyWebsite)
+  }, [navigate, onboardingData])
+
+  useEffect(() => {
+    if (isError) {
+      setError(queryErrorMessage(queryError, "ონბორდინგის ჩატვირთვა ვერ მოხერხდა."))
+    }
+  }, [isError, queryError])
 
   const filteredLanguageOptions = useMemo(() => filterProfileLanguageOptions(languageQuery), [languageQuery])
 
@@ -531,7 +486,7 @@ export default function OnboardingPage() {
     }
   }
 
-  if (loading) {
+  if (loading || !authReady || onboardingData?.redirect) {
     return (
       <div className="min-h-screen bg-slate-50">
         <Navbar />

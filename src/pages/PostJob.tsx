@@ -1,21 +1,14 @@
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 import Navbar from "../components/Navbar.tsx"
-import { formatSupabaseClientError, isSupabaseConfigured, supabase } from "../lib/supabase"
+import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { jobImageThumbnailUrl } from "../lib/storageImageUrl.ts"
-import {
-  categoryChildrenOf,
-  categoryIdsWithChildren,
-  categoryRoots,
-  rootIdContainingCategory,
-  type CategoryBranchRow,
-} from "../lib/marketplaceCategoryTree.ts"
+import { categoryChildrenOf, categoryRoots, type CategoryBranchRow } from "../lib/marketplaceCategoryTree.ts"
 import { formatJobBudget, PRICE_TYPE_LABELS } from "../lib/listingPrice.ts"
 import {
   encodeJobContactPreference,
   JOB_CONTACT_LABELS,
-  normalizeJobContactPreference,
-  parseJobContactPreference,
 } from "../lib/jobContactPreference.ts"
 import {
   assertField,
@@ -23,6 +16,9 @@ import {
   validateJobTitle,
   validatePositiveInt,
 } from "../lib/validation.ts"
+import { fetchPostJob } from "../lib/queries/fetchPostJob.ts"
+import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
+import { queryKeys } from "../lib/queryKeys.ts"
 
 const MAX_JOB_IMAGES = 3
 const MAX_INPUT_IMAGE_BYTES = 10 * 1024 * 1024
@@ -126,11 +122,22 @@ export default function PostJobPage() {
   const navigate = useNavigate()
   const { jobId } = useParams<{ jobId: string }>()
   const isEdit = Boolean(jobId)
-
-  const [loading, setLoading] = useState(true)
+  const [postJobUserId, setPostJobUserId] = useState("")
+  const {
+    data: postJobData,
+    isLoading: loading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: queryKeys.postJob(postJobUserId || "pending", jobId),
+    queryFn: () => fetchPostJob(jobId),
+    enabled: Boolean(postJobUserId) && isSupabaseConfigured,
+  })
+  const loadPageError = isError ? queryErrorMessage(queryError, "გვერდის ჩატვირთვა ვერ მოხერხდა.") : ""
   const [submitting, setSubmitting] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [pageError, setPageError] = useState("")
+  const displayPageError = pageError || loadPageError
 
   const [hirerProfileId, setHirerProfileId] = useState("")
   const [categories, setCategories] = useState<CategoryRow[]>([])
@@ -168,150 +175,48 @@ export default function PostJobPage() {
   }, [isEdit])
 
   useEffect(() => {
-    const load = async () => {
-      if (!isSupabaseConfigured || !supabase) {
-        setPageError("Supabase არ არის კონფიგურირებული.")
-        setLoading(false)
+    if (!isSupabaseConfigured || !supabase) return
+    void supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) {
+        navigate("/login", { replace: true })
         return
       }
+      setPostJobUserId(user.id)
+    })
+  }, [navigate])
 
-      try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
-        if (!user) {
-          navigate("/login", { replace: true })
-          return
-        }
-
-        const { data: profile, error: profileErr } = await supabase.from("profiles").select("user_type").eq("id", user.id).single()
-        if (profileErr) throw profileErr
-        if (profile?.user_type !== "hirer") {
-          navigate("/dashboard", { replace: true })
-          return
-        }
-
-        const [{ data: hirerRow, error: hirerErr }, { data: catRows, error: catErr }] = await Promise.all([
-          supabase.from("hirer_profiles").select("id").eq("user_id", user.id).maybeSingle(),
-          supabase.from("categories").select("id,name_ka,is_active,sort_order,parent_id").eq("is_active", true).order("sort_order", { ascending: true }),
-        ])
-
-        if (hirerErr) throw hirerErr
-        if (catErr) throw catErr
-
-        if (!hirerRow?.id) {
-          navigate("/onboarding", { replace: true })
-          return
-        }
-
-        setHirerProfileId(hirerRow.id)
-        const fullCats: CategoryRow[] = (catRows ?? []).map((row: Record<string, unknown>) => ({
-          id: String(row.id ?? ""),
-          name_ka: String(row.name_ka ?? ""),
-          is_active: (row.is_active as boolean | null | undefined) ?? null,
-          sort_order: (row.sort_order as number | null | undefined) ?? null,
-          parent_id: (row.parent_id as string | null | undefined) ?? null,
-        }))
-        setCategories(fullCats)
-
-        const { data: skillRows, error: skillErr } = await supabase
-          .from("skills")
-          .select("id,name,category_id,is_approved")
-          .eq("is_approved", true)
-          .order("name", { ascending: true })
-        if (skillErr) {
-          if (import.meta.env.DEV) console.warn("[PostJob] skills catalog:", skillErr)
-          setAllSkills([])
-        } else {
-          setAllSkills(skillRows ?? [])
-        }
-
-        if (jobId) {
-          const { data: jobRow, error: jobErr } = await supabase
-            .from("jobs")
-            .select("*")
-            .eq("id", jobId)
-            .eq("hirer_profile_id", hirerRow.id)
-            .maybeSingle()
-
-          if (jobErr || !jobRow) {
-            navigate("/dashboard", { replace: true })
-            return
-          }
-
-          const { data: jsRows, error: jsErr } = await supabase.from("job_skills").select("skill_id").eq("job_id", jobRow.id)
-          if (jsErr) throw jsErr
-
-          const byId = new Map(fullCats.map((c) => [c.id, c]))
-          let midForQuery = String(jobRow.category_id ?? "")
-          const initialNode = midForQuery ? byId.get(midForQuery) : undefined
-          if (initialNode && initialNode.parent_id == null && jobRow.subcategory_id) {
-            const { data: loneSub } = await supabase.from("subcategories").select("category_id").eq("id", jobRow.subcategory_id).maybeSingle()
-            if (loneSub?.category_id) midForQuery = loneSub.category_id
-          }
-
-          const { data: subRows, error: subErr } = await supabase
-            .from("subcategories")
-            .select("id,name_ka,category_id,is_active")
-            .eq("category_id", midForQuery)
-            .eq("is_active", true)
-            .order("name_ka", { ascending: true })
-
-          if (subErr) throw subErr
-
-          let resolvedMid = midForQuery
-          let resolvedRoot = ""
-          if (resolvedMid) {
-            const node = byId.get(resolvedMid)
-            const hasKids = categoryIdsWithChildren(fullCats as CategoryBranchRow[])
-            if (node?.parent_id) {
-              resolvedRoot = rootIdContainingCategory(fullCats as CategoryBranchRow[], resolvedMid)
-            } else if (hasKids.has(resolvedMid)) {
-              resolvedRoot = resolvedMid
-              resolvedMid = ""
-            } else {
-              resolvedRoot = resolvedMid
-            }
-          }
-          setRootCategoryId(resolvedRoot)
-          setCategoryId(resolvedMid)
-          setSubcategories(subRows ?? [])
-          setTitle(jobRow.title)
-          setSubcategoryId(jobRow.subcategory_id ?? "")
-          setDescription(jobRow.description)
-          setIsUrgent(jobRow.is_urgent)
-          setBudgetType(jobRow.budget_type)
-          setBudgetMin(jobRow.budget_min == null ? "" : String(jobRow.budget_min))
-          setBudgetMax(jobRow.budget_max == null ? "" : String(jobRow.budget_max))
-          setDurationType(jobRow.duration_type)
-          setLocationType(jobRow.location_type)
-          const parsedContact = parseJobContactPreference(
-            normalizeJobContactPreference(String(jobRow.contact_preference ?? "email")),
-          )
-          setContactEmail(parsedContact.contactEmail)
-          setContactPhone(parsedContact.contactPhone)
-          setApplicationDeadline(jobRow.application_deadline ? jobRow.application_deadline.slice(0, 10) : "")
-          const jr = jobRow as { vacancies?: unknown; accepted_count?: unknown }
-          const vacN = Number(jr.vacancies ?? 1)
-          const acN = Number(jr.accepted_count ?? 0)
-          setVacancies(Number.isFinite(vacN) && vacN >= 1 ? Math.floor(vacN) : 1)
-          setAcceptedCountSnapshot(Number.isFinite(acN) && acN >= 0 ? Math.floor(acN) : 0)
-          setSelectedSkillIds(jsRows?.map((r) => r.skill_id) ?? [])
-          setExistingImageUrls(
-            Array.isArray((jobRow as { image_urls?: unknown }).image_urls)
-              ? ((jobRow as { image_urls: unknown[] }).image_urls.map((v) => String(v)).filter(Boolean).slice(0, MAX_JOB_IMAGES))
-              : [],
-          )
-        }
-      } catch (e) {
-        setPageError(formatSupabaseClientError(e, "გვერდის ჩატვირთვა ვერ მოხერხდა."))
-      } finally {
-        setLoading(false)
-      }
+  useEffect(() => {
+    if (!postJobData) return
+    if (postJobData.redirectTo) {
+      navigate(postJobData.redirectTo, { replace: true })
+      return
     }
-
-    void load()
-  }, [navigate, jobId])
+    setHirerProfileId(postJobData.hirerProfileId)
+    setCategories(postJobData.categories)
+    setAllSkills(postJobData.allSkills)
+    if (postJobData.edit) {
+      const edit = postJobData.edit
+      setRootCategoryId(edit.rootCategoryId)
+      setCategoryId(edit.categoryId)
+      setSubcategories(edit.subcategories)
+      setTitle(edit.title)
+      setSubcategoryId(edit.subcategoryId)
+      setDescription(edit.description)
+      setIsUrgent(edit.isUrgent)
+      setBudgetType(edit.budgetType)
+      setBudgetMin(edit.budgetMin)
+      setBudgetMax(edit.budgetMax)
+      setDurationType(edit.durationType)
+      setLocationType(edit.locationType)
+      setContactEmail(edit.contactEmail)
+      setContactPhone(edit.contactPhone)
+      setApplicationDeadline(edit.applicationDeadline)
+      setVacancies(edit.vacancies)
+      setAcceptedCountSnapshot(edit.acceptedCountSnapshot)
+      setSelectedSkillIds(edit.selectedSkillIds)
+      setExistingImageUrls(edit.existingImageUrls)
+    }
+  }, [postJobData, navigate])
 
   const categoryRootsList = useMemo(() => categoryRoots(categories as CategoryBranchRow[]), [categories])
   const categoryMidsList = useMemo(
@@ -654,8 +559,8 @@ export default function PostJobPage() {
           {isEdit ? "განაახლე დეტალები და შეინახე ცვლილებები." : "შექმენი ახალი განცხადება და იპოვე საუკეთესო ფრილანსერი."}
         </p>
 
-        {pageError ? (
-          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{pageError}</p>
+        {displayPageError ? (
+          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{displayPageError}</p>
         ) : null}
 
         {showPreview ? (

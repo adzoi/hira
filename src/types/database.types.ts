@@ -904,6 +904,8 @@ export interface Database {
           phone: string | null
           updated_at: string
           user_type: string
+          unread_messages_count: number
+          unread_notifications_count: number
         }
         Insert: {
           avatar_url?: string | null
@@ -920,6 +922,8 @@ export interface Database {
           phone?: string | null
           updated_at?: string
           user_type: string
+          unread_messages_count?: number
+          unread_notifications_count?: number
         }
         Update: {
           avatar_url?: string | null
@@ -936,6 +940,8 @@ export interface Database {
           phone?: string | null
           updated_at?: string
           user_type?: string
+          unread_messages_count?: number
+          unread_notifications_count?: number
         }
         Relationships: []
       }

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { unstable_batchedUpdates } from "react-dom"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useInfiniteQuery } from "@tanstack/react-query"
 import { Link, useSearchParams } from "react-router-dom"
 import Navbar from "../components/Navbar.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
@@ -9,8 +9,10 @@ import SkeletonCard from "../components/ui/SkeletonCard.tsx"
 import MarketplaceCatalogToolbar from "../components/MarketplaceCatalogToolbar.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
 import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
+import { fetchJobsPagePayload } from "../lib/marketplaceEdge.ts"
+import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
+import { queryKeys } from "../lib/queryKeys.ts"
 import { isSupabaseConfigured, supabase, formatSupabaseClientError } from "../lib/supabase"
-import { withRejectedJwtRetry } from "../lib/supabaseAuth.ts"
 import { jobVacancyStats } from "../lib/jobVacancies.ts"
 import { formatCityForDisplay, jobMatchesUnifiedLocation } from "../lib/marketplaceFilters.ts"
 import { jobVipIsActive } from "../lib/vipJobTiers.ts"
@@ -288,19 +290,82 @@ function mapRpcRowsToJobs(jobRows: unknown[]): JobItem[] {
   })
 }
 
+type JobsCatalogPage = {
+  jobs: JobItem[]
+  categories: CategoryItem[]
+  subcategoryParentById: Map<string, string>
+  subcategoryNamesById: Map<string, string>
+  total: number
+}
+
+async function loadJobsCatalogPage(category: string, page: number): Promise<JobsCatalogPage> {
+  if (!isSupabaseConfigured || !supabase) {
+    return {
+      jobs: mockJobs,
+      categories: [],
+      subcategoryParentById: new Map(),
+      subcategoryNamesById: new Map(),
+      total: mockJobs.length,
+    }
+  }
+
+  const client = supabase
+  const payload = (await fetchJobsPagePayload(category, page)) as Record<string, unknown> | null
+  const jobRows = Array.isArray(payload?.jobs) ? (payload.jobs as unknown[]) : []
+  const categoryRows = Array.isArray(payload?.categories) ? (payload.categories as unknown[]) : []
+  const totalRaw = payload?.total_count ?? payload?.total
+  const total = Number(totalRaw)
+  const safeTotal = Number.isFinite(total) ? total : 0
+
+  const mappedJobs = mapRpcRowsToJobs(jobRows)
+  const jobs = page === 1 && mappedJobs.length === 0 ? mockJobs : mappedJobs
+
+  const categories = categoryRows.map((c) => {
+    const row = c as Record<string, unknown>
+    return {
+      id: String(row.id ?? ""),
+      name_ka: String(row.name_ka ?? ""),
+      parent_id: (row.parent_id as string | null | undefined) ?? null,
+    }
+  }) as CategoryItem[]
+
+  let subcategoryNamesById = new Map<string, string>()
+  let subcategoryParentById = new Map<string, string>()
+  if (page === 1) {
+    try {
+      const subRows = await fetchAllRowsByRange(
+        (from, to) =>
+          client
+            .from("subcategories")
+            .select("id,name_ka,category_id")
+            .eq("is_active", true)
+            .order("name_ka")
+            .range(from, to),
+        500,
+        client,
+      )
+      subcategoryNamesById = new Map(
+        subRows.map((r) => {
+          const row = r as { id?: string; name_ka?: string }
+          return [String(row.id ?? ""), String(row.name_ka ?? "")] as const
+        }),
+      )
+      subcategoryParentById = new Map(
+        subRows.map((r) => {
+          const row = r as { id?: string; category_id?: string | null }
+          return [String(row.id ?? ""), String(row.category_id ?? "")] as const
+        }),
+      )
+    } catch (subcategoryError) {
+      console.warn("[jobs] subcategory filters unavailable:", subcategoryError)
+    }
+  }
+
+  return { jobs, categories, subcategoryParentById, subcategoryNamesById, total: safeTotal }
+}
+
 export default function JobsPage() {
   const [searchParams] = useSearchParams()
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-  const [jobsTotal, setJobsTotal] = useState(0)
-  const [jobsNextOffset, setJobsNextOffset] = useState(0)
-  const jobsNextOffsetRef = useRef(0)
-  const subcategoriesFetchedRef = useRef(false)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [jobs, setJobs] = useState<JobItem[]>([])
-  const [categories, setCategories] = useState<CategoryItem[]>([])
-  const [subcategoryParentById, setSubcategoryParentById] = useState<Map<string, string>>(() => new Map())
-  const [subcategoryNamesById, setSubcategoryNamesById] = useState<Map<string, string>>(() => new Map())
 
   const [advancedDropdownOpen, setAdvancedDropdownOpen] = useState(false)
   const advancedDropdownRef = useRef<HTMLDivElement>(null)
@@ -327,6 +392,69 @@ export default function JobsPage() {
   const [draftSkillIds, setDraftSkillIds] = useState<string[]>([])
 
   const [sortBy, setSortBy] = useState<SortOption>("newest")
+  const [subcategoryParentById, setSubcategoryParentById] = useState<Map<string, string>>(() => new Map())
+  const [subcategoryNamesById, setSubcategoryNamesById] = useState<Map<string, string>>(() => new Map())
+
+  const serverCategoryForFetch = useMemo(() => {
+    const spec = filterSpecializationId.trim()
+    if (spec) {
+      const p = (subcategoryParentById.get(spec) ?? "").trim()
+      if (p) return p
+    }
+    const mid = filterMidCategoryId.trim()
+    if (mid) return mid
+    return filterRootCategoryId.trim() || undefined
+  }, [filterSpecializationId, filterMidCategoryId, filterRootCategoryId, subcategoryParentById])
+
+  const jobsCategoryKey = serverCategoryForFetch ?? "all"
+
+  const {
+    data: catalogData,
+    isLoading: loading,
+    isError,
+    error: catalogError,
+    fetchNextPage,
+    hasNextPage: jobsHasMore,
+    isFetchingNextPage: loadingMore,
+    refetch,
+  } = useInfiniteQuery({
+    queryKey: queryKeys.jobsCatalog(jobsCategoryKey),
+    queryFn: ({ pageParam }) => loadJobsCatalogPage(jobsCategoryKey, pageParam),
+    initialPageParam: 1,
+    staleTime: 30_000,
+    getNextPageParam: (lastPage, _allPages, lastPageParam) => {
+      const loadedOffset = lastPageParam * JOBS_PAGE_SIZE
+      if (loadedOffset < lastPage.total) return lastPageParam + 1
+      return undefined
+    },
+  })
+
+  const error = isError
+    ? queryErrorMessage(catalogError, formatSupabaseClientError(catalogError, "მონაცემები ვერ ჩაიტვირთა."))
+    : ""
+
+  const firstPage = catalogData?.pages[0]
+  const categories = firstPage?.categories ?? []
+
+  useEffect(() => {
+    if (!firstPage) return
+    if (firstPage.subcategoryParentById.size > 0) setSubcategoryParentById(firstPage.subcategoryParentById)
+    if (firstPage.subcategoryNamesById.size > 0) setSubcategoryNamesById(firstPage.subcategoryNamesById)
+  }, [firstPage])
+
+  const jobs = useMemo(() => {
+    const seen = new Set<string>()
+    const merged: JobItem[] = []
+    for (const page of catalogData?.pages ?? []) {
+      for (const job of page.jobs) {
+        if (!seen.has(job.id)) {
+          seen.add(job.id)
+          merged.push(job)
+        }
+      }
+    }
+    return merged
+  }, [catalogData?.pages])
 
   const categoryRows = categories as CategoryBranchRow[]
   const categoryRootsList = useMemo(() => categoryRoots(categoryRows), [categoryRows])
@@ -357,17 +485,6 @@ export default function JobsPage() {
     () => effectiveCatalogFilterId(filterRootCategoryId, filterMidCategoryId, filterSpecializationId),
     [filterRootCategoryId, filterMidCategoryId, filterSpecializationId],
   )
-
-  const serverCategoryForFetch = useMemo(() => {
-    const spec = filterSpecializationId.trim()
-    if (spec) {
-      const p = (subcategoryParentById.get(spec) ?? "").trim()
-      if (p) return p
-    }
-    const mid = filterMidCategoryId.trim()
-    if (mid) return mid
-    return filterRootCategoryId.trim() || undefined
-  }, [filterSpecializationId, filterMidCategoryId, filterRootCategoryId, subcategoryParentById])
 
   const jobsCategoryFilterSlot = (
     <div className="flex flex-wrap items-center gap-2">
@@ -477,161 +594,6 @@ export default function JobsPage() {
       document.removeEventListener("pointerdown", onPointerDown)
     }
   }, [advancedDropdownOpen])
-
-  const fetchJobsPage = useCallback(
-    async (append: boolean) => {
-      if (!isSupabaseConfigured || !supabase) {
-        unstable_batchedUpdates(() => {
-          setJobs(mockJobs)
-          setCategories([])
-          setSubcategoryParentById(new Map())
-          setSubcategoryNamesById(new Map())
-          setJobsTotal(mockJobs.length)
-          jobsNextOffsetRef.current = mockJobs.length
-          setJobsNextOffset(mockJobs.length)
-        })
-        setLoading(false)
-        setLoadingMore(false)
-        return
-      }
-
-      if (!append) {
-        jobsNextOffsetRef.current = 0
-        setJobsNextOffset(0)
-        setLoading(true)
-      } else {
-        setLoadingMore(true)
-      }
-      setError("")
-      try {
-        const client = supabase
-        const offset = append ? jobsNextOffsetRef.current : 0
-        const category = serverCategoryForFetch
-        const runRpc = () =>
-          client.rpc("get_jobs_page", {
-            p_search: null,
-            p_limit: JOBS_PAGE_SIZE,
-            p_offset: offset,
-            p_category_id: category === "all" ? null : category,
-          })
-
-        const { data, error: rpcErr } = await withRejectedJwtRetry(client, runRpc)
-        if (rpcErr) throw rpcErr
-
-        const payload = data as Record<string, unknown> | null
-        const jobRows = Array.isArray(payload?.jobs) ? (payload.jobs as unknown[]) : []
-        const categoryRows = Array.isArray(payload?.categories) ? (payload.categories as unknown[]) : []
-        const totalRaw = payload?.total_count ?? payload?.total
-        const total = Number(totalRaw)
-        const safeTotal = Number.isFinite(total) ? total : 0
-
-        await new Promise<void>((resolve) => {
-          setTimeout(resolve, 0)
-        })
-        const mappedJobs = mapRpcRowsToJobs(jobRows)
-
-        unstable_batchedUpdates(() => {
-          if (!append) {
-            setJobs(mappedJobs.length > 0 ? mappedJobs : mockJobs)
-            jobsNextOffsetRef.current = JOBS_PAGE_SIZE
-            setJobsNextOffset(JOBS_PAGE_SIZE)
-          } else {
-            setJobs((prev) => {
-              const seen = new Set(prev.map((j) => j.id))
-              const merged = [...prev]
-              for (const j of mappedJobs) {
-                if (!seen.has(j.id)) {
-                  seen.add(j.id)
-                  merged.push(j)
-                }
-              }
-              return merged
-            })
-            jobsNextOffsetRef.current += JOBS_PAGE_SIZE
-            setJobsNextOffset(jobsNextOffsetRef.current)
-          }
-
-          setJobsTotal(safeTotal)
-
-          setCategories(
-            categoryRows.map((c) => {
-              const row = c as Record<string, unknown>
-              return {
-                id: String(row.id ?? ""),
-                name_ka: String(row.name_ka ?? ""),
-                parent_id: (row.parent_id as string | null | undefined) ?? null,
-              }
-            }) as CategoryItem[],
-          )
-        })
-
-        if (!append && !subcategoriesFetchedRef.current) {
-          subcategoriesFetchedRef.current = true
-          try {
-            const subRows = await fetchAllRowsByRange(
-              (from, to) =>
-                client
-                  .from("subcategories")
-                  .select("id,name_ka,category_id")
-                  .eq("is_active", true)
-                  .order("name_ka")
-                  .range(from, to),
-              500,
-              client,
-            )
-            unstable_batchedUpdates(() => {
-              setSubcategoryNamesById(
-                new Map(
-                  subRows.map((r) => {
-                    const row = r as { id?: string; name_ka?: string }
-                    return [String(row.id ?? ""), String(row.name_ka ?? "")] as const
-                  }),
-                ),
-              )
-              setSubcategoryParentById(
-                new Map(
-                  subRows.map((r) => {
-                    const row = r as { id?: string; category_id?: string | null }
-                    return [String(row.id ?? ""), String(row.category_id ?? "")] as const
-                  }),
-                ),
-              )
-            })
-          } catch (subcategoryError) {
-            console.warn("[jobs] subcategory filters unavailable:", subcategoryError)
-          }
-        }
-      } catch (loadError) {
-        console.error("[jobs] catalog load failed:", loadError)
-        setError(formatSupabaseClientError(loadError, "მონაცემები ვერ ჩაიტვირთა."))
-      } finally {
-        setLoading(false)
-        setLoadingMore(false)
-      }
-    },
-    [serverCategoryForFetch],
-  )
-
-  const fetchJobsPageRef = useRef(fetchJobsPage)
-  useEffect(() => {
-    fetchJobsPageRef.current = fetchJobsPage
-  }, [fetchJobsPage])
-
-  // Edge function only receives category + page; budget/location/skill filters run client-side on `filteredJobs`.
-  // Do not list applied* array state here — new array references each render would refetch endlessly.
-  useEffect(() => {
-    void fetchJobsPageRef.current(false)
-  }, [serverCategoryForFetch])
-
-  const reloadJobsFirstPage = () => {
-    void fetchJobsPageRef.current(false)
-  }
-
-  const loadMoreJobs = () => {
-    void fetchJobsPageRef.current(true)
-  }
-
-  const jobsHasMore = jobsNextOffset < jobsTotal
 
   const budgetTypeLabels = PRICE_TYPE_LABELS
 
@@ -964,7 +926,7 @@ export default function JobsPage() {
 
         {error ? (
           <div className="mt-6">
-            <ErrorState message={error} onRetry={reloadJobsFirstPage} />
+            <ErrorState message={error} onRetry={() => void refetch()} />
           </div>
         ) : loading ? (
           <div className="mt-6 space-y-4">
@@ -1077,7 +1039,7 @@ export default function JobsPage() {
                 <button
                   type="button"
                   disabled={loadingMore}
-                  onClick={loadMoreJobs}
+                  onClick={() => void fetchNextPage()}
                   className="h-11 rounded-lg border border-[#0088FF] px-4 text-sm font-semibold text-[#0088FF] transition hover:bg-[#E8F4FF] disabled:opacity-60"
                 >
                   მეტის ჩატვირთვა

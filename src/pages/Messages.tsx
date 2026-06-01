@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 import Navbar from "../components/Navbar.tsx"
 import ChatIcon from "../components/ui/ChatIcon.tsx"
 import EmptyState from "../components/ui/EmptyState.tsx"
@@ -7,8 +8,6 @@ import ErrorState from "../components/ui/ErrorState.tsx"
 import PageLoader from "../components/ui/PageLoader.tsx"
 import {
   applyReadReceipts,
-  fetchConversations,
-  fetchMessages,
   getOrCreateConversation,
   markConversationRead,
   readReceiptLabel,
@@ -18,7 +17,10 @@ import {
   type ChatMessage,
 } from "../lib/chat.ts"
 import { subscribeToConversationMessages, subscribeToConversationReads } from "../lib/chatRealtime.ts"
-import { resolveProfilePublicHrefByIds } from "../lib/follows.ts"
+import { fetchMessagesList } from "../lib/queries/fetchMessagesList.ts"
+import { fetchMessagesThread } from "../lib/queries/fetchMessagesThread.ts"
+import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
+import { queryKeys } from "../lib/queryKeys.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase.ts"
 import { LIMITS, validateUuid } from "../lib/validation.ts"
 
@@ -89,14 +91,13 @@ export default function MessagesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
 
-  const [loadingList, setLoadingList] = useState(true)
-  const [listError, setListError] = useState("")
+  const [listValidationError, setListValidationError] = useState("")
   const [conversations, setConversations] = useState<ChatConversation[]>([])
   const [profileHrefs, setProfileHrefs] = useState<Record<string, string>>({})
   const [activeId, setActiveId] = useState<string | null>(routeConversationId ?? null)
+  const [messagesUserId, setMessagesUserId] = useState("")
 
-  const [loadingThread, setLoadingThread] = useState(false)
-  const [threadError, setThreadError] = useState("")
+  const [threadValidationError, setThreadValidationError] = useState("")
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [meId, setMeId] = useState("")
   const [otherLastReadAt, setOtherLastReadAt] = useState<string | null>(null)
@@ -117,6 +118,62 @@ export default function MessagesPage() {
   }, [activeId])
 
   useEffect(() => {
+    if (!supabase) return
+    void supabase.auth.getUser().then(({ data: { user } }) => {
+      setMessagesUserId(user?.id ?? "")
+    })
+  }, [])
+
+  const {
+    data: listData,
+    isLoading: loadingList,
+    isError: listIsError,
+    error: listQueryError,
+    refetch: refetchConversations,
+  } = useQuery({
+    queryKey: queryKeys.messagesList(messagesUserId),
+    queryFn: fetchMessagesList,
+    enabled: Boolean(messagesUserId) && isSupabaseConfigured,
+  })
+  const listError =
+    listValidationError || (listIsError ? queryErrorMessage(listQueryError, "საუბრების ჩატვირთვა ვერ მოხერხდა.") : "")
+
+  useEffect(() => {
+    if (!listData) return
+    setConversations(listData.conversations)
+    setProfileHrefs(listData.profileHrefs)
+  }, [listData])
+
+  const {
+    data: threadData,
+    isLoading: loadingThread,
+    isError: threadIsError,
+    error: threadQueryError,
+    refetch: refetchThread,
+  } = useQuery({
+    queryKey: queryKeys.messagesThread(validatedActiveId ?? ""),
+    queryFn: () => fetchMessagesThread(validatedActiveId!),
+    enabled: Boolean(validatedActiveId) && isSupabaseConfigured,
+  })
+  const threadError =
+    threadValidationError ||
+    (threadIsError ? queryErrorMessage(threadQueryError, "შეტყობინებების ჩატვირთვა ვერ მოხერხდა.") : "")
+
+  useEffect(() => {
+    if (!threadData || !validatedActiveId || !supabase) return
+    if (activeIdRef.current !== validatedActiveId) return
+    setMessages(threadData.messages)
+    setMeId(threadData.meId)
+    setOtherLastReadAt(threadData.otherLastReadAt)
+    void markConversationRead(supabase, validatedActiveId).then(() => {
+      if (activeIdRef.current !== validatedActiveId) return
+      setConversations((prev) =>
+        prev.map((c) => (c.id === validatedActiveId ? { ...c, unread: false, unreadCount: 0 } : c)),
+      )
+    })
+  }, [threadData, validatedActiveId])
+
+  useEffect(() => {
     activeIdRef.current = validatedActiveId
   }, [validatedActiveId])
 
@@ -129,49 +186,18 @@ export default function MessagesPage() {
     [conversations, validatedActiveId],
   )
 
-  const loadConversations = useCallback(async (opts?: { silent?: boolean }) => {
-    if (!isSupabaseConfigured || !supabase) {
-      setListError("Supabase არ არის კონფიგურირებული.")
-      setConversations([])
-      setLoadingList(false)
-      return
-    }
-    if (!opts?.silent) {
-      setLoadingList(true)
-      setListError("")
-    }
-    try {
-      const list = await fetchConversations(supabase)
-      setConversations(list)
-      const hrefs = await resolveProfilePublicHrefByIds(list.map((c) => c.otherUserId))
-      setProfileHrefs(hrefs)
-    } catch (e) {
-      if (!opts?.silent) {
-        setListError(e instanceof Error ? e.message : "საუბრების ჩატვირთვა ვერ მოხერხდა.")
-      }
-    } finally {
-      if (!opts?.silent) {
-        setLoadingList(false)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    void loadConversations()
-  }, [loadConversations])
-
   useEffect(() => {
     if (!routeConversationId) {
       setActiveId(null)
       setMessages([])
       setOtherLastReadAt(null)
       setMeId("")
-      setThreadError("")
+      setThreadValidationError("")
       return
     }
     const result = validateUuid(routeConversationId, "საუბარი")
     if (result.ok === false) {
-      setThreadError(result.message)
+      setThreadValidationError(result.message)
       navigate("/messages", { replace: true })
       return
     }
@@ -184,7 +210,7 @@ export default function MessagesPage() {
 
     const withUserResult = validateUuid(withUserRaw, "მომხმარებელი")
     if (withUserResult.ok === false) {
-      setListError(withUserResult.message)
+      setListValidationError(withUserResult.message)
       setSearchParams({}, { replace: true })
       return
     }
@@ -197,7 +223,7 @@ export default function MessagesPage() {
     if (inquiryRaw) {
       const inquiryResult = validateUuid(inquiryRaw, "შეთავაზება")
       if (inquiryResult.ok === false) {
-        setListError(inquiryResult.message)
+        setListValidationError(inquiryResult.message)
         setSearchParams({}, { replace: true })
         return
       }
@@ -206,7 +232,7 @@ export default function MessagesPage() {
     if (applicationRaw) {
       const applicationResult = validateUuid(applicationRaw, "განცხადება")
       if (applicationResult.ok === false) {
-        setListError(applicationResult.message)
+        setListValidationError(applicationResult.message)
         setSearchParams({}, { replace: true })
         return
       }
@@ -226,10 +252,10 @@ export default function MessagesPage() {
         if (cancelled) return
         setSearchParams({}, { replace: true })
         navigate(`/messages/${id}`, { replace: true })
-        await loadConversations()
+        await refetchConversations()
       } catch (e) {
         if (!cancelled) {
-          setListError(e instanceof Error ? e.message : "საუბრის შექმნა ვერ მოხერხდა.")
+          setListValidationError(e instanceof Error ? e.message : "საუბრის შექმნა ვერ მოხერხდა.")
         }
       } finally {
         if (!cancelled) startChatInFlightRef.current = false
@@ -240,7 +266,7 @@ export default function MessagesPage() {
       cancelled = true
       startChatInFlightRef.current = false
     }
-  }, [searchParams, setSearchParams, navigate, loadConversations])
+  }, [searchParams, setSearchParams, navigate, refetchConversations])
 
   const bumpConversationInList = useCallback(
     (conversationId: string, preview: string, at: string, markUnread: boolean) => {
@@ -274,46 +300,6 @@ export default function MessagesPage() {
     },
     [navigate],
   )
-
-  const loadThread = useCallback(async (conversationId: string) => {
-    if (!supabase) return
-    setLoadingThread(true)
-    setThreadError("")
-    try {
-      const { messages: rows, meId: uid, otherLastReadAt: otherRead } = await fetchMessages(supabase, conversationId)
-      if (activeIdRef.current !== conversationId) return
-      setMessages(rows)
-      setMeId(uid)
-      setOtherLastReadAt(otherRead)
-      await markConversationRead(supabase, conversationId)
-      if (activeIdRef.current !== conversationId) return
-      setConversations((prev) =>
-        prev.map((c) => (c.id === conversationId ? { ...c, unread: false, unreadCount: 0 } : c)),
-      )
-    } catch (e) {
-      if (activeIdRef.current !== conversationId) return
-      setThreadError(e instanceof Error ? e.message : "შეტყობინებების ჩატვირთვა ვერ მოხერხდა.")
-      setMessages([])
-    } finally {
-      if (activeIdRef.current === conversationId) {
-        setLoadingThread(false)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!validatedActiveId || !supabase) {
-      setMessages([])
-      return
-    }
-    let cancelled = false
-    void loadThread(validatedActiveId).then(() => {
-      if (!cancelled) scrollBehaviorRef.current = "auto"
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [validatedActiveId, loadThread])
 
   useEffect(() => {
     const client = supabase
@@ -352,6 +338,12 @@ export default function MessagesPage() {
   }, [validatedActiveId])
 
   useEffect(() => {
+    if (threadData && validatedActiveId) {
+      scrollBehaviorRef.current = "auto"
+    }
+  }, [threadData, validatedActiveId])
+
+  useEffect(() => {
     if (messages.length === 0) return
     messagesEndRef.current?.scrollIntoView({ behavior: scrollBehaviorRef.current })
     scrollBehaviorRef.current = "smooth"
@@ -369,7 +361,7 @@ export default function MessagesPage() {
       bumpConversationInList(validatedActiveId, msg.body, msg.createdAt, false)
       composerRef.current?.focus()
     } catch (e) {
-      setThreadError(e instanceof Error ? e.message : "გაგზავნა ვერ მოხერხდა.")
+      setThreadValidationError(e instanceof Error ? e.message : "გაგზავნა ვერ მოხერხდა.")
     } finally {
       setSending(false)
     }
@@ -441,7 +433,7 @@ export default function MessagesPage() {
                 </div>
               ) : listError ? (
                 <div className="p-4">
-                  <ErrorState message={listError} onRetry={() => void loadConversations()} />
+                  <ErrorState message={listError} onRetry={() => void refetchConversations()} />
                 </div>
               ) : conversations.length === 0 ? (
                 <div className="p-4">
@@ -566,7 +558,7 @@ export default function MessagesPage() {
                   ) : threadError ? (
                     <ErrorState
                       message={threadError}
-                      onRetry={() => validatedActiveId && void loadThread(validatedActiveId)}
+                      onRetry={() => validatedActiveId && void refetchThread()}
                     />
                   ) : messages.length === 0 ? (
                     <p className="py-8 text-center text-sm text-slate-500">პირველი შეტყობინება გაგზავნეთ.</p>

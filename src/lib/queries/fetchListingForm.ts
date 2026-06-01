@@ -1,0 +1,189 @@
+import { stripLegacyPricePrefix } from "../listingDescription.ts"
+import { normalizeListingPriceType } from "../listingPrice.ts"
+import {
+  categoryIdsWithChildren,
+  rootIdContainingCategory,
+  type CategoryBranchRow,
+} from "../marketplaceCategoryTree.ts"
+import { formatSupabaseClientError, isSupabaseConfigured, supabase } from "../supabase.ts"
+
+const MAX_LISTING_IMAGES = 3
+const META_PREFIX = "<!--gigori-meta:"
+const META_SUFFIX = "-->"
+
+type ListingMeta = {
+  categoryId: string | null
+  subcategoryId: string | null
+  tags: string[]
+}
+
+function parseListingDescription(raw: string | null): { description: string; meta: ListingMeta } {
+  const fallback: ListingMeta = { categoryId: null, subcategoryId: null, tags: [] }
+  if (!raw) return { description: "", meta: fallback }
+  if (!raw.startsWith(META_PREFIX)) return { description: stripLegacyPricePrefix(raw), meta: fallback }
+  const endIndex = raw.indexOf(META_SUFFIX)
+  if (endIndex < 0) return { description: stripLegacyPricePrefix(raw), meta: fallback }
+  const metaChunk = raw.slice(META_PREFIX.length, endIndex).trim()
+  const body = stripLegacyPricePrefix(raw.slice(endIndex + META_SUFFIX.length))
+  try {
+    const parsed = JSON.parse(metaChunk) as Partial<ListingMeta>
+    return {
+      description: body,
+      meta: {
+        categoryId: parsed.categoryId ?? null,
+        subcategoryId: parsed.subcategoryId ?? null,
+        tags: Array.isArray(parsed.tags)
+          ? parsed.tags.map((tag) => String(tag).trim()).filter(Boolean).slice(0, 20)
+          : [],
+      },
+    }
+  } catch {
+    return { description: stripLegacyPricePrefix(raw), meta: fallback }
+  }
+}
+
+export type TagOption = {
+  name: string
+  categoryId: string | null
+}
+
+export type ListingFormEditData = {
+  title: string
+  description: string
+  price: string
+  priceType: ReturnType<typeof normalizeListingPriceType>
+  isActive: boolean
+  rootCategoryId: string
+  categoryId: string
+  subcategoryId: string
+  tags: string[]
+  existingImageUrls: string[]
+}
+
+export type ListingFormQueryData = {
+  userId: string
+  freelancerProfileId: string
+  categories: CategoryBranchRow[]
+  availableTags: TagOption[]
+  edit?: ListingFormEditData
+  redirectTo?: string
+}
+
+export async function fetchListingForm(listingId?: string): Promise<ListingFormQueryData> {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error("Supabase არ არის კონფიგურირებული.")
+  }
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+  if (userError || !user) {
+    return {
+      userId: "",
+      freelancerProfileId: "",
+      categories: [],
+      availableTags: [],
+      redirectTo: "/login?reason=listing",
+    }
+  }
+
+  const [{ data: fp, error: fpError }, { data: categoryRows, error: categoryError }] = await Promise.all([
+    supabase.from("freelancer_profiles").select("id").eq("user_id", user.id).maybeSingle(),
+    supabase.from("categories").select("id,name_ka,parent_id").eq("is_active", true).order("sort_order"),
+  ])
+
+  if (fpError || !fp) throw new Error("ფრილანსერის პროფილი ვერ მოიძებნა.")
+  if (categoryError) throw categoryError
+
+  const fullCats = (categoryRows ?? []).map((row: { id?: string; name_ka?: string; parent_id?: string | null }) => ({
+    id: String(row.id ?? ""),
+    name_ka: String(row.name_ka ?? ""),
+    parent_id: row.parent_id ?? null,
+  })) as CategoryBranchRow[]
+
+  const { data: skillRows, error: skillError } = await supabase
+    .from("skills")
+    .select("name,category_id")
+    .eq("is_approved", true)
+    .order("name")
+
+  const availableTags: TagOption[] = skillError
+    ? (import.meta.env.DEV && console.warn("[ListingForm] skills catalog:", skillError), [])
+    : Array.from(
+        new Map(
+          (skillRows ?? [])
+            .map((row: { name?: string | null; category_id?: string | null }) => ({
+              name: String(row.name ?? "").trim(),
+              categoryId: row.category_id ?? null,
+            }))
+            .filter((row) => row.name)
+            .map((row) => [`${row.name}::${row.categoryId ?? "none"}`, row]),
+        ).values(),
+      )
+
+  const base: ListingFormQueryData = {
+    userId: user.id,
+    freelancerProfileId: fp.id,
+    categories: fullCats,
+    availableTags,
+  }
+
+  if (!listingId) return base
+
+  const { data: listing, error: listingError } = await supabase
+    .from("services")
+    .select("*")
+    .eq("id", listingId)
+    .eq("freelancer_profile_id", fp.id)
+    .single()
+  if (listingError || !listing) throw new Error("ლისტინგი ვერ მოიძებნა.")
+
+  const parsed = parseListingDescription(listing.description ?? "")
+
+  let resolvedMid = parsed.meta.categoryId ?? ""
+  const parsedSub = parsed.meta.subcategoryId ?? ""
+  const byId = new Map(fullCats.map((c) => [c.id, c]))
+  if (resolvedMid && parsedSub) {
+    const initialNode = byId.get(resolvedMid)
+    if (initialNode && initialNode.parent_id == null) {
+      const { data: subRow } = await supabase.from("subcategories").select("category_id").eq("id", parsedSub).maybeSingle()
+      if (subRow?.category_id) resolvedMid = subRow.category_id
+    }
+  }
+  const hasKids = categoryIdsWithChildren(fullCats)
+  let resolvedRoot = ""
+  if (resolvedMid) {
+    const node = byId.get(resolvedMid)
+    if (node?.parent_id) {
+      resolvedRoot = rootIdContainingCategory(fullCats, resolvedMid)
+    } else if (hasKids.has(resolvedMid)) {
+      resolvedRoot = resolvedMid
+      resolvedMid = ""
+    } else {
+      resolvedRoot = resolvedMid
+    }
+  }
+
+  return {
+    ...base,
+    edit: {
+      title: listing.title ?? "",
+      description: parsed.description,
+      price: String(listing.price ?? 0),
+      priceType: normalizeListingPriceType((listing as { price_type?: string | null }).price_type),
+      isActive: listing.is_active ?? true,
+      rootCategoryId: resolvedRoot,
+      categoryId: resolvedMid,
+      subcategoryId: parsedSub,
+      tags: parsed.meta.tags,
+      existingImageUrls: Array.isArray((listing as { image_urls?: unknown }).image_urls)
+        ? (listing as { image_urls: unknown[] }).image_urls.map((v) => String(v)).filter(Boolean).slice(0, MAX_LISTING_IMAGES)
+        : [],
+    },
+  }
+}
+
+export function listingFormFetchErrorMessage(error: unknown): string {
+  return formatSupabaseClientError(error, "ჩატვირთვა ვერ მოხერხდა.")
+}

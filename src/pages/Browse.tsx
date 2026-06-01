@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query"
 import { Link, useSearchParams } from "react-router-dom"
 import Navbar from "../components/Navbar.tsx"
 import EmptyState from "../components/ui/EmptyState.tsx"
@@ -8,6 +9,8 @@ import { mergeFreelancerCompletedWorkCounts } from "../lib/freelancerCompletedWo
 import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
+import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
+import { queryKeys } from "../lib/queryKeys.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { matchesLocationFilter } from "../lib/marketplaceFilters.ts"
 import {
@@ -180,6 +183,122 @@ function stripListingMeta(raw: string | null) {
 
 const FREELANCER_PAGE_SIZE = 20
 
+type BrowseFreelancersPage = {
+  freelancers: FreelancerCardItem[]
+  total: number
+}
+
+type BrowseCatalogData = {
+  categories: CategoryItem[]
+  skills: SkillItem[]
+}
+
+async function loadBrowseCatalog(): Promise<BrowseCatalogData> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { categories: [], skills: [] }
+  }
+  const sb = supabase
+  const [categoryRows, skillRows] = await Promise.all([
+    fetchAllRowsByRange((from, to) =>
+      sb
+        .from("categories")
+        .select("id,name_ka,parent_id")
+        .eq("is_active", true)
+        .order("sort_order")
+        .range(from, to),
+    ),
+    fetchAllRowsByRange((from, to) =>
+      sb.from("skills").select("id,name,category_id").eq("is_approved", true).order("name").range(from, to),
+    ),
+  ])
+  return {
+    categories: (categoryRows as { id?: string; name_ka?: string; parent_id?: string | null }[]).map((row) => ({
+      id: String(row.id ?? ""),
+      name_ka: String(row.name_ka ?? ""),
+      parent_id: row.parent_id ?? null,
+    })),
+    skills: skillRows as SkillItem[],
+  }
+}
+
+async function loadBrowseFreelancersPage(offset: number): Promise<BrowseFreelancersPage> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { freelancers: mockFreelancers, total: mockFreelancers.length }
+  }
+
+  const { data, error: freelancersErr, count } = await supabase
+    .from("freelancer_profiles")
+    .select(
+      `
+            *,
+            profiles:profiles!freelancer_profiles_user_id_fkey (full_name, avatar_url, city),
+            freelancer_skills (
+              skills (id, name, category_id)
+            ),
+            services (price, description)
+          `,
+      { count: "exact" },
+    )
+    .eq("is_public", true)
+    .order("average_rating", { ascending: false })
+    .range(offset, offset + FREELANCER_PAGE_SIZE - 1)
+
+  if (freelancersErr) throw freelancersErr
+
+  const mapped: FreelancerCardItem[] = (data ?? []).map((item: any) => {
+    const skillRows =
+      item.freelancer_skills
+        ?.map((fs: any) => fs.skills)
+        .filter(Boolean)
+        .map((skill: any) => ({
+          id: skill.id,
+          name: skill.name,
+          categoryId: skill.category_id ?? null,
+        })) ?? []
+
+    const serviceRows =
+      item.services?.map((service: any) => ({
+        price: service.price,
+        description: stripListingMeta(service.description ?? null),
+      })) ?? []
+
+    return {
+      id: item.id,
+      slug: item.slug,
+      professionalTitle: item.professional_title ?? "ფრილანსერი",
+      averageRating: item.average_rating ?? 0,
+      totalReviewsCount: item.total_reviews_count ?? 0,
+      availability: item.availability ?? null,
+      isAcceptingNewWork: item.is_accepting_new_work !== false,
+      completedJobsCount: Number(item.completed_jobs_count ?? 0),
+      createdAt: item.created_at,
+      fullName: item.profiles?.full_name ?? "ფრილანსერი",
+      avatarUrl: item.profiles?.avatar_url ?? null,
+      city: item.profiles?.city ?? null,
+      bio: item.bio ?? null,
+      skills: skillRows,
+      services: serviceRows,
+    }
+  })
+
+  if (mapped.length > 0) {
+    const fallbackByFp = Object.fromEntries(mapped.map((item) => [item.id, item.completedJobsCount]))
+    const countMap = await mergeFreelancerCompletedWorkCounts(
+      supabase,
+      mapped.map((item) => item.id),
+      fallbackByFp,
+    )
+    for (const item of mapped) {
+      item.completedJobsCount = countMap[item.id] ?? item.completedJobsCount
+    }
+  }
+
+  const total = count ?? 0
+  const freelancers = mapped.length > 0 || offset > 0 ? mapped : mockFreelancers
+
+  return { freelancers, total }
+}
+
 function FreelancerCardInitials({ fullName }: { fullName: string }) {
   const initials = useMemo(() => getInitials(fullName), [fullName])
   return <>{initials}</>
@@ -187,19 +306,46 @@ function FreelancerCardInitials({ fullName }: { fullName: string }) {
 
 export default function BrowsePage() {
   const [searchParams] = useSearchParams()
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
   const [advancedDropdownOpen, setAdvancedDropdownOpen] = useState(false)
   const advancedDropdownRef = useRef<HTMLDivElement>(null)
-  const [freelancerTotal, setFreelancerTotal] = useState(0)
-  const freelancerNextOffsetRef = useRef(0)
-  const fetchInProgressRef = useRef(false)
-  const fetchGenerationRef = useRef(0)
-  const [freelancersLoadingMore, setFreelancersLoadingMore] = useState(false)
-  const [freelancers, setFreelancers] = useState<FreelancerCardItem[]>([])
-  const [categories, setCategories] = useState<CategoryItem[]>([])
-  const [skills, setSkills] = useState<SkillItem[]>([])
   const [sortBy, setSortBy] = useState<SortOption>("rating")
+
+  const { data: catalog } = useQuery({
+    queryKey: queryKeys.browseCatalog,
+    queryFn: loadBrowseCatalog,
+  })
+  const categories = catalog?.categories ?? []
+  const skills = catalog?.skills ?? []
+
+  const {
+    data: freelancersData,
+    isLoading: loading,
+    isError,
+    error: freelancersError,
+    fetchNextPage,
+    hasNextPage: freelancersHasMore,
+    isFetchingNextPage: freelancersLoadingMore,
+    refetch,
+  } = useInfiniteQuery({
+    queryKey: queryKeys.browseFreelancers,
+    queryFn: ({ pageParam }) => loadBrowseFreelancersPage(pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, _allPages, lastPageParam) => {
+      const nextOffset = lastPageParam + FREELANCER_PAGE_SIZE
+      if (nextOffset < lastPage.total) return nextOffset
+      return undefined
+    },
+  })
+
+  const error = isError ? queryErrorMessage(freelancersError, "მონაცემები ვერ ჩაიტვირთა.") : ""
+
+  const freelancers = useMemo(() => {
+    const merged: FreelancerCardItem[] = []
+    for (const page of freelancersData?.pages ?? []) {
+      merged.push(...page.freelancers)
+    }
+    return merged
+  }, [freelancersData?.pages])
 
   const [searchText, setSearchText] = useState("")
   const [filterRootCategoryId, setFilterRootCategoryId] = useState("")
@@ -236,169 +382,6 @@ export default function BrowsePage() {
       document.title = "გიგორი"
     }
   }, [])
-
-  const fetchFreelancersPage = useCallback(async (append: boolean) => {
-    if (!isSupabaseConfigured || !supabase) {
-      setFreelancers(mockFreelancers)
-      freelancerNextOffsetRef.current = mockFreelancers.length
-      setFreelancerTotal(mockFreelancers.length)
-      setLoading(false)
-      setFreelancersLoadingMore(false)
-      return
-    }
-
-    if (append && fetchInProgressRef.current) return
-    if (append) fetchInProgressRef.current = true
-
-    if (!append) {
-      freelancerNextOffsetRef.current = 0
-      setLoading(true)
-      fetchGenerationRef.current += 1
-    } else {
-      setFreelancersLoadingMore(true)
-    }
-    const requestGen = fetchGenerationRef.current
-    setError("")
-    try {
-      const offset = append ? freelancerNextOffsetRef.current : 0
-      const { data, error: freelancersErr, count } = await supabase
-        .from("freelancer_profiles")
-        .select(
-          `
-            *,
-            profiles:profiles!freelancer_profiles_user_id_fkey (full_name, avatar_url, city),
-            freelancer_skills (
-              skills (id, name, category_id)
-            ),
-            services (price, description)
-          `,
-          { count: "exact" },
-        )
-        .eq("is_public", true)
-        .order("average_rating", { ascending: false })
-        .range(offset, offset + FREELANCER_PAGE_SIZE - 1)
-
-      if (freelancersErr) throw freelancersErr
-
-      if (!append && requestGen !== fetchGenerationRef.current) return
-
-      const mapped: FreelancerCardItem[] = (data ?? []).map((item: any) => {
-        const skillRows =
-          item.freelancer_skills
-            ?.map((fs: any) => fs.skills)
-            .filter(Boolean)
-            .map((skill: any) => ({
-              id: skill.id,
-              name: skill.name,
-              categoryId: skill.category_id ?? null,
-            })) ?? []
-
-        const serviceRows =
-          item.services?.map((service: any) => ({
-            price: service.price,
-            description: stripListingMeta(service.description ?? null),
-          })) ?? []
-
-        return {
-          id: item.id,
-          slug: item.slug,
-          professionalTitle: item.professional_title ?? "ფრილანსერი",
-          averageRating: item.average_rating ?? 0,
-          totalReviewsCount: item.total_reviews_count ?? 0,
-          availability: item.availability ?? null,
-          isAcceptingNewWork: item.is_accepting_new_work !== false,
-          completedJobsCount: Number(item.completed_jobs_count ?? 0),
-          createdAt: item.created_at,
-          fullName: item.profiles?.full_name ?? "ფრილანსერი",
-          avatarUrl: item.profiles?.avatar_url ?? null,
-          city: item.profiles?.city ?? null,
-          bio: item.bio ?? null,
-          skills: skillRows,
-          services: serviceRows,
-        }
-      })
-
-      if (mapped.length > 0) {
-        const fallbackByFp = Object.fromEntries(mapped.map((item) => [item.id, item.completedJobsCount]))
-        const countMap = await mergeFreelancerCompletedWorkCounts(
-          supabase,
-          mapped.map((item) => item.id),
-          fallbackByFp,
-        )
-        for (const item of mapped) {
-          item.completedJobsCount = countMap[item.id] ?? item.completedJobsCount
-        }
-      }
-
-      if (!append && requestGen !== fetchGenerationRef.current) return
-
-      const total = count ?? 0
-
-      if (!append) {
-        setFreelancers(mapped.length > 0 ? mapped : mockFreelancers)
-        freelancerNextOffsetRef.current = FREELANCER_PAGE_SIZE
-      } else {
-        setFreelancers((prev) => [...prev, ...mapped])
-        freelancerNextOffsetRef.current += FREELANCER_PAGE_SIZE
-      }
-
-      setFreelancerTotal(total)
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "მონაცემები ვერ ჩაიტვირთა.")
-    } finally {
-      setLoading(false)
-      setFreelancersLoadingMore(false)
-      if (append) fetchInProgressRef.current = false
-    }
-  }, [])
-
-  useEffect(() => {
-    const loadCatalog = async () => {
-      if (!isSupabaseConfigured || !supabase) {
-        setCategories([])
-        setSkills([])
-        return
-      }
-      try {
-        if (!supabase) return
-        const sb = supabase
-        const [categoryRows, skillRows] = await Promise.all([
-          fetchAllRowsByRange((from, to) =>
-            sb
-              .from("categories")
-              .select("id,name_ka,parent_id")
-              .eq("is_active", true)
-              .order("sort_order")
-              .range(from, to),
-          ),
-          fetchAllRowsByRange((from, to) =>
-            sb.from("skills").select("id,name,category_id").eq("is_approved", true).order("name").range(from, to),
-          ),
-        ])
-        setCategories(
-          (categoryRows as { id?: string; name_ka?: string; parent_id?: string | null }[]).map((row) => ({
-            id: String(row.id ?? ""),
-            name_ka: String(row.name_ka ?? ""),
-            parent_id: row.parent_id ?? null,
-          })),
-        )
-        setSkills(skillRows as SkillItem[])
-      } catch (catalogErr) {
-        if (import.meta.env.DEV) console.warn("[Browse] catalog load:", catalogErr)
-      }
-    }
-    void loadCatalog()
-  }, [])
-
-  useEffect(() => {
-    void fetchFreelancersPage(false)
-  }, [searchText, catalogFilterEffectiveId, fetchFreelancersPage])
-
-  const loadMoreFreelancers = () => {
-    void fetchFreelancersPage(true)
-  }
-
-  const freelancersHasMore = freelancerNextOffsetRef.current < freelancerTotal
 
   useEffect(() => {
     const query = searchParams.get("q")
@@ -873,7 +856,7 @@ export default function BrowsePage() {
 
         <section className="mt-6 min-w-0">
           {error ? (
-            <ErrorState message={error} onRetry={() => void fetchFreelancersPage(false)} />
+            <ErrorState message={error} onRetry={() => void refetch()} />
           ) : loading ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, index) => (
@@ -989,7 +972,7 @@ export default function BrowsePage() {
                   <button
                     type="button"
                     disabled={freelancersLoadingMore}
-                    onClick={loadMoreFreelancers}
+                    onClick={() => void fetchNextPage()}
                     className="h-11 rounded-lg border border-[#1B2B4B] px-4 text-sm font-semibold text-[#1B2B4B]"
                   >
                     მეტის ჩატვირთვა

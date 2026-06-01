@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 import Navbar from "../components/Navbar.tsx"
 import { useToast } from "../components/ui/ToastProvider.tsx"
-import { countFreelancerProfileVisits, recordProfileVisit } from "../lib/profileVisits.ts"
+import { countFreelancerProfileVisits } from "../lib/profileVisits.ts"
 import { formatFreelancerEducationDegreeLevel } from "../lib/freelancerEducation.ts"
-import { parseListingPreview } from "../lib/listingDescription.ts"
-import { listingPriceNegotiable } from "../lib/homeFeed.ts"
-import { formatListingPrice, normalizeListingPriceType } from "../lib/listingPrice.ts"
+import { formatListingPrice } from "../lib/listingPrice.ts"
 import { formatCityForDisplay } from "../lib/marketplaceFilters.ts"
-import { supabaseEdgeHeaders } from "../lib/supabaseEdgeHeaders.ts"
 import FollowListsModal, { type FollowModalTab } from "../components/FollowListsModal.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import { ViewCountEyeIcon } from "../components/ViewCountEyeIcon.tsx"
@@ -24,117 +22,20 @@ import {
   type ProfileJobApplication,
 } from "../lib/profileOffers.ts"
 import StartConversationButton from "../components/StartConversationButton.tsx"
-
-type ProfileData = {
-  id: string
-  full_name: string
-  avatar_url: string | null
-  city: string | null
-  member_since: string
-  email: string | null
-  phone: string | null
-  cv_url: string | null
-}
-
-type FreelancerData = {
-  id: string
-  slug: string
-  professional_title: string | null
-  average_rating: number
-  total_reviews_count: number
-  availability: string | null
-  languages: string[]
-  linkedin_url: string | null
-  github_url: string | null
-  portfolio_url: string | null
-  facebook_url: string | null
-  instagram_url: string | null
-  tiktok_url: string | null
-  youtube_url: string | null
-  x_url: string | null
-  bio: string | null
-  user_id: string
-  is_accepting_new_work?: boolean | null
-  /** საჯარო პროფილის ჩვენების კონტროლი (RLS/RPC-თან თანხვედრაში). */
-  show_completed_work_on_public_profile?: boolean
-}
-
-type SkillData = { id: string; name: string }
-type ServiceData = {
-  id: string
-  title: string
-  description: string | null
-  price: number
-  price_type: string
-  views_count: number
-  tags: string[]
-  /** From raw listing text + price (before meta strip). */
-  negotiable: boolean
-}
-type ExperienceData = { id: string; title: string; organization: string; start_date: string; end_date: string | null; description: string | null }
-type EducationData = {
-  id: string
-  institution: string
-  degree_level: string
-  field_of_study: string | null
-  end_date: string | null
-}
-type PortfolioData = { id: string; title: string; image_url: string; project_url: string | null }
-
-type PublicCompletedPlatformJob = {
-  completedJobId: string
-  jobDescription: string
-  hirerDisplayName: string
-  hirerAvatarUrl: string | null
-}
-
-function embedCjJoin<T extends Record<string, unknown>>(v: T | T[] | null | undefined): T | null {
-  if (v == null) return null
-  return Array.isArray(v) ? (v[0] as T | undefined) ?? null : v
-}
-
-function mapPublicCompletedJobRows(rows: unknown[] | null | undefined): PublicCompletedPlatformJob[] {
-  if (!rows?.length) return []
-  const out: PublicCompletedPlatformJob[] = []
-  for (const raw of rows as Array<Record<string, unknown>>) {
-    const job = embedCjJoin(raw.jobs as Record<string, unknown> | Record<string, unknown>[] | null)
-    const hp = embedCjJoin(raw.hirer_profiles as Record<string, unknown> | Record<string, unknown>[] | null)
-    const completedAt = raw.completed_at != null ? String(raw.completed_at) : ""
-    if (!completedAt) continue
-    const completedJobId = typeof raw.id === "string" ? raw.id : ""
-    if (!completedJobId) continue
-
-    const descRaw = job?.description != null ? String(job.description) : ""
-    const titleFallback = typeof job?.title === "string" && job.title.trim() ? job.title.trim() : ""
-    const jobDescription = descRaw.trim() || titleFallback || "აღწერა არ არის."
-
-    const profiles = hp ? embedCjJoin(hp.profiles as Record<string, unknown> | Record<string, unknown>[] | null) : null
-    const company = typeof hp?.company_name === "string" ? hp.company_name.trim() : ""
-    const profileName = typeof profiles?.full_name === "string" ? String(profiles.full_name).trim() : ""
-    const hirerDisplayName = company || profileName || "დამქირავებელი"
-    const hirerAvatarUrl =
-      profiles?.avatar_url != null && String(profiles.avatar_url).trim()
-        ? String(profiles.avatar_url).trim()
-        : null
-
-    out.push({
-      completedJobId,
-      jobDescription,
-      hirerDisplayName,
-      hirerAvatarUrl,
-    })
-  }
-  return out
-}
-
-type ReviewData = {
-  id: string
-  reviewer_id: string
-  review_text: string
-  rating_overall: number
-  created_at: string
-  reviewer_name: string
-}
+import {
+  fetchFreelancerProfile,
+  type EducationData,
+  type ExperienceData,
+  type FreelancerData,
+  type PortfolioData,
+  type ProfileData,
+  type PublicCompletedPlatformJob,
+  type ReviewData,
+  type ServiceData,
+  type SkillData,
+} from "../lib/queries/fetchFreelancerProfile.ts"
+import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
+import { queryKeys } from "../lib/queryKeys.ts"
 
 function getInitials(fullName: string) {
   const parts = fullName.trim().split(" ").filter(Boolean)
@@ -191,8 +92,17 @@ export default function FreelancerProfilePage() {
   const navigate = useNavigate()
   const { slug } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
+  const {
+    data: profileData,
+    isLoading: loading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: queryKeys.freelancerProfile(slug ?? ""),
+    queryFn: () => fetchFreelancerProfile(slug!),
+    enabled: Boolean(slug),
+  })
+  const error = isError ? queryErrorMessage(queryError, "მონაცემები ვერ ჩაიტვირთა.") : ""
   const [profile, setProfile] = useState<ProfileData | null>(null)
   const [freelancer, setFreelancer] = useState<FreelancerData | null>(null)
   const [skills, setSkills] = useState<SkillData[]>([])
@@ -301,330 +211,34 @@ export default function FreelancerProfilePage() {
   }, [canRespondToApplications, freelancer?.id, viewerHirerProfileId])
 
   useEffect(() => {
-    const loadProfile = async () => {
-      if (!slug) {
-        setError("ფრილანსერი ვერ მოიძებნა.")
-        setLoading(false)
-        return
-      }
-
-      if (!isSupabaseConfigured || !supabase) {
-        setError("Supabase არ არის კონფიგურირებული.")
-        setLoading(false)
-        return
-      }
-
-      try {
-        setPublicCompletedJobs([])
-        setPublicCompletedListings([])
-        setViewerIsOwner(false)
-
-        const { data: freelancerData, error: freelancerError } = await supabase
-          .from("freelancer_profiles")
-          .select("*")
-          .eq("slug", slug)
-          .eq("is_public", true)
-          .single()
-
-        if (freelancerError || !freelancerData) {
-          throw new Error("ფრილანსერი ვერ მოიძებნა.")
-        }
-
-        setFreelancer(freelancerData as FreelancerData)
-
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-        const isOwnerViewer = session?.user?.id === freelancerData.user_id
-        setViewerIsOwner(isOwnerViewer)
-
-        try {
-          const cvRes = await fetch(
-            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/cv-get?user_id=${encodeURIComponent(freelancerData.user_id)}`,
-            {
-              method: "GET",
-              headers: supabaseEdgeHeaders(session?.access_token ?? null),
-            },
-          )
-          if (cvRes.ok) {
-            const cvPayload = await cvRes.json().catch(() => null)
-            const cv = cvPayload?.cv
-            const slugValue =
-              cv &&
-              typeof cv === "object" &&
-              cv.is_visible_on_profile === true &&
-              cv.is_public === true &&
-              typeof cv.custom_slug === "string" &&
-              cv.custom_slug.trim()
-                ? cv.custom_slug.trim()
-                : ""
-            setPublicCvSlug(slugValue || null)
-          } else {
-            setPublicCvSlug(null)
-          }
-        } catch {
-          setPublicCvSlug(null)
-        }
-
-        const profileSelectPublic = "id,full_name,avatar_url,city,member_since,cv_url"
-
-        const [
-          profileRes,
-          freelancerProfileSkillsRes,
-          servicesRes,
-          reviewsRes,
-          experienceRes,
-          educationRes,
-          portfolioRes,
-          completedJobsRes,
-          listingsRpcRes,
-        ] = await Promise.all([
-          supabase
-            .from("profiles")
-            .select(profileSelectPublic)
-            .eq("id", freelancerData.user_id)
-            .single(),
-          supabase
-            .from("freelancer_profiles")
-            .select(
-              `
-              freelancer_skills (
-                skill_id,
-                skills ( id, name )
-              )
-            `,
-            )
-            .eq("id", freelancerData.id)
-            .eq("is_public", true)
-            .maybeSingle(),
-          supabase
-            .from("services")
-            .select("id,title,description,price,price_type,views_count")
-            .eq("freelancer_profile_id", freelancerData.id)
-            .eq("is_active", true)
-            .order("created_at", { ascending: false }),
-          supabase
-            .from("reviews")
-            .select("id,reviewer_id,review_text,rating_overall,created_at")
-            .eq("reviewee_id", freelancerData.user_id)
-            .order("created_at", { ascending: false })
-            .limit(10),
-          supabase
-            .from("experience")
-            .select("id,title,organization,start_date,end_date,description")
-            .eq("freelancer_profile_id", freelancerData.id)
-            .order("start_date", { ascending: false }),
-          supabase
-            .from("freelancer_education")
-            .select("id,institution,degree_level,field_of_study,end_date")
-            .eq("freelancer_profile_id", freelancerData.id)
-            .order("end_date", { ascending: false }),
-          supabase
-            .from("portfolio_items")
-            .select("id,title,image_url,project_url")
-            .eq("freelancer_profile_id", freelancerData.id)
-            .order("sort_order", { ascending: true }),
-          supabase
-            .from("completed_jobs")
-            .select(
-              `
-              id,
-              completed_at,
-              job_id,
-              jobs ( title, description ),
-              hirer_profiles (
-                company_name,
-                profiles:profiles!hirer_profiles_user_id_fkey ( full_name, avatar_url )
-              )
-            `,
-            )
-            .eq("freelancer_profile_id", freelancerData.id)
-            .not("completed_at", "is", null)
-            .order("completed_at", { ascending: false })
-            .limit(40),
-          supabase.rpc("public_freelancer_completed_service_titles", {
-            p_freelancer_profile_id: freelancerData.id,
-          }),
-        ])
-
-        if (profileRes.error) throw profileRes.error
-        if (freelancerProfileSkillsRes.error) throw freelancerProfileSkillsRes.error
-        if (servicesRes.error) throw servicesRes.error
-        if (reviewsRes.error) throw reviewsRes.error
-        if (experienceRes.error) throw experienceRes.error
-        if (educationRes.error) throw educationRes.error
-        if (portfolioRes.error) throw portfolioRes.error
-
-        if (completedJobsRes.error) {
-          if (import.meta.env.DEV)
-            console.warn("[FreelancerProfile] completed_jobs:", completedJobsRes.error.message)
-          setPublicCompletedJobs([])
-        } else {
-          setPublicCompletedJobs(mapPublicCompletedJobRows(completedJobsRes.data as unknown[]))
-        }
-        if (listingsRpcRes.error) {
-          if (import.meta.env.DEV)
-            console.warn("[FreelancerProfile] completed listing titles RPC:", listingsRpcRes.error.message)
-          setPublicCompletedListings([])
-        } else {
-          const rpcRows = (listingsRpcRes.data ?? []) as { service_title: string; completed_at: string }[]
-          setPublicCompletedListings(
-            rpcRows.map((row: { service_title: string; completed_at: string }) => ({
-              title: row.service_title,
-              completedAt: row.completed_at,
-            })),
-          )
-        }
-
-        const hideCompletedPublic =
-          (freelancerData as FreelancerData).show_completed_work_on_public_profile === false
-        if (hideCompletedPublic && !isOwnerViewer) {
-          setPublicCompletedJobs([])
-          setPublicCompletedListings([])
-        }
-
-        const base = profileRes.data as Omit<ProfileData, "phone" | "email"> &
-          Partial<Pick<ProfileData, "phone" | "email">>
-        setProfile({
-          ...base,
-          email: null,
-          phone: null,
-        })
-        setServices(
-          (
-            (servicesRes.data ?? []) as Array<
-              Omit<ServiceData, "tags" | "views_count" | "negotiable"> & { views_count?: number | null }
-            >
-          ).map((service) => {
-            const rawDesc = String(service.description ?? "")
-            const parsed = parseListingPreview(service.description ?? null)
-            return {
-              id: service.id,
-              title: service.title,
-              description: parsed.text.trim() ? parsed.text : null,
-              price: service.price,
-              price_type: normalizeListingPriceType(service.price_type),
-              views_count: Number(service.views_count ?? 0),
-              tags: parsed.tags,
-              negotiable: listingPriceNegotiable(service.price, rawDesc),
-            }
-          }),
-        )
-        setExperience((experienceRes.data ?? []) as ExperienceData[])
-        setEducation((educationRes.data ?? []) as EducationData[])
-        setPortfolioItems((portfolioRes.data ?? []) as PortfolioData[])
-
-        type SkillCell = { id: string; name: string }
-        type FsRowRaw = { skill_id?: string | null; skills?: SkillCell | SkillCell[] | null }
-
-        function firstSkill(skillCell: FsRowRaw["skills"]): SkillCell | null {
-          if (!skillCell) return null
-          return Array.isArray(skillCell) ? skillCell[0] ?? null : skillCell
-        }
-
-        const fpSkillPayload =
-          freelancerProfileSkillsRes.data as { freelancer_skills?: FsRowRaw[] | null } | null
-        const fsRowsRaw = fpSkillPayload?.freelancer_skills ?? []
-
-        const skillById = new Map<string, { id: string; name: string }>()
-        const idsNeedingName: string[] = []
-        for (const row of fsRowsRaw) {
-          const embedded = firstSkill(row.skills)
-          if (embedded?.id && embedded?.name) {
-            skillById.set(embedded.id, { id: embedded.id, name: embedded.name })
-            continue
-          }
-          const sid = row.skill_id ?? embedded?.id
-          if (sid && !skillById.has(sid)) idsNeedingName.push(sid)
-        }
-        const uniqueMissing = [...new Set(idsNeedingName)]
-        async function hydrateSkills(ids: string[]) {
-          const uniq = [...new Set(ids.filter(Boolean))]
-          if (uniq.length === 0 || !supabase) return
-          const { data: skillRowsExtra, error: skillRowsExtraErr } = await supabase
-            .from("skills")
-            .select("id,name")
-            .in("id", uniq)
-            .eq("is_approved", true)
-          if (skillRowsExtraErr) throw skillRowsExtraErr
-          for (const s of skillRowsExtra ?? []) {
-            if (s.id && s.name) skillById.set(s.id, { id: s.id, name: s.name })
-          }
-        }
-
-        if (uniqueMissing.length > 0) await hydrateSkills(uniqueMissing)
-
-        if (skillById.size === 0) {
-          const { data: rawFs, error: rawFsErr } = await supabase
-            .from("freelancer_skills")
-            .select("skill_id")
-            .eq("freelancer_profile_id", freelancerData.id)
-          if (!rawFsErr && rawFs?.length) {
-            await hydrateSkills(rawFs.map((r) => String(r.skill_id ?? "")))
-          }
-        }
-
-        setSkills([...skillById.values()])
-
-        const reviewRows = (reviewsRes.data ?? []) as Array<{
-          id: string
-          reviewer_id: string
-          review_text: string
-          rating_overall: number
-          created_at: string
-        }>
-        const reviewRatings = reviewRows
-          .map((r) => Number(r.rating_overall))
-          .filter((n) => Number.isFinite(n))
-        if (reviewRatings.length > 0) {
-          const avg = reviewRatings.reduce((sum, n) => sum + n, 0) / reviewRatings.length
-          setFreelancer((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  average_rating: avg,
-                  total_reviews_count: Math.max(prev.total_reviews_count ?? 0, reviewRows.length),
-                }
-              : prev,
-          )
-        }
-        const reviewerIds = Array.from(new Set(reviewRows.map((review) => review.reviewer_id)))
-
-        let reviewerMap: Record<string, string> = {}
-        if (reviewerIds.length > 0) {
-          const { data: reviewersData, error: reviewersError } = await supabase
-            .from("profiles")
-            .select("id,full_name")
-            .in("id", reviewerIds)
-          if (reviewersError) throw reviewersError
-          reviewerMap =
-            reviewersData?.reduce<Record<string, string>>((acc, row) => {
-              acc[row.id] = row.full_name
-              return acc
-            }, {}) ?? {}
-        }
-
-        setReviews(
-          reviewRows.map((review) => ({
-            ...review,
-            reviewer_name: reviewerMap[review.reviewer_id] ?? "მომხმარებელი",
-          })),
-        )
-
-        void recordProfileVisit({
-          kind: "freelancer",
-          freelancerProfileId: freelancerData.id,
-          profileOwnerUserId: freelancerData.user_id,
-        })
-      } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : "მონაცემები ვერ ჩაიტვირთა.")
-      } finally {
-        setLoading(false)
-      }
+    if (!profileData) {
+      setProfile(null)
+      setFreelancer(null)
+      setSkills([])
+      setServices([])
+      setReviews([])
+      setExperience([])
+      setEducation([])
+      setPortfolioItems([])
+      setPublicCompletedJobs([])
+      setPublicCompletedListings([])
+      setViewerIsOwner(false)
+      setPublicCvSlug(null)
+      return
     }
-
-    loadProfile()
-  }, [slug])
+    setProfile(profileData.profile)
+    setFreelancer(profileData.freelancer)
+    setSkills(profileData.skills)
+    setServices(profileData.services)
+    setReviews(profileData.reviews)
+    setExperience(profileData.experience)
+    setEducation(profileData.education)
+    setPortfolioItems(profileData.portfolioItems)
+    setPublicCompletedJobs(profileData.publicCompletedJobs)
+    setPublicCompletedListings(profileData.publicCompletedListings)
+    setViewerIsOwner(profileData.viewerIsOwner)
+    setPublicCvSlug(profileData.publicCvSlug)
+  }, [profileData])
 
   useEffect(() => {
     if (!freelancer || !isSupabaseConfigured || !supabase) {

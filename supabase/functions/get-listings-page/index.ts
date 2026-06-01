@@ -9,7 +9,7 @@ const PAGE_SIZE = 20
 function jsonResponse(req: Request, body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: corsHeadersFor(req),
+    headers: corsHeadersFor(req, { "Content-Type": "application/json" }),
   })
 }
 

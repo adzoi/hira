@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useInfiniteQuery } from "@tanstack/react-query"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import Navbar from "../components/Navbar.tsx"
 import EmptyState from "../components/ui/EmptyState.tsx"
@@ -12,7 +13,9 @@ import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { formatListingPrice } from "../lib/listingPrice.ts"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
-import { withRejectedJwtRetry } from "../lib/supabaseAuth.ts"
+import { fetchListingsPagePayload } from "../lib/marketplaceEdge.ts"
+import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
+import { queryKeys } from "../lib/queryKeys.ts"
 import { isSupabaseConfigured, supabase, formatSupabaseClientError } from "../lib/supabase"
 import { mergeFreelancerCompletedWorkCounts } from "../lib/freelancerCompletedWorkCounts.ts"
 import { formatCityForDisplay, matchesLocationFilter } from "../lib/marketplaceFilters.ts"
@@ -205,26 +208,229 @@ const mockListings: ListingRow[] = [
   },
 ]
 
+type ListingsCatalogPage = {
+  listings: ListingRow[]
+  categories: CategoryItem[]
+  skills: SkillItem[]
+  subcategoryNamesById: Map<string, string>
+  subcategoryParentById: Map<string, string>
+  total: number
+}
+
+async function loadListingsCatalogPage(page: number): Promise<ListingsCatalogPage> {
+  if (!isSupabaseConfigured || !supabase) {
+    return {
+      listings: mockListings,
+      categories: [],
+      skills: [],
+      subcategoryNamesById: new Map(),
+      subcategoryParentById: new Map(),
+      total: mockListings.length,
+    }
+  }
+
+  const client = supabase
+  const payload = (await fetchListingsPagePayload(page)) as null | {
+    services?: unknown
+    categories?: unknown
+    skills?: unknown
+    total?: unknown
+    total_count?: unknown
+  }
+  const servicesData = Array.isArray(payload?.services) ? payload.services : []
+  const categoriesData = Array.isArray(payload?.categories) ? payload.categories : []
+  const skillsPayload = Array.isArray(payload?.skills) ? payload.skills : []
+  const totalRaw = payload?.total_count ?? payload?.total
+  const total = Number(totalRaw)
+  const safeTotal = Number.isFinite(total) ? total : 0
+
+  const mapped: ListingRow[] = []
+  for (const row of servicesData) {
+    const r = row as {
+      id: string
+      freelancer_profile_id: string
+      title: string | null
+      description: string | null
+      price: number | string | null
+      price_type: string | null
+      views_count?: number | string | null
+      created_at: string | null
+      is_vip?: boolean | null
+      vip_expires_at?: string | null
+      slug: string | null
+      professional_title: string | null
+      is_public: boolean | null
+      bio: string | null
+      availability: string | null
+      average_rating: number | string | null
+      completed_jobs_count: number | string | null
+      full_name: string | null
+      avatar_url: string | null
+      city: string | null
+      skills: unknown
+      is_accepting_new_work?: boolean | null
+    }
+    if (!r.slug || r.is_public === false) continue
+    const parsed = parseListingDescription(r.description ?? null)
+    const skillsArr = Array.isArray(r.skills) ? r.skills : []
+    const skillIds = skillsArr
+      .map((x) => (x && typeof x === "object" && "id" in x ? String((x as { id?: unknown }).id ?? "") : ""))
+      .filter((id): id is string => Boolean(id))
+    const vipActive =
+      r.is_vip === true && Boolean(r.vip_expires_at) && new Date(String(r.vip_expires_at)) > new Date()
+    mapped.push({
+      id: r.id,
+      freelancerProfileId: String(r.freelancer_profile_id ?? ""),
+      title: r.title ?? "სერვისი",
+      descriptionRaw: r.description,
+      price: Number(r.price ?? 0),
+      priceType: String(r.price_type ?? "fixed"),
+      createdAt: r.created_at ?? new Date().toISOString(),
+      freelancerSlug: r.slug,
+      professionalTitle: r.professional_title ?? "",
+      fullName: r.full_name?.trim() || "ფრილანსერი",
+      avatarUrl: r.avatar_url ?? null,
+      city: r.city ?? null,
+      bio: r.bio ?? null,
+      availability: r.availability ?? null,
+      isAcceptingNewWork: r.is_accepting_new_work !== false,
+      averageRating: Number(r.average_rating ?? 0),
+      completedJobsCount: Number(r.completed_jobs_count ?? 0),
+      viewsCount: Number(r.views_count ?? 0),
+      skillIds,
+      categoryId: parsed.meta.categoryId,
+      subcategoryId: parsed.meta.subcategoryId,
+      tags: parsed.meta.tags,
+      vipActive,
+    })
+  }
+
+  if (mapped.length > 0) {
+    const fallbackByFp = Object.fromEntries(mapped.map((item) => [item.freelancerProfileId, item.completedJobsCount]))
+    const countMap = await getCachedCompletedWorkCounts(
+      supabase,
+      mapped.map((item) => item.freelancerProfileId),
+      fallbackByFp,
+    )
+    for (const item of mapped) {
+      item.completedJobsCount = countMap[item.freelancerProfileId] ?? item.completedJobsCount
+    }
+  }
+
+  const categories = categoriesData.map((c) => {
+    const row = c as { id?: string; name_ka?: string; parent_id?: string | null }
+    return {
+      id: String(row.id ?? ""),
+      name_ka: String(row.name_ka ?? ""),
+      parent_id: row.parent_id ?? null,
+    }
+  })
+
+  const skills = skillsPayload.map((sk) => {
+    const row = sk as { id?: string; name?: string; category_id?: string | null }
+    return {
+      id: String(row.id ?? ""),
+      name: String(row.name ?? ""),
+      category_id: row.category_id ?? null,
+    }
+  })
+
+  let subcategoryNamesById = new Map<string, string>()
+  let subcategoryParentById = new Map<string, string>()
+  if (page === 1) {
+    try {
+      const subRows = await fetchAllRowsByRange(
+        (from, to) =>
+          client
+            .from("subcategories")
+            .select("id,name_ka,category_id")
+            .eq("is_active", true)
+            .order("name_ka")
+            .range(from, to),
+        500,
+        client,
+      )
+      subcategoryNamesById = new Map(
+        subRows.map((r) => {
+          const row = r as { id?: string; name_ka?: string }
+          return [String(row.id ?? ""), String(row.name_ka ?? "")] as const
+        }),
+      )
+      subcategoryParentById = new Map(
+        subRows.map((r) => {
+          const row = r as { id?: string; category_id?: string | null }
+          return [String(row.id ?? ""), String(row.category_id ?? "")] as const
+        }),
+      )
+    } catch (subcategoryError) {
+      console.warn("[listings] subcategory filters unavailable:", subcategoryError)
+    }
+  }
+
+  return {
+    listings: mapped,
+    categories,
+    skills,
+    subcategoryNamesById,
+    subcategoryParentById,
+    total: safeTotal,
+  }
+}
+
 export default function ListingsPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { pushToast } = useToast()
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-  const [listings, setListings] = useState<ListingRow[]>([])
-  const [categories, setCategories] = useState<CategoryItem[]>([])
-  const [subcategoryNamesById, setSubcategoryNamesById] = useState<Map<string, string>>(() => new Map())
-  const [subcategoryParentById, setSubcategoryParentById] = useState<Map<string, string>>(() => new Map())
-  const [skills, setSkills] = useState<SkillItem[]>([])
   const [searchText, setSearchText] = useState("")
   const [filterRootCategoryId, setFilterRootCategoryId] = useState("")
   const [filterMidCategoryId, setFilterMidCategoryId] = useState("")
   const [filterSpecializationId, setFilterSpecializationId] = useState("")
   const [sortBy, setSortBy] = useState<SortOption>("newest")
-  const [listingsTotal, setListingsTotal] = useState(0)
-  const [listingsNextOffset, setListingsNextOffset] = useState(0)
-  const listingsNextOffsetRef = useRef(0)
-  const [listingsLoadingMore, setListingsLoadingMore] = useState(false)
+
+  const {
+    data: catalogData,
+    isLoading: loading,
+    isError,
+    error: catalogError,
+    fetchNextPage,
+    hasNextPage: listingsHasMore,
+    isFetchingNextPage: listingsLoadingMore,
+    refetch,
+  } = useInfiniteQuery({
+    queryKey: queryKeys.listingsCatalog,
+    queryFn: ({ pageParam }) => loadListingsCatalogPage(pageParam),
+    initialPageParam: 1,
+    staleTime: 30_000,
+    getNextPageParam: (lastPage, _allPages, lastPageParam) => {
+      const loadedOffset = lastPageParam * LISTINGS_PAGE_SIZE
+      if (loadedOffset < lastPage.total) return lastPageParam + 1
+      return undefined
+    },
+  })
+
+  const error = isError
+    ? queryErrorMessage(catalogError, formatSupabaseClientError(catalogError, "მონაცემების ჩატვირთვა ვერ მოხერხდა."))
+    : ""
+
+  const firstPage = catalogData?.pages[0]
+  const categories = firstPage?.categories ?? []
+  const skills = firstPage?.skills ?? []
+  const subcategoryNamesById = firstPage?.subcategoryNamesById ?? new Map<string, string>()
+  const subcategoryParentById = firstPage?.subcategoryParentById ?? new Map<string, string>()
+
+  const listings = useMemo(() => {
+    const seen = new Set<string>()
+    const merged: ListingRow[] = []
+    for (const page of catalogData?.pages ?? []) {
+      for (const item of page.listings) {
+        if (!seen.has(item.id)) {
+          seen.add(item.id)
+          merged.push(item)
+        }
+      }
+    }
+    return merged
+  }, [catalogData?.pages])
 
   const [advancedDropdownOpen, setAdvancedDropdownOpen] = useState(false)
   const advancedDropdownRef = useRef<HTMLDivElement>(null)
@@ -281,17 +487,6 @@ export default function ListingsPage() {
     () => effectiveCatalogFilterId(filterRootCategoryId, filterMidCategoryId, filterSpecializationId),
     [filterRootCategoryId, filterMidCategoryId, filterSpecializationId],
   )
-
-  const serverCategoryForFetch = useMemo(() => {
-    const spec = filterSpecializationId.trim()
-    if (spec) {
-      const p = (subcategoryParentById.get(spec) ?? "").trim()
-      if (p) return p
-    }
-    const mid = filterMidCategoryId.trim()
-    if (mid) return mid
-    return filterRootCategoryId.trim() || undefined
-  }, [filterSpecializationId, filterMidCategoryId, filterRootCategoryId, subcategoryParentById])
 
   useEffect(() => {
     const loadViewer = async () => {
@@ -422,225 +617,6 @@ export default function ListingsPage() {
       document.removeEventListener("pointerdown", onPointerDown)
     }
   }, [advancedDropdownOpen])
-
-  const fetchListingsPage = useCallback(
-    async (append: boolean) => {
-      if (!isSupabaseConfigured || !supabase) {
-        setListings(mockListings)
-        setCategories([])
-        setSubcategoryNamesById(new Map())
-        setSubcategoryParentById(new Map())
-        setSkills([])
-        listingsNextOffsetRef.current = mockListings.length
-        setListingsNextOffset(mockListings.length)
-        setListingsTotal(mockListings.length)
-        setLoading(false)
-        setListingsLoadingMore(false)
-        return
-      }
-
-      if (!append) {
-        listingsNextOffsetRef.current = 0
-        setListingsNextOffset(0)
-        setLoading(true)
-      } else {
-        setListingsLoadingMore(true)
-      }
-      setError("")
-      try {
-        const client = supabase
-        const offset = append ? listingsNextOffsetRef.current : 0
-        const runRpc = () =>
-          client.rpc("get_listings_page", {
-            p_search: null,
-            p_limit: LISTINGS_PAGE_SIZE,
-            p_offset: offset,
-          })
-
-        const { data, error: rpcErr } = await withRejectedJwtRetry(client, runRpc)
-        if (rpcErr) throw rpcErr
-
-        const payload = data as null | {
-          services?: unknown
-          categories?: unknown
-          skills?: unknown
-          total?: unknown
-          total_count?: unknown
-        }
-        const servicesData = Array.isArray(payload?.services) ? payload.services : []
-        const categoriesData = Array.isArray(payload?.categories) ? payload.categories : []
-        const skillsPayload = Array.isArray(payload?.skills) ? payload.skills : []
-        const totalRaw = payload?.total_count ?? payload?.total
-        const total = Number(totalRaw)
-        const safeTotal = Number.isFinite(total) ? total : 0
-
-        const mapped: ListingRow[] = []
-        for (const row of servicesData) {
-          const r = row as {
-            id: string
-            freelancer_profile_id: string
-            title: string | null
-            description: string | null
-            price: number | string | null
-            price_type: string | null
-            views_count?: number | string | null
-            created_at: string | null
-            is_vip?: boolean | null
-            vip_expires_at?: string | null
-            slug: string | null
-            professional_title: string | null
-            is_public: boolean | null
-            bio: string | null
-            availability: string | null
-            average_rating: number | string | null
-            completed_jobs_count: number | string | null
-            full_name: string | null
-            avatar_url: string | null
-            city: string | null
-            skills: unknown
-            is_accepting_new_work?: boolean | null
-          }
-          if (!r.slug || r.is_public === false) continue
-          const parsed = parseListingDescription(r.description ?? null)
-          const skillsArr = Array.isArray(r.skills) ? r.skills : []
-          const skillIds = skillsArr
-            .map((x) => (x && typeof x === "object" && "id" in x ? String((x as { id?: unknown }).id ?? "") : ""))
-            .filter((id): id is string => Boolean(id))
-          const vipActive =
-            r.is_vip === true &&
-            Boolean(r.vip_expires_at) &&
-            new Date(String(r.vip_expires_at)) > new Date()
-          mapped.push({
-            id: r.id,
-            freelancerProfileId: String(r.freelancer_profile_id ?? ""),
-            title: r.title ?? "სერვისი",
-            descriptionRaw: r.description,
-            price: Number(r.price ?? 0),
-            priceType: String(r.price_type ?? "fixed"),
-            createdAt: r.created_at ?? new Date().toISOString(),
-            freelancerSlug: r.slug,
-            professionalTitle: r.professional_title ?? "",
-            fullName: r.full_name?.trim() || "ფრილანსერი",
-            avatarUrl: r.avatar_url ?? null,
-            city: r.city ?? null,
-            bio: r.bio ?? null,
-            availability: r.availability ?? null,
-            isAcceptingNewWork: r.is_accepting_new_work !== false,
-            averageRating: Number(r.average_rating ?? 0),
-            completedJobsCount: Number(r.completed_jobs_count ?? 0),
-            viewsCount: Number(r.views_count ?? 0),
-            skillIds,
-            categoryId: parsed.meta.categoryId,
-            subcategoryId: parsed.meta.subcategoryId,
-            tags: parsed.meta.tags,
-            vipActive,
-          })
-        }
-
-        if (mapped.length > 0) {
-          const fallbackByFp = Object.fromEntries(
-            mapped.map((item) => [item.freelancerProfileId, item.completedJobsCount]),
-          )
-          const countMap = await getCachedCompletedWorkCounts(
-            supabase,
-            mapped.map((item) => item.freelancerProfileId),
-            fallbackByFp,
-          )
-          for (const item of mapped) {
-            item.completedJobsCount = countMap[item.freelancerProfileId] ?? item.completedJobsCount
-          }
-        }
-
-        if (!append) {
-          setListings(mapped)
-          listingsNextOffsetRef.current = LISTINGS_PAGE_SIZE
-          setListingsNextOffset(LISTINGS_PAGE_SIZE)
-        } else {
-          setListings((prev) => {
-            const seen = new Set(prev.map((x) => x.id))
-            const merged = [...prev]
-            for (const item of mapped) {
-              if (!seen.has(item.id)) {
-                seen.add(item.id)
-                merged.push(item)
-              }
-            }
-            return merged
-          })
-          listingsNextOffsetRef.current += LISTINGS_PAGE_SIZE
-          setListingsNextOffset(listingsNextOffsetRef.current)
-        }
-
-        setListingsTotal(safeTotal)
-
-        setCategories(
-          categoriesData.map((c) => {
-            const row = c as { id?: string; name_ka?: string; parent_id?: string | null }
-            return {
-              id: String(row.id ?? ""),
-              name_ka: String(row.name_ka ?? ""),
-              parent_id: row.parent_id ?? null,
-            }
-          }),
-        )
-        if (!append) {
-          try {
-            const subRows = await fetchAllRowsByRange(
-              (from, to) =>
-                client
-                  .from("subcategories")
-                  .select("id,name_ka,category_id")
-                  .eq("is_active", true)
-                  .order("name_ka")
-                  .range(from, to),
-              500,
-              client,
-            )
-            setSubcategoryNamesById(
-              new Map(
-                subRows.map((r) => {
-                  const row = r as { id?: string; name_ka?: string }
-                  return [String(row.id ?? ""), String(row.name_ka ?? "")] as const
-                }),
-              ),
-            )
-            setSubcategoryParentById(
-              new Map(
-                subRows.map((r) => {
-                  const row = r as { id?: string; category_id?: string | null }
-                  return [String(row.id ?? ""), String(row.category_id ?? "")] as const
-                }),
-              ),
-            )
-          } catch (subcategoryError) {
-            console.warn("[listings] subcategory filters unavailable:", subcategoryError)
-          }
-        }
-        setSkills(
-          skillsPayload.map((sk) => {
-            const row = sk as { id?: string; name?: string; category_id?: string | null }
-            return {
-              id: String(row.id ?? ""),
-              name: String(row.name ?? ""),
-              category_id: row.category_id ?? null,
-            }
-          }),
-        )
-      } catch (e) {
-        console.error("[listings] catalog load failed:", e)
-        setError(formatSupabaseClientError(e, "მონაცემების ჩატვირთვა ვერ მოხერხდა."))
-        if (!append) setListings([])
-      } finally {
-        setLoading(false)
-        setListingsLoadingMore(false)
-      }
-    },
-    [serverCategoryForFetch],
-  )
-
-  useEffect(() => {
-    void fetchListingsPage(false)
-  }, [serverCategoryForFetch, fetchListingsPage])
 
   const skillById = useMemo(() => new Map(skills.map((s) => [s.id, s])), [skills])
 
@@ -818,8 +794,6 @@ export default function ListingsPage() {
     categories,
   ])
 
-  const listingsHasMore = listingsNextOffset < listingsTotal
-
   const openListingQueryId = searchParams.get("open")
 
   useEffect(() => {
@@ -835,7 +809,7 @@ export default function ListingsPage() {
     }
 
     if (listingsHasMore && !listingsLoadingMore) {
-      void fetchListingsPage(true)
+      void fetchNextPage()
       return
     }
 
@@ -855,7 +829,7 @@ export default function ListingsPage() {
     filteredSorted,
     listingsHasMore,
     listingsLoadingMore,
-    fetchListingsPage,
+    fetchNextPage,
     setSearchParams,
   ])
 
@@ -1141,7 +1115,7 @@ export default function ListingsPage() {
 
         <section className="mt-6 min-w-0">
           {error ? (
-            <ErrorState message={error} onRetry={() => void fetchListingsPage(false)} />
+            <ErrorState message={error} onRetry={() => void refetch()} />
           ) : loading ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, index) => (
@@ -1342,7 +1316,7 @@ export default function ListingsPage() {
                   <button
                     type="button"
                     disabled={listingsLoadingMore}
-                    onClick={() => void fetchListingsPage(true)}
+                    onClick={() => void fetchNextPage()}
                     className="h-11 rounded-lg border border-[#0088FF] px-6 text-sm font-semibold text-[#0088FF] hover:bg-[#E8F4FF] disabled:opacity-60"
                   >
                     {listingsLoadingMore ? "იტვირთება…" : "მეტის ნახვა"}

@@ -1,28 +1,24 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 import Navbar from "../components/Navbar"
 import VIPUpgrade from "../components/VIPUpgrade"
-import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import {
-  normalizeListingPriceType,
   PRICE_TYPE_LABELS,
   type ListingPriceType,
 } from "../lib/listingPrice.ts"
-import { formatSupabaseClientError, isSupabaseConfigured, supabase } from "../lib/supabase"
+import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { serviceImageThumbnailUrl } from "../lib/storageImageUrl.ts"
-import {
-  categoryChildrenOf,
-  categoryIdsWithChildren,
-  categoryRoots,
-  rootIdContainingCategory,
-  type CategoryBranchRow,
-} from "../lib/marketplaceCategoryTree.ts"
+import { categoryChildrenOf, categoryRoots, type CategoryBranchRow } from "../lib/marketplaceCategoryTree.ts"
 import {
   validateListingDescription,
   validateListingTitle,
   validateMoneyAmount,
   validateTags,
 } from "../lib/validation.ts"
+import { fetchListingForm } from "../lib/queries/fetchListingForm.ts"
+import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
+import { queryKeys } from "../lib/queryKeys.ts"
 
 type ListingMeta = {
   categoryId: string | null
@@ -80,35 +76,6 @@ async function compressImage(file: File): Promise<Blob> {
   }
 }
 
-function parseListingDescription(raw: string | null): { description: string; meta: ListingMeta } {
-  const fallback: ListingMeta = { categoryId: null, subcategoryId: null, tags: [] }
-  if (!raw) return { description: "", meta: fallback }
-
-  if (!raw.startsWith(META_PREFIX)) return { description: stripLegacyPricePrefix(raw), meta: fallback }
-
-  const endIndex = raw.indexOf(META_SUFFIX)
-  if (endIndex < 0) return { description: stripLegacyPricePrefix(raw), meta: fallback }
-
-  const metaChunk = raw.slice(META_PREFIX.length, endIndex).trim()
-  const body = stripLegacyPricePrefix(raw.slice(endIndex + META_SUFFIX.length))
-
-  try {
-    const parsed = JSON.parse(metaChunk) as Partial<ListingMeta>
-    return {
-      description: body,
-      meta: {
-        categoryId: parsed.categoryId ?? null,
-        subcategoryId: parsed.subcategoryId ?? null,
-        tags: Array.isArray(parsed.tags)
-          ? parsed.tags.map((tag) => String(tag).trim()).filter(Boolean).slice(0, 20)
-          : [],
-      },
-    }
-  } catch {
-    return { description: stripLegacyPricePrefix(raw), meta: fallback }
-  }
-}
-
 function buildListingDescription(description: string, meta: ListingMeta) {
   const cleanedMeta: ListingMeta = {
     categoryId: meta.categoryId ?? null,
@@ -122,10 +89,21 @@ export default function ListingFormPage() {
   const navigate = useNavigate()
   const { id } = useParams()
   const isEdit = Boolean(id)
-
-  const [loading, setLoading] = useState(true)
+  const [listingFormUserId, setListingFormUserId] = useState("")
+  const {
+    data: listingFormData,
+    isLoading: loading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: queryKeys.listingForm(listingFormUserId || "pending", id),
+    queryFn: () => fetchListingForm(id),
+    enabled: Boolean(listingFormUserId) && isSupabaseConfigured,
+  })
+  const loadError = isError ? queryErrorMessage(queryError, "ჩატვირთვა ვერ მოხერხდა.") : ""
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
+  const displayError = error || loadError
 
   const [freelancerProfileId, setFreelancerProfileId] = useState("")
   const [categories, setCategories] = useState<CategoryBranchRow[]>([])
@@ -151,119 +129,39 @@ export default function ListingFormPage() {
   }, [isEdit])
 
   useEffect(() => {
-    const load = async () => {
-      if (!isSupabaseConfigured || !supabase) {
-        setError("Supabase არ არის კონფიგურირებული.")
-        setLoading(false)
+    if (!isSupabaseConfigured || !supabase) return
+    void supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) {
+        navigate("/login?reason=listing", { replace: true })
         return
       }
+      setListingFormUserId(user.id)
+    })
+  }, [navigate])
 
-      try {
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser()
-        if (userError || !user) {
-          navigate("/login?reason=listing", { replace: true })
-          return
-        }
-
-        const [{ data: fp, error: fpError }, { data: categoryRows, error: categoryError }] = await Promise.all([
-          supabase.from("freelancer_profiles").select("id").eq("user_id", user.id).maybeSingle(),
-          supabase.from("categories").select("id,name_ka,parent_id").eq("is_active", true).order("sort_order"),
-        ])
-
-        if (fpError || !fp) throw new Error("ფრილანსერის პროფილი ვერ მოიძებნა.")
-        if (categoryError) throw categoryError
-
-        const fullCats = (categoryRows ?? []).map((row: { id?: string; name_ka?: string; parent_id?: string | null }) => ({
-          id: String(row.id ?? ""),
-          name_ka: String(row.name_ka ?? ""),
-          parent_id: row.parent_id ?? null,
-        })) as CategoryBranchRow[]
-
-        setFreelancerProfileId(fp.id)
-        setCategories(fullCats)
-
-        const { data: skillRows, error: skillError } = await supabase
-          .from("skills")
-          .select("name,category_id")
-          .eq("is_approved", true)
-          .order("name")
-
-        if (skillError) {
-          if (import.meta.env.DEV) console.warn("[ListingForm] skills catalog:", skillError)
-          setAvailableTags([])
-        } else {
-          setAvailableTags(
-            Array.from(
-              new Map(
-                (skillRows ?? [])
-                  .map((row: { name?: string | null; category_id?: string | null }) => ({
-                    name: String(row.name ?? "").trim(),
-                    categoryId: row.category_id ?? null,
-                  }))
-                  .filter((row) => row.name)
-                  .map((row) => [`${row.name}::${row.categoryId ?? "none"}`, row]),
-              ).values(),
-            ),
-          )
-        }
-
-        if (isEdit && id) {
-          const { data: listing, error: listingError } = await supabase
-            .from("services")
-            .select("*")
-            .eq("id", id)
-            .eq("freelancer_profile_id", fp.id)
-            .single()
-          if (listingError || !listing) throw new Error("ლისტინგი ვერ მოიძებნა.")
-
-          const parsed = parseListingDescription(listing.description ?? "")
-          setTitle(listing.title ?? "")
-          setDescription(parsed.description)
-          setPrice(String(listing.price ?? 0))
-          setPriceType(normalizeListingPriceType((listing as { price_type?: string | null }).price_type))
-          setIsActive(listing.is_active ?? true)
-
-          let resolvedMid = parsed.meta.categoryId ?? ""
-          const parsedSub = parsed.meta.subcategoryId ?? ""
-          const byId = new Map(fullCats.map((c) => [c.id, c]))
-          if (resolvedMid && parsedSub) {
-            const initialNode = byId.get(resolvedMid)
-            if (initialNode && initialNode.parent_id == null) {
-              const { data: subRow } = await supabase.from("subcategories").select("category_id").eq("id", parsedSub).maybeSingle()
-              if (subRow?.category_id) resolvedMid = subRow.category_id
-            }
-          }
-          const hasKids = categoryIdsWithChildren(fullCats)
-          let resolvedRoot = ""
-          if (resolvedMid) {
-            const node = byId.get(resolvedMid)
-            if (node?.parent_id) {
-              resolvedRoot = rootIdContainingCategory(fullCats, resolvedMid)
-            } else if (hasKids.has(resolvedMid)) {
-              resolvedRoot = resolvedMid
-              resolvedMid = ""
-            } else {
-              resolvedRoot = resolvedMid
-            }
-          }
-          setRootCategoryId(resolvedRoot)
-          setCategoryId(resolvedMid)
-          setSubcategoryId(parsedSub)
-          setTags(parsed.meta.tags)
-          setExistingImageUrls(Array.isArray((listing as { image_urls?: unknown }).image_urls) ? ((listing as { image_urls: unknown[] }).image_urls.map((v) => String(v)).filter(Boolean).slice(0, MAX_LISTING_IMAGES)) : [])
-        }
-      } catch (loadError) {
-        setError(formatSupabaseClientError(loadError, "ჩატვირთვა ვერ მოხერხდა."))
-      } finally {
-        setLoading(false)
-      }
+  useEffect(() => {
+    if (!listingFormData) return
+    if (listingFormData.redirectTo) {
+      navigate(listingFormData.redirectTo, { replace: true })
+      return
     }
-
-    load()
-  }, [id, isEdit, navigate])
+    setFreelancerProfileId(listingFormData.freelancerProfileId)
+    setCategories(listingFormData.categories)
+    setAvailableTags(listingFormData.availableTags)
+    if (listingFormData.edit) {
+      const edit = listingFormData.edit
+      setTitle(edit.title)
+      setDescription(edit.description)
+      setPrice(edit.price)
+      setPriceType(edit.priceType)
+      setIsActive(edit.isActive)
+      setRootCategoryId(edit.rootCategoryId)
+      setCategoryId(edit.categoryId)
+      setSubcategoryId(edit.subcategoryId)
+      setTags(edit.tags)
+      setExistingImageUrls(edit.existingImageUrls)
+    }
+  }, [listingFormData, navigate])
 
   const categoryRootsList = useMemo(() => categoryRoots(categories), [categories])
   const categoryMidsList = useMemo(
@@ -716,7 +614,7 @@ export default function ListingFormPage() {
             </label>
           </div>
 
-          {error ? <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+          {displayError ? <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{displayError}</p> : null}
 
           <div className="mt-6 flex gap-3">
             <button

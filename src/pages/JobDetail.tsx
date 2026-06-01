@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useParams } from "react-router-dom"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import Navbar from "../components/Navbar.tsx"
 import VIPUpgrade from "../components/VIPUpgrade.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
@@ -7,50 +8,14 @@ import { useToast } from "../components/ui/ToastProvider.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import StartConversationButton from "../components/StartConversationButton.tsx"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
+import { fetchJobDetail, loadHirerContact, type JobDetailQueryResult } from "../lib/queries/fetchJobDetail.ts"
+import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
+import { queryKeys } from "../lib/queryKeys.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { jobVacancyStats } from "../lib/jobVacancies.ts"
 import { formatJobBudget, jobApplicationRateLabel } from "../lib/listingPrice.ts"
-import { jobVipIsActive } from "../lib/vipJobTiers.ts"
 import { formatHirerContactForApplicant, hirerContactCopyText } from "../lib/jobContactPreference.ts"
 import { validateCoverLetter, validateMoneyAmount } from "../lib/validation.ts"
-
-type JobData = {
-  id: string
-  title: string
-  description: string
-  status: string
-  vacancies: number
-  accepted_count: number
-  created_at: string
-  views_count: number
-  is_urgent: boolean
-  budget_type: string
-  budget_min: number | null
-  budget_max: number | null
-  duration_type: string
-  location_type: string
-  application_deadline: string | null
-  category_name: string
-  subcategory_name: string | null
-  skills: Array<{ id: string; name: string }>
-  hirer_profile_id: string
-  hirer_company_name: string
-  hirer_jobs_posted_count: number
-  hirer_user_id: string
-  hirer_full_name: string
-  hirer_avatar_url: string | null
-  hirer_city: string | null
-  hirer_member_since: string
-  hirer_email: string
-  hirer_phone: string | null
-  contact_preference: string
-  is_vip: boolean
-  vip_tier: string | null
-  vip_expires_at: string | null
-  vipActive: boolean
-}
-
-type OtherJob = { id: string; title: string; budget_min: number | null; budget_max: number | null; budget_type: string }
 
 function formatDate(dateString: string) {
   if (!dateString.trim()) return "—"
@@ -80,24 +45,30 @@ function getInitials(value: string) {
   return `${parts[0][0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase()
 }
 
-/** PostgREST + RLS sometimes yields null, []; normalize to one row or null before reading fields. */
-function normalizeSingleRelation<T extends Record<string, unknown>>(embedded: unknown): T | null {
-  if (embedded == null) return null
-  if (Array.isArray(embedded)) {
-    const first = embedded[0]
-    return first != null && typeof first === "object" ? (first as T) : null
-  }
-  if (typeof embedded === "object") return embedded as T
-  return null
-}
-
 export default function JobDetailPage() {
   const { pushToast } = useToast()
+  const queryClient = useQueryClient()
   const { id } = useParams()
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-  const [job, setJob] = useState<JobData | null>(null)
-  const [otherJobs, setOtherJobs] = useState<OtherJob[]>([])
+  const {
+    data,
+    isLoading: loading,
+    isError,
+    error: queryError,
+    refetch,
+  } = useQuery({
+    queryKey: queryKeys.jobDetail(id ?? ""),
+    queryFn: () => fetchJobDetail(id!),
+    enabled: Boolean(id) && isSupabaseConfigured,
+  })
+  const error = !id
+    ? "სამუშაო ვერ მოიძებნა"
+    : !isSupabaseConfigured
+      ? "Supabase არ არის კონფიგურირებული."
+      : isError
+        ? queryErrorMessage(queryError, "მონაცემები ვერ ჩაიტვირთა.")
+        : ""
+  const job = data?.job ?? null
+  const otherJobs = data?.otherJobs ?? []
   const [authedUserType, setAuthedUserType] = useState<"freelancer" | "hirer" | "guest">("guest")
   const [freelancerProfileId, setFreelancerProfileId] = useState<string | null>(null)
   const [alreadyApplied, setAlreadyApplied] = useState(false)
@@ -112,18 +83,15 @@ export default function JobDetailPage() {
   const [vipModalOpen, setVipModalOpen] = useState(false)
   const trackedJobViewRef = useRef<string | null>(null)
 
-  const loadHirerContact = async (jobId: string) => {
-    if (!supabase) return null
-    const { data, error } = await supabase.rpc("get_job_hirer_contact_for_applicant", { p_job_id: jobId })
-    if (error || !data || !Array.isArray(data) || data.length === 0) return null
-    const row = data[0] as { email?: string | null; phone?: string | null }
-    const email = typeof row.email === "string" ? row.email : ""
-    const phone = row.phone != null ? String(row.phone) : null
-    if (!email && !phone) return null
-    const contact = { email, phone }
-    setHirerContact(contact)
-    return contact
-  }
+  useEffect(() => {
+    if (!data) return
+    setAuthedUserType(data.authedUserType)
+    setFreelancerProfileId(data.freelancerProfileId)
+    setAlreadyApplied(data.alreadyApplied)
+    setJobApplicationId(data.jobApplicationId)
+    setViewerUserId(data.viewerUserId)
+    setHirerContact(data.hirerContact)
+  }, [data])
 
   useEffect(() => {
     document.title = "სამუშაოები — გიგორი"
@@ -138,245 +106,18 @@ export default function JobDetailPage() {
     trackedJobViewRef.current = job.id
     void (async () => {
       try {
-        const { data, error } = await supabase.rpc("increment_job_views", { p_job_id: job.id })
-        if (error) return
-        const next = Number(data ?? 0)
+        const { data: viewCount, error: viewError } = await supabase.rpc("increment_job_views", { p_job_id: job.id })
+        if (viewError) return
+        const next = Number(viewCount ?? 0)
         if (!Number.isFinite(next)) return
-        setJob((prev) => (prev && prev.id === job.id ? { ...prev, views_count: next } : prev))
+        queryClient.setQueryData<JobDetailQueryResult>(queryKeys.jobDetail(job.id), (prev) =>
+          prev?.job && prev.job.id === job.id ? { ...prev, job: { ...prev.job, views_count: next } } : prev,
+        )
       } catch {
         /* non-blocking */
       }
     })()
-  }, [job?.id])
-
-  const loadData = async () => {
-      if (!id) {
-        setJob(null)
-        setError("სამუშაო ვერ მოიძებნა")
-        setLoading(false)
-        return
-      }
-
-      if (!isSupabaseConfigured || !supabase) {
-        setJob(null)
-        setError("Supabase არ არის კონფიგურირებული.")
-        setLoading(false)
-        return
-      }
-
-      setLoading(true)
-      setError("")
-      setJob(null)
-      setOtherJobs([])
-      setAlreadyApplied(false)
-      setFreelancerProfileId(null)
-      setAuthedUserType("guest")
-      setViewerUserId(null)
-      setHirerContact(null)
-
-      try {
-        const { data: jobRow, error: jobError } = await supabase
-          .from("jobs")
-          .select(`
-            *,
-            categories (name_ka),
-            subcategories (name_ka),
-            hirer_profiles (
-              id,
-              user_id,
-              company_name,
-              jobs_posted_count,
-              profiles:profiles!hirer_profiles_user_id_fkey (full_name, avatar_url, city, member_since)
-            ),
-            job_skills (
-              skills (id, name)
-            )
-          `)
-          .eq("id", id)
-          .maybeSingle()
-
-        let rowUnknown: Record<string, unknown> | null = null
-        if (jobRow == null || jobRow === undefined) {
-          rowUnknown = null
-        } else if (Array.isArray(jobRow)) {
-          const first = jobRow[0]
-          rowUnknown = first != null && typeof first === "object" && !Array.isArray(first) ? (first as Record<string, unknown>) : null
-        } else if (typeof jobRow === "object") {
-          rowUnknown = jobRow as Record<string, unknown>
-        }
-
-        if (jobError || rowUnknown == null || typeof rowUnknown.id !== "string") {
-          setError("")
-          setJob(null)
-          return
-        }
-
-        const hirerProfilesRaw = normalizeSingleRelation<Record<string, unknown>>(
-          (jobRow as { hirer_profiles?: unknown }).hirer_profiles ?? rowUnknown.hirer_profiles,
-        )
-        const hirerP =
-          hirerProfilesRaw?.profiles !== undefined && hirerProfilesRaw.profiles !== null
-            ? normalizeSingleRelation<Record<string, unknown>>(hirerProfilesRaw.profiles)
-            : null
-
-        const jobSkillsUnknown = rowUnknown.job_skills
-        const jobSkillsRows = Array.isArray(jobSkillsUnknown) ? jobSkillsUnknown : []
-
-        const hirerProfileIdSafe =
-          hirerProfilesRaw && typeof hirerProfilesRaw.id === "string" ? hirerProfilesRaw.id : ""
-        const hirerUserIdSafe =
-          hirerProfilesRaw && typeof hirerProfilesRaw.user_id === "string" ? hirerProfilesRaw.user_id : ""
-
-        const vacStats = jobVacancyStats(rowUnknown.vacancies as number | null | undefined, rowUnknown.accepted_count as number | null | undefined)
-
-        const mappedJob: JobData = {
-          id: String(rowUnknown.id),
-          title: String(rowUnknown.title ?? ""),
-          description: String(rowUnknown.description ?? ""),
-          status: String(rowUnknown.status ?? "open"),
-          vacancies: vacStats.vacancies,
-          accepted_count: vacStats.acceptedCount,
-          created_at: String(rowUnknown.created_at ?? ""),
-          views_count: Number(rowUnknown.views_count ?? 0),
-          is_urgent: Boolean(rowUnknown.is_urgent),
-          budget_type: String(rowUnknown.budget_type ?? ""),
-          budget_min:
-            rowUnknown.budget_min === null || rowUnknown.budget_min === undefined ? null : Number(rowUnknown.budget_min),
-          budget_max:
-            rowUnknown.budget_max === null || rowUnknown.budget_max === undefined ? null : Number(rowUnknown.budget_max),
-          duration_type: String(rowUnknown.duration_type ?? ""),
-          location_type: String(rowUnknown.location_type ?? ""),
-          application_deadline:
-            rowUnknown.application_deadline === null || rowUnknown.application_deadline === undefined
-              ? null
-              : String(rowUnknown.application_deadline),
-          category_name:
-            normalizeSingleRelation<{ name_ka?: string }>(rowUnknown.categories)?.name_ka?.trim() || "კატეგორია",
-          subcategory_name:
-            normalizeSingleRelation<{ name_ka?: string }>(rowUnknown.subcategories)?.name_ka?.trim() ?? null,
-          skills: jobSkillsRows
-            .map((item) =>
-              normalizeSingleRelation<{ id?: unknown; name?: unknown }>((item as { skills?: unknown }).skills ?? null),
-            )
-            .filter(
-              (s): s is { id: string; name: string } =>
-                s != null &&
-                typeof s.id === "string" &&
-                s.id.length > 0 &&
-                typeof s.name === "string" &&
-                s.name.length > 0,
-            )
-            .map((skill) => ({ id: skill.id, name: skill.name })),
-          hirer_profile_id: hirerProfileIdSafe,
-          hirer_company_name:
-            (typeof hirerProfilesRaw?.company_name === "string" && hirerProfilesRaw.company_name.trim()
-              ? hirerProfilesRaw.company_name
-              : null) ||
-            (typeof hirerP?.full_name === "string" && hirerP.full_name.trim() ? hirerP.full_name : null) ||
-            "დამქირავებელი",
-          hirer_jobs_posted_count: Number(hirerProfilesRaw?.jobs_posted_count ?? 0),
-          hirer_user_id: hirerUserIdSafe,
-          hirer_full_name:
-            (typeof hirerP?.full_name === "string" && hirerP.full_name.trim() ? hirerP.full_name : "") || "დამქირავებელი",
-          hirer_avatar_url: hirerP?.avatar_url != null ? String(hirerP.avatar_url) : null,
-          hirer_city: hirerP?.city != null ? String(hirerP.city) : null,
-          hirer_member_since:
-            hirerP?.member_since != null ? String(hirerP.member_since) : new Date().toISOString(),
-          hirer_email: "",
-          hirer_phone: null,
-          contact_preference: String(rowUnknown.contact_preference ?? ""),
-          is_vip: Boolean(rowUnknown.is_vip),
-          vip_tier: rowUnknown.vip_tier != null ? String(rowUnknown.vip_tier) : null,
-          vip_expires_at: rowUnknown.vip_expires_at != null ? String(rowUnknown.vip_expires_at) : null,
-          vipActive: jobVipIsActive(Boolean(rowUnknown.is_vip), rowUnknown.vip_expires_at != null ? String(rowUnknown.vip_expires_at) : null),
-        }
-
-        if (!mappedJob.hirer_profile_id) {
-          setError("")
-          setJob(null)
-          return
-        }
-
-        setJob(mappedJob)
-
-        const { data: others, error: othersError } = await supabase
-          .from("jobs")
-          .select("id,title,budget_min,budget_max,budget_type")
-          .eq("hirer_profile_id", mappedJob.hirer_profile_id)
-          .eq("status", "open")
-          .neq("id", mappedJob.id)
-          .order("created_at", { ascending: false })
-          .limit(3)
-        if (othersError) throw othersError
-        setOtherJobs((others ?? []) as OtherJob[])
-
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
-
-        if (!user) {
-          setAuthedUserType("guest")
-          setViewerUserId(null)
-          setLoading(false)
-          return
-        }
-        setViewerUserId(user.id)
-
-        const { data: profile, error: profileError } = await supabase
-          .from("profiles")
-          .select("id,user_type")
-          .eq("id", user.id)
-          .maybeSingle()
-        if (profileError || !profile) {
-          setAuthedUserType("guest")
-          setViewerUserId(null)
-          setLoading(false)
-          return
-        }
-
-        if (profile.user_type === "freelancer") {
-          setAuthedUserType("freelancer")
-          const { data: fp, error: fpError } = await supabase
-            .from("freelancer_profiles")
-            .select("id")
-            .eq("user_id", user.id)
-            .maybeSingle()
-          if (!fpError && fp) {
-            setFreelancerProfileId(fp.id)
-            const { data: applied, error: appliedError } = await supabase
-              .from("job_applications")
-              .select("id")
-              .eq("job_id", mappedJob.id)
-              .eq("freelancer_profile_id", fp.id)
-              .maybeSingle()
-            if (!appliedError && applied) {
-              setAlreadyApplied(true)
-              setJobApplicationId(applied.id)
-              await loadHirerContact(mappedJob.id)
-            } else {
-              setJobApplicationId(null)
-              setHirerContact(null)
-            }
-          }
-        } else if (profile.user_type === "hirer") {
-          setAuthedUserType("hirer")
-          if (user.id === mappedJob.hirer_user_id) {
-            await loadHirerContact(mappedJob.id)
-          }
-        } else {
-          setAuthedUserType("guest")
-        }
-      } catch (loadError) {
-        setJob(null)
-        setError(loadError instanceof Error ? loadError.message : "მონაცემები ვერ ჩაიტვირთა.")
-      } finally {
-        setLoading(false)
-      }
-    }
-
-  useEffect(() => {
-    loadData()
-  }, [id])
+  }, [job?.id, queryClient])
 
   const budgetText = useMemo(() => {
     if (!job) return ""
@@ -444,6 +185,7 @@ export default function JobDetailPage() {
       setAlreadyApplied(true)
       if (inserted?.id) setJobApplicationId(inserted.id)
       const contactRow = await loadHirerContact(job.id)
+      if (contactRow) setHirerContact(contactRow)
       const contact = formatHirerContactForApplicant({
         contactPreference: job.contact_preference,
         email: contactRow?.email ?? "",
@@ -499,7 +241,7 @@ export default function JobDetailPage() {
             <p className="mt-4 text-xl font-semibold text-[#1B2B4B]">{headline}</p>
             <button
               type="button"
-              onClick={() => void loadData()}
+              onClick={() => void refetch()}
               className="mt-6 h-11 rounded-lg border border-[#1B2B4B] bg-white px-5 text-sm font-semibold text-[#1B2B4B] transition hover:bg-[#1B2B4B] hover:text-white"
             >
               თავიდან ცდა
@@ -747,7 +489,7 @@ export default function JobDetailPage() {
           jobId={job.id}
           jobTitle={job.title}
           onClose={() => setVipModalOpen(false)}
-          onSuccess={() => void loadData()}
+          onSuccess={() => void refetch()}
         />
       ) : null}
     </div>

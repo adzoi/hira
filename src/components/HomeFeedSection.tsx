@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
-import { loadHomeFeed, type HomeFeedItem, type HomeFreelancerServiceItem, type HomeJobListingItem } from "../lib/homeFeed.ts"
+import { type HomeFreelancerServiceItem, type HomeJobListingItem } from "../lib/homeFeed.ts"
+import { useHomeFeedQuery } from "../lib/queries/useHomeFeedQuery.ts"
 import { formatJobBudget, formatListingPrice } from "../lib/listingPrice.ts"
 import { ViewCountEyeIcon } from "./ViewCountEyeIcon.tsx"
 import VipBadge from "./VipBadge.tsx"
@@ -212,8 +213,7 @@ function JobListingFeedCard({ item }: { item: HomeJobListingItem }) {
 }
 
 export default function HomeFeedSection() {
-  const [items, setItems] = useState<HomeFeedItem[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data: items = [], isLoading: loading } = useHomeFeedQuery()
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   /** Guests default to talent (freelancer listings); logged-in users default to the opposite role’s content. */
   const [feedFilter, setFeedFilter] = useState<"all" | "freelancer" | "hirer">("freelancer")
@@ -244,31 +244,6 @@ export default function HomeFeedSection() {
       appliedRoleDefaultTab.current = true
     }
     void syncDefaultTabWithRole()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    const run = async () => {
-      setLoading(true)
-      try {
-        const data = await loadHomeFeed()
-        if (!cancelled) {
-          setItems(data)
-          setVisibleCount(PAGE_SIZE)
-        }
-      } catch {
-        if (!cancelled) {
-          setItems([])
-          setVisibleCount(PAGE_SIZE)
-        }
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    void run()
     return () => {
       cancelled = true
     }

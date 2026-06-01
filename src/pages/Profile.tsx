@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 import Navbar from "../components/Navbar"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
 import { PROFILE_LANGUAGE_OPTIONS } from "../lib/profileLanguages.ts"
@@ -7,21 +8,20 @@ import {
   FREELANCER_EDUCATION_DEGREE_OPTIONS,
   type FreelancerEducationDegreeLevel,
 } from "../lib/freelancerEducation.ts"
-import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import {
   normalizeListingPriceType,
   PRICE_TYPE_LABELS,
   type ListingPriceType,
 } from "../lib/listingPrice.ts"
 import OptionalSocialUrlField from "../components/OptionalSocialUrlField.tsx"
-import { parseFreelancerSocialFields, socialFormFromDbRow } from "../lib/freelancerSocialFields.ts"
+import { parseFreelancerSocialFields } from "../lib/freelancerSocialFields.ts"
 import { avatarImageUrl, avatarPublicUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { isAuthRateLimited, signInWithRateLimit } from "../lib/authRateLimit"
 import { LIMITS, validateOptionalUrl, validateTextField } from "../lib/validation.ts"
-
-/** Skills without a valid mid-level category_id (picker bucket). */
-const SKILL_PICKER_UNCATEGORIZED = "__uncategorized__"
+import { fetchProfile, SKILL_PICKER_UNCATEGORIZED } from "../lib/queries/fetchProfile.ts"
+import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
+import { queryKeys } from "../lib/queryKeys.ts"
 
 type SkillCategoryRow = { id: string; name_ka: string; parent_id: string | null }
 
@@ -62,21 +62,23 @@ type EducationForm = {
   endDate: string
 }
 
-function stripListingMeta(raw: string | null) {
-  if (!raw) return ""
-  const prefix = "<!--gigori-meta:"
-  const suffix = "-->"
-  if (!raw.startsWith(prefix)) return stripLegacyPricePrefix(raw)
-  const endIndex = raw.indexOf(suffix)
-  if (endIndex < 0) return stripLegacyPricePrefix(raw)
-  return stripLegacyPricePrefix(raw.slice(endIndex + suffix.length))
-}
-
 export default function ProfilePage() {
   const navigate = useNavigate()
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const [profileUserId, setProfileUserId] = useState("")
+  const {
+    data: profileQueryData,
+    isLoading: loading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: queryKeys.profile(profileUserId || "pending"),
+    queryFn: fetchProfile,
+    enabled: Boolean(profileUserId) && isSupabaseConfigured,
+  })
+  const loadError = isError ? queryErrorMessage(queryError, "პროფილი ვერ ჩაიტვირთა.") : ""
   const [error, setError] = useState("")
+  const displayError = error || loadError
+  const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState("")
   const [userId, setUserId] = useState("")
   const [userType, setUserType] = useState<"freelancer" | "hirer" | "">("")
@@ -200,154 +202,55 @@ export default function ProfilePage() {
   }, [langDropdownOpen])
 
   useEffect(() => {
-    const load = async () => {
-      if (!isSupabaseConfigured || !supabase) {
-        setError("Supabase არ არის კონფიგურირებული.")
-        setLoading(false)
-        return
-      }
-      try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
-        if (!user) throw new Error("მომხმარებელი ვერ მოიძებნა.")
-        setUserId(user.id)
-        setAccountEmail(user.email ?? "")
-        const [{ data: profile, error: profileError }, { data: fp }, { data: hp }] = await Promise.all([
-          supabase.from("profiles").select("*").eq("id", user.id).single(),
-          supabase.from("freelancer_profiles").select("*").eq("user_id", user.id).maybeSingle(),
-          supabase.from("hirer_profiles").select("*").eq("user_id", user.id).maybeSingle(),
-        ])
-
-        if (profileError || !profile) throw new Error("პროფილი ვერ ჩაიტვირთა.")
-        setUserType(profile.user_type as "freelancer" | "hirer")
-        setFullName(profile.full_name ?? "")
-        setCity(profile.city ?? "")
-        setPhone(profile.phone ?? "")
-        setAvatarUrl(profile.avatar_url ?? "")
-
-        if (profile.user_type === "freelancer") {
-          if (fp) {
-            setFreelancerProfileId(fp.id)
-            setProfessionalTitle(fp.professional_title ?? "")
-            const loadedBio = fp.bio ?? ""
-            setBio(loadedBio.trim() === "ბიო უნდა შეიცავდეს მინიმუმ 50 სიმბოლოს" ? "" : loadedBio)
-            setAvailability(fp.availability ?? "")
-            setAcceptingNewWork(fp.is_accepting_new_work !== false)
-            setLanguages(Array.isArray(fp.languages) ? fp.languages : [])
-            const social = socialFormFromDbRow(fp)
-            setLinkedinUrl(social.linkedinUrl)
-            setGithubUrl(social.githubUrl)
-            setPortfolioUrl(social.portfolioUrl)
-            setFacebookUrl(social.facebookUrl)
-            setInstagramUrl(social.instagramUrl)
-            setTiktokUrl(social.tiktokUrl)
-            setYoutubeUrl(social.youtubeUrl)
-            setXUrl(social.xUrl)
-            setNoLinkedinProfile(social.noLinkedinProfile)
-            setNoGithubProfile(social.noGithubProfile)
-            setNoPortfolioWebsite(social.noPortfolioWebsite)
-            setNoFacebookProfile(social.noFacebookProfile)
-            setNoInstagramProfile(social.noInstagramProfile)
-            setNoTiktokProfile(social.noTiktokProfile)
-            setNoYoutubeProfile(social.noYoutubeProfile)
-            setNoXProfile(social.noXProfile)
-
-            const [
-              { data: serviceRows, error: servicesError },
-              { data: expRows, error: expError },
-              { data: eduRows, error: eduRowsError },
-              { data: skillRows, error: skillRowsError },
-              { data: allSkillsRows, error: allSkillsError },
-              { data: categoriesData },
-            ] = await Promise.all([
-              supabase
-                .from("services")
-                .select("id,title,description,price,price_type,is_active")
-                .eq("freelancer_profile_id", fp.id)
-                .order("created_at", { ascending: false }),
-              supabase
-                .from("experience")
-                .select("id,title,organization,start_date,end_date,description")
-                .eq("freelancer_profile_id", fp.id)
-                .order("start_date", { ascending: false }),
-              supabase
-                .from("freelancer_education")
-                .select("id,institution,degree_level,field_of_study,end_date")
-                .eq("freelancer_profile_id", fp.id)
-                .order("end_date", { ascending: false }),
-              supabase.from("freelancer_skills").select("skill_id").eq("freelancer_profile_id", fp.id),
-              supabase.from("skills").select("id,name,category_id").eq("is_approved", true).order("name"),
-              supabase
-                .from("categories")
-                .select("id,name_ka,parent_id")
-                .eq("is_active", true)
-                .order("sort_order", { ascending: true }),
-            ])
-
-            if (servicesError) throw servicesError
-            if (expError) throw expError
-            if (eduRowsError) throw eduRowsError
-            if (skillRowsError) throw skillRowsError
-            if (allSkillsError) throw allSkillsError
-
-            const mappedServices = (serviceRows ?? []).map((item) => ({
-              id: item.id,
-              title: item.title ?? "",
-              description: stripListingMeta(item.description ?? ""),
-              price: item.price !== null && item.price !== undefined ? String(item.price) : "",
-              priceType: normalizeListingPriceType(item.price_type),
-              isActive: item.is_active ?? true,
-            }))
-
-            setServiceListings(mappedServices.slice(0, 3))
-            setInitialServiceIds(mappedServices.map((item) => item.id).filter(Boolean))
-            setExperiences(
-              (expRows ?? []).slice(0, 10).map((item) => ({
-                id: item.id,
-                title: item.title ?? "",
-                organization: item.organization ?? "",
-                startDate: item.start_date ?? "",
-                endDate: item.end_date ?? "",
-                isPresent: !item.end_date,
-                description: item.description ?? "",
-              })),
-            )
-            setEducations(
-              (eduRows ?? []).slice(0, 10).map((item) => ({
-                id: item.id,
-                institution: item.institution ?? "",
-                degreeLevel: (item.degree_level as FreelancerEducationDegreeLevel) ?? "",
-                fieldOfStudy: item.field_of_study ?? "",
-                endDate: item.end_date ?? "",
-              })),
-            )
-            setSelectedSkillIds((skillRows ?? []).map((row) => row.skill_id).filter(Boolean))
-            setSkillsCatalog((allSkillsRows ?? []) as Array<{ id: string; name: string; category_id: string | null }>)
-            setSkillCategories((categoriesData ?? []) as SkillCategoryRow[])
-          } else {
-            setServiceListings([])
-            setInitialServiceIds([])
-            setSelectedSkillIds([])
-            setSkillsCatalog([])
-            setSkillCategories([])
-            setExperiences([])
-            setEducations([])
-          }
-        } else if (hp) {
-          setCompanyName(hp.company_name ?? "")
-          setCompanyDescription(hp.description ?? "")
-          setIndustry(hp.industry ?? "")
-          setCompanyWebsite(hp.website_url ?? "")
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "პროფილი ვერ ჩაიტვირთა.")
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
+    if (!isSupabaseConfigured || !supabase) return
+    void supabase.auth.getUser().then(({ data: { user } }) => {
+      setProfileUserId(user?.id ?? "")
+    })
   }, [])
+
+  useEffect(() => {
+    if (!profileQueryData) return
+    setUserId(profileQueryData.userId)
+    setAccountEmail(profileQueryData.accountEmail)
+    setUserType(profileQueryData.userType)
+    setAvatarUrl(profileQueryData.avatarUrl)
+    setFullName(profileQueryData.fullName)
+    setCity(profileQueryData.city)
+    setPhone(profileQueryData.phone)
+    setProfessionalTitle(profileQueryData.professionalTitle)
+    setBio(profileQueryData.bio)
+    setAvailability(profileQueryData.availability)
+    setAcceptingNewWork(profileQueryData.acceptingNewWork)
+    setLanguages(profileQueryData.languages)
+    setLinkedinUrl(profileQueryData.linkedinUrl)
+    setGithubUrl(profileQueryData.githubUrl)
+    setPortfolioUrl(profileQueryData.portfolioUrl)
+    setNoLinkedinProfile(profileQueryData.noLinkedinProfile)
+    setNoGithubProfile(profileQueryData.noGithubProfile)
+    setNoPortfolioWebsite(profileQueryData.noPortfolioWebsite)
+    setFacebookUrl(profileQueryData.facebookUrl)
+    setInstagramUrl(profileQueryData.instagramUrl)
+    setTiktokUrl(profileQueryData.tiktokUrl)
+    setYoutubeUrl(profileQueryData.youtubeUrl)
+    setXUrl(profileQueryData.xUrl)
+    setNoFacebookProfile(profileQueryData.noFacebookProfile)
+    setNoInstagramProfile(profileQueryData.noInstagramProfile)
+    setNoTiktokProfile(profileQueryData.noTiktokProfile)
+    setNoYoutubeProfile(profileQueryData.noYoutubeProfile)
+    setNoXProfile(profileQueryData.noXProfile)
+    setCompanyName(profileQueryData.companyName)
+    setCompanyDescription(profileQueryData.companyDescription)
+    setIndustry(profileQueryData.industry)
+    setCompanyWebsite(profileQueryData.companyWebsite)
+    setFreelancerProfileId(profileQueryData.freelancerProfileId)
+    setServiceListings(profileQueryData.serviceListings)
+    setInitialServiceIds(profileQueryData.initialServiceIds)
+    setSkillsCatalog(profileQueryData.skillsCatalog)
+    setSkillCategories(profileQueryData.skillCategories)
+    setSelectedSkillIds(profileQueryData.selectedSkillIds)
+    setExperiences(profileQueryData.experiences)
+    setEducations(profileQueryData.educations)
+  }, [profileQueryData])
 
   const handleAvatarUpload = async (file: File) => {
     if (!file || !supabase) return
@@ -1672,7 +1575,7 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {error ? <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+          {displayError ? <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{displayError}</p> : null}
           {success ? <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{success}</p> : null}
 
           <button

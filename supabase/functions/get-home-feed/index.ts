@@ -16,7 +16,10 @@ const RATE_LIMIT_REQUESTS = 10
 const RATE_LIMIT_WINDOW = "10 s"
 
 function jsonResponse(req: Request, body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: corsHeadersFor(req) })
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: corsHeadersFor(req, { "Content-Type": "application/json" }),
+  })
 }
 
 type SuccessPayload = { ok: true; data: unknown }

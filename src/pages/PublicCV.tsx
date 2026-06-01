@@ -1,55 +1,29 @@
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { useParams } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 import Navbar from "../components/Navbar"
 import CVPreview from "../../components/cv/CVPreview.jsx"
-import { supabaseEdgeHeaders } from "../lib/supabaseEdgeHeaders.ts"
-import { supabase } from "../lib/supabase"
-
-type CvPayload = Record<string, unknown>
+import { fetchPublicCvBySlug } from "../lib/queries/fetchPublicCv.ts"
+import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
+import { queryKeys } from "../lib/queryKeys.ts"
 
 export default function PublicCVPage() {
   const { slug } = useParams<{ slug: string }>()
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-  const [cv, setCv] = useState<CvPayload | null>(null)
+  const {
+    data: cv = null,
+    isLoading: loading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: queryKeys.publicCv(slug ?? ""),
+    queryFn: () => fetchPublicCvBySlug(slug!),
+    enabled: Boolean(slug),
+  })
+  const error = isError ? queryErrorMessage(queryError, "შეცდომა") : ""
 
   useEffect(() => {
     document.title = "საჯარო CV — გიგორი"
   }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    const load = async () => {
-      if (!slug) {
-        setError("CV slug ვერ მოიძებნა.")
-        setLoading(false)
-        return
-      }
-      try {
-        const token = supabase ? (await supabase.auth.getSession()).data.session?.access_token ?? null : null
-        const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/cv-get?slug=${encodeURIComponent(slug)}`,
-          {
-            method: "GET",
-            headers: supabaseEdgeHeaders(token),
-          },
-        )
-        const payload = await response.json().catch(() => null)
-        if (!response.ok) {
-          throw new Error(payload?.error || "CV ვერ მოიძებნა.")
-        }
-        if (!cancelled) setCv((payload?.cv ?? null) as CvPayload | null)
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "შეცდომა")
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [slug])
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -64,4 +38,3 @@ export default function PublicCVPage() {
     </div>
   )
 }
-

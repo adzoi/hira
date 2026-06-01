@@ -1,18 +1,20 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 import FollowListsModal, { FollowStatPills, type FollowModalTab } from "../components/FollowListsModal.tsx"
 import Navbar from "../components/Navbar"
 import VIPUpgrade from "../components/VIPUpgrade"
-import { countFollowers, countFollowing } from "../lib/follows.ts"
 import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { formatListingPrice, normalizeListingPriceType } from "../lib/listingPrice.ts"
-import { countFreelancerProfileVisits } from "../lib/profileVisits"
 import { subscribeToDashboardMessaging } from "../lib/dashboardMessagingRealtime.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import type { Database } from "../lib/database.types"
 import { jobVacancyStats } from "../lib/jobVacancies.ts"
 import { validateReviewComment } from "../lib/validation.ts"
+import { fetchDashboard } from "../lib/queries/fetchDashboard.ts"
+import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
+import { queryKeys } from "../lib/queryKeys.ts"
 
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"]
 type FreelancerProfileRow = Database["public"]["Tables"]["freelancer_profiles"]["Row"]
@@ -487,67 +489,10 @@ function mapFreelancerCompletedPlatformJobRows(rows: unknown[] | null | undefine
   return out
 }
 
-async function loadFreelancerHirerReviewQueue(
-  client: SupabaseClient,
-  freelancerProfileId: string,
-  profileUserId: string,
-): Promise<FreelancerHirerReviewRow[]> {
-  const { data: rows, error } = await client
-    .from("completed_jobs")
-    .select(
-      `
-      id,
-      job_id,
-      hirer_profile_id,
-      jobs ( title ),
-      hirer_profiles ( user_id, company_name )
-    `,
-    )
-    .eq("freelancer_profile_id", freelancerProfileId)
-  if (error) throw error
-
-  const cjList = (rows ?? []) as Array<{
-    id: string
-    job_id: string
-    hirer_profile_id: string
-    jobs: { title: string | null } | { title: string | null }[] | null
-    hirer_profiles: { user_id: string; company_name: string | null } | { user_id: string; company_name: string | null }[] | null
-  }>
-  if (cjList.length === 0) return []
-
-  const cjIds = cjList.map((r) => r.id)
-  const { data: myRevs, error: revErr } = await client
-    .from("reviews")
-    .select("completed_job_id")
-    .eq("reviewer_id", profileUserId)
-    .in("completed_job_id", cjIds)
-  if (revErr) throw revErr
-  const reviewed = new Set((myRevs ?? []).map((r) => r.completed_job_id))
-
-  const out: FreelancerHirerReviewRow[] = []
-  for (const row of cjList) {
-    if (reviewed.has(row.id)) continue
-    const job = embedJoinOne(row.jobs as Record<string, unknown> | Record<string, unknown>[] | null)
-    const hp = embedJoinOne(row.hirer_profiles as Record<string, unknown> | Record<string, unknown>[] | null)
-    const jobTitle = typeof job?.title === "string" && job.title.trim() ? job.title : "სამუშაო"
-    const hirerUserId = typeof hp?.user_id === "string" ? hp.user_id : ""
-    if (!hirerUserId) continue
-    const company = typeof hp?.company_name === "string" ? hp.company_name.trim() : ""
-    out.push({
-      completedJobId: row.id,
-      jobId: row.job_id,
-      jobTitle,
-      hirerUserId,
-      hirerDisplayName: company || "დამქირავებელი",
-    })
-  }
-  return out
-}
-
 export default function DashboardPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const [loading, setLoading] = useState(true)
+  const [dashboardUserId, setDashboardUserId] = useState("")
   const [error, setError] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
   const [profile, setProfile] = useState<ProfileRow | null>(null)
@@ -667,486 +612,11 @@ export default function DashboardPage() {
   }, [location.hash, location.pathname, location.search, location.state, navigate])
 
   useEffect(() => {
-    const loadDashboard = async () => {
-      if (!isSupabaseConfigured || !supabase) {
-        setError("Supabase პარამეტრები ვერ მოიძებნა.")
-        setLoading(false)
-        return
-      }
-
-      try {
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser()
-
-        if (userError || !user) {
-          navigate("/login", { replace: true })
-          return
-        }
-
-        const { data: profileData, error: profileError } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", user.id)
-          .single()
-
-        if (profileError || !profileData) {
-          throw new Error("პროფილის მონაცემები ვერ ჩაიტვირთა.")
-        }
-
-        setProfile(profileData)
-
-        let freelancerData: FreelancerProfileRow | null = null
-        let hirerData: HirerProfileRow | null = null
-
-        if (profileData.user_type === "freelancer") {
-          const { data, error: freelancerError } = await supabase
-            .from("freelancer_profiles")
-            .select("*")
-            .eq("user_id", profileData.id)
-            .maybeSingle()
-
-          if (freelancerError) {
-            throw new Error("ფრილანსერის პროფილი ვერ ჩაიტვირთა.")
-          }
-          freelancerData = data
-          setFreelancerProfile(freelancerData)
-
-          if (freelancerData) {
-            try {
-              const { data: inqRows, error: inqLoadErr } = await supabaseAny
-                .from("service_inquiries")
-                .select(
-                  `
-                  id,
-                  created_at,
-                  message,
-                  proposed_budget,
-                  status,
-                  cancel_requested_by,
-                  completed_at,
-                  services ( id, title ),
-                  hirer_profiles ( id, company_name, user_id )
-                `,
-                )
-                .eq("freelancer_profile_id", freelancerData.id)
-                .eq("deleted_by_hirer", false)
-                .eq("deleted_by_freelancer", false)
-                .order("created_at", { ascending: false })
-                .limit(40)
-              if (inqLoadErr) throw inqLoadErr
-              setFreelancerListingInquiries(mapServiceInquiryRowsForFreelancer(inqRows as unknown[]))
-            } catch (inqErr) {
-              if (import.meta.env.DEV) console.warn("[dashboard] service_inquiries load:", inqErr)
-              setFreelancerListingInquiries([])
-            }
-          } else {
-            setFreelancerCompletedJobsCount(0)
-            setFreelancerHirerReviewQueue([])
-            setFreelancerListingInquiries([])
-            setFreelancerCompletedPlatformJobs([])
-            setFreelancerPendingJobOffers([])
-            setHirerProfileViewerCount(0)
-            setOverallProfileVisitCount(0)
-          }
-        }
-
-        if (profileData.user_type === "hirer") {
-          const { data, error: hirerError } = await supabase
-            .from("hirer_profiles")
-            .select("*")
-            .eq("user_id", profileData.id)
-            .maybeSingle()
-
-          if (hirerError) {
-            throw new Error("დამქირავებლის პროფილი ვერ ჩაიტვირთა.")
-          }
-          hirerData = data
-          setHirerProfile(hirerData)
-
-          if (hirerData) {
-            const { data: myJobsData, error: myJobsError } = await supabase
-              .from("jobs")
-              .select("id,title,status")
-              .eq("hirer_profile_id", hirerData.id)
-              .order("created_at", { ascending: false })
-
-            if (myJobsError) throw myJobsError
-            const myJobsList = (myJobsData ?? []) as JobRow[]
-            setMyJobs(myJobsList)
-
-            const jobIds = myJobsList.map((j) => j.id)
-            const jobStatusById = myJobsList.reduce<Record<string, string>>((acc, j) => {
-              acc[j.id] = j.status
-              return acc
-            }, {})
-            const jobTitleById = myJobsList.reduce<Record<string, string>>((acc, j) => {
-              acc[j.id] = j.title
-              return acc
-            }, {})
-
-            if (jobIds.length > 0) {
-              const { data: applicationsData, error: applicationsError } = await supabaseAny
-                .from("job_applications")
-                .select("*")
-                .in("job_id", jobIds)
-                .eq("deleted_by_hirer", false)
-                .eq("deleted_by_freelancer", false)
-                .order("created_at", { ascending: false })
-                .limit(100)
-              if (applicationsError) throw applicationsError
-
-              const apps = (applicationsData ?? []) as JobApplicationRow[]
-              const freelancerIds = [...new Set(apps.map((a) => a.freelancer_profile_id))]
-              const { data: freelancerProfilesData, error: freelancerProfilesError } = await supabase
-                .from("freelancer_profiles")
-                .select("id,user_id,slug,profiles!freelancer_profiles_user_id_fkey(full_name)")
-                .in("id", freelancerIds)
-              if (freelancerProfilesError) throw freelancerProfilesError
-
-              const profileMap = new Map(
-                (freelancerProfilesData ?? []).map((fp: any) => [
-                  fp.id,
-                  {
-                    userId: fp.user_id as string,
-                    slug: (fp.slug as string | null) ?? null,
-                    fullName: (fp.profiles?.full_name as string | null) ?? "ფრილანსერი",
-                  },
-                ]),
-              )
-
-              const applications: HirerApplicationRow[] = apps.map((app) => {
-                const p = profileMap.get(app.freelancer_profile_id)
-                return {
-                  applicationId: app.id,
-                  jobId: app.job_id,
-                  jobTitle: jobTitleById[app.job_id] ?? "განცხადება",
-                  jobStatus: jobStatusById[app.job_id] ?? "open",
-                  freelancerProfileId: app.freelancer_profile_id,
-                  freelancerUserId: p?.userId ?? "",
-                  freelancerName: p?.fullName ?? "ფრილანსერი",
-                  freelancerSlug: p?.slug ?? null,
-                  createdAt: app.created_at,
-                  status: app.status,
-                  cancelRequestedBy: ((app as unknown as Record<string, unknown>).cancel_requested_by as CancelRequestedByRole) ?? null,
-                }
-              })
-
-              const counts = apps.reduce<Record<string, number>>((acc, app) => {
-                acc[app.job_id] = (acc[app.job_id] ?? 0) + 1
-                return acc
-              }, {})
-
-              setHirerApplications(applications)
-              setJobApplicationsByJobId(counts)
-            } else {
-              setHirerApplications([])
-              setJobApplicationsByJobId({})
-            }
-          } else {
-            setHirerCompletedJobsCount(0)
-            setHirerListingInquiries([])
-            setHirerReviewedListingInquiryIds({})
-            setHirerReviewedJobApplicationIds({})
-            setMyJobs([])
-            setHirerApplications([])
-            setJobApplicationsByJobId({})
-          }
-        }
-
-        setLoading(false)
-
-        if (profileData.id) {
-          void (async () => {
-            try {
-              const [n, nf] = await Promise.all([countFollowers(profileData.id), countFollowing(profileData.id)])
-              setDashFollowersCount(Number.isFinite(n) ? n : 0)
-              setDashFollowingCount(Number.isFinite(nf) ? nf : 0)
-            } catch {
-              setDashFollowersCount(0)
-              setDashFollowingCount(0)
-            }
-          })()
-        }
-
-        if (profileData.user_type === "freelancer" && freelancerData) {
-          void (async () => {
-            try {
-              const queue = await loadFreelancerHirerReviewQueue(supabase, freelancerData.id, user.id)
-              setFreelancerHirerReviewQueue(queue)
-            } catch (queueErr) {
-              if (import.meta.env.DEV) console.warn("[dashboard] freelancer hirer review queue:", queueErr)
-              setFreelancerHirerReviewQueue([])
-            }
-          })()
-
-          void (async () => {
-            try {
-              const { data: pendingAppsRows, error: pendingAppsErr } = await supabaseAny
-                .from("job_applications")
-                .select(
-                  `
-                  id,
-                  job_id,
-                  created_at,
-                  status,
-                  cancel_requested_by,
-                  jobs (
-                    title,
-                    hirer_profiles (
-                      user_id,
-                      company_name,
-                      profiles:profiles!hirer_profiles_user_id_fkey ( full_name )
-                    )
-                  )
-                `,
-                )
-                .eq("freelancer_profile_id", freelancerData.id)
-                .eq("deleted_by_hirer", false)
-                .eq("deleted_by_freelancer", false)
-                .order("created_at", { ascending: false })
-              if (pendingAppsErr) throw pendingAppsErr
-
-              const mappedOffers = ((pendingAppsRows ?? []) as Array<Record<string, unknown>>).map((row) => {
-                const job = embedJoinRow(row.jobs as Record<string, unknown> | Record<string, unknown>[] | null)
-                const hp = embedJoinRow(job?.hirer_profiles as Record<string, unknown> | Record<string, unknown>[] | null)
-                const hpProfile = embedJoinRow(hp?.profiles as Record<string, unknown> | Record<string, unknown>[] | null)
-                const companyName = typeof hp?.company_name === "string" ? hp.company_name.trim() : ""
-                const fullName = typeof hpProfile?.full_name === "string" ? hpProfile.full_name.trim() : ""
-                return {
-                  applicationId: String(row.id ?? ""),
-                  jobId: String(row.job_id ?? ""),
-                  createdAt: String(row.created_at ?? ""),
-                  jobTitle: typeof job?.title === "string" && job.title.trim() ? job.title : "განცხადება",
-                  hirerLabel: companyName || fullName || "დამქირავებელი",
-                  hirerUserId: typeof hp?.user_id === "string" && hp.user_id.trim() ? hp.user_id : null,
-                  status: String(row.status ?? "pending"),
-                  cancelRequestedBy: (row.cancel_requested_by as CancelRequestedByRole) ?? null,
-                }
-              })
-              setFreelancerPendingJobOffers(mappedOffers.filter((item) => item.applicationId))
-            } catch (pendingAppsLoadErr) {
-              if (import.meta.env.DEV) console.warn("[dashboard] freelancer pending job offers:", pendingAppsLoadErr)
-              setFreelancerPendingJobOffers([])
-            }
-          })()
-
-          void (async () => {
-            try {
-              const { data: cjRows, error: cjRowsErr } = await supabase
-                .from("completed_jobs")
-                .select(
-                  `
-                  id,
-                  completed_at,
-                  job_id,
-                  jobs ( title, description ),
-                  hirer_profiles (
-                    company_name,
-                    profiles:profiles!hirer_profiles_user_id_fkey ( full_name, avatar_url )
-                  )
-                `,
-                )
-                .eq("freelancer_profile_id", freelancerData.id)
-                .not("completed_at", "is", null)
-                .order("completed_at", { ascending: false })
-                .limit(80)
-              if (cjRowsErr) throw cjRowsErr
-              setFreelancerCompletedPlatformJobs(mapFreelancerCompletedPlatformJobRows(cjRows as unknown[]))
-            } catch (cjListErr) {
-              if (import.meta.env.DEV) console.warn("[dashboard] completed_jobs list:", cjListErr)
-              setFreelancerCompletedPlatformJobs([])
-            }
-          })()
-
-          void (async () => {
-            try {
-              const [{ count: cjCount, error: cjCountErr }, { count: listingDoneCount, error: listingDoneErr }] =
-                await Promise.all([
-                  supabase.from("completed_jobs").select("id", { count: "exact", head: true }).eq("freelancer_profile_id", freelancerData.id),
-                  supabaseAny
-                    .from("service_inquiries")
-                    .select("id", { count: "exact", head: true })
-                    .eq("freelancer_profile_id", freelancerData.id)
-                    .eq("deleted_by_hirer", false)
-                    .eq("deleted_by_freelancer", false)
-                    .eq("status", "completed"),
-                ])
-              if (cjCountErr && import.meta.env.DEV) {
-                console.warn("[dashboard] completed_jobs count:", cjCountErr.message)
-              }
-              if (listingDoneErr && import.meta.env.DEV) {
-                console.warn("[dashboard] service_inquiries completed count:", listingDoneErr.message)
-              }
-              const jobDone = typeof cjCount === "number" ? cjCount : 0
-              const listingDone = typeof listingDoneCount === "number" ? listingDoneCount : 0
-              setFreelancerCompletedJobsCount(
-                cjCountErr
-                  ? Number(freelancerData.completed_jobs_count ?? 0) + (listingDoneErr ? 0 : listingDone)
-                  : jobDone + (listingDoneErr ? 0 : listingDone),
-              )
-            } catch {
-              setFreelancerCompletedJobsCount(Number(freelancerData.completed_jobs_count ?? 0))
-            }
-          })()
-
-          void (async () => {
-            try {
-              const [{ data: hirerVisitorsRpc, error: hirerVisitorsRpcError }, totalVisits] = await Promise.all([
-                supabase.rpc("count_distinct_hirer_visitors_to_freelancer", {
-                  target_freelancer_profile_id: freelancerData.id,
-                }),
-                countFreelancerProfileVisits(freelancerData.id),
-              ])
-              if (hirerVisitorsRpcError && import.meta.env.DEV) {
-                console.warn("[dashboard] hirer visitor count RPC:", hirerVisitorsRpcError.message)
-              }
-              const hv = hirerVisitorsRpc == null ? 0 : Number(hirerVisitorsRpc)
-              setHirerProfileViewerCount(Number.isFinite(hv) ? hv : 0)
-              setOverallProfileVisitCount(totalVisits ?? 0)
-            } catch {
-              setHirerProfileViewerCount(0)
-              setOverallProfileVisitCount(0)
-            }
-          })()
-
-          void (async () => {
-            try {
-              const { data: servicesData, error: servicesError } = await supabase
-                .from("services")
-                .select("*")
-                .eq("freelancer_profile_id", freelancerData.id)
-                .order("created_at", { ascending: false })
-
-              if (servicesError) throw servicesError
-              const serviceRows = servicesData ?? []
-              const nextDrafts = serviceRows.slice(0, 3).map((item) => ({
-                id: item.id,
-                title: item.title ?? "",
-                description: stripListingMeta(item.description ?? ""),
-                price: item.price !== null && item.price !== undefined ? String(item.price) : "",
-                priceType: normalizeListingPriceType(item.price_type),
-                isActive: item.is_active ?? true,
-              }))
-              setServiceDrafts(nextDrafts)
-              setInitialServicesSnapshot(snapshotServices(nextDrafts))
-              setInitialServiceIds(serviceRows.map((item) => item.id))
-            } catch {
-              setServiceDrafts([])
-              setInitialServicesSnapshot(snapshotServices([]))
-              setInitialServiceIds([])
-            }
-          })()
-        }
-
-        if (profileData.user_type === "hirer" && hirerData) {
-          void (async () => {
-            try {
-              const [{ count: hCjCount, error: hCjErr }, { count: hListingDone, error: hListingDoneErr }] =
-                await Promise.all([
-                  supabase.from("completed_jobs").select("id", { count: "exact", head: true }).eq("hirer_profile_id", hirerData.id),
-                  supabaseAny
-                    .from("service_inquiries")
-                    .select("id", { count: "exact", head: true })
-                    .eq("hirer_profile_id", hirerData.id)
-                    .eq("deleted_by_hirer", false)
-                    .eq("deleted_by_freelancer", false)
-                    .eq("status", "completed"),
-                ])
-              if (hCjErr && import.meta.env.DEV) {
-                console.warn("[dashboard] hirer completed_jobs count:", hCjErr.message)
-              }
-              if (hListingDoneErr && import.meta.env.DEV) {
-                console.warn("[dashboard] hirer service_inquiries completed count:", hListingDoneErr.message)
-              }
-              const hJobDone = typeof hCjCount === "number" ? hCjCount : 0
-              const hListDone = typeof hListingDone === "number" ? hListingDone : 0
-              setHirerCompletedJobsCount(
-                hCjErr
-                  ? Number(hirerData.completed_jobs_count ?? 0) + (hListingDoneErr ? 0 : hListDone)
-                  : hJobDone + (hListingDoneErr ? 0 : hListDone),
-              )
-            } catch {
-              setHirerCompletedJobsCount(Number(hirerData.completed_jobs_count ?? 0))
-            }
-          })()
-
-          void (async () => {
-            try {
-              const { data: hInqRows, error: hInqErr } = await supabaseAny
-                .from("service_inquiries")
-                .select(
-                  `
-                  id,
-                  created_at,
-                  message,
-                  proposed_budget,
-                  status,
-                  cancel_requested_by,
-                  completed_at,
-                  services ( title ),
-                  freelancer_profiles (
-                    user_id,
-                    slug,
-                    profiles:profiles!freelancer_profiles_user_id_fkey ( full_name )
-                  )
-                `,
-                )
-                .eq("hirer_profile_id", hirerData.id)
-                .eq("deleted_by_hirer", false)
-                .eq("deleted_by_freelancer", false)
-                .order("created_at", { ascending: false })
-                .limit(40)
-              if (hInqErr) throw hInqErr
-              const mappedHirerInquiries = mapServiceInquiryRowsForHirer(hInqRows as unknown[])
-              setHirerListingInquiries(mappedHirerInquiries)
-              if (mappedHirerInquiries.length > 0) {
-                const inquiryIds = mappedHirerInquiries.map((item) => item.id)
-                const { data: myReviewsRows, error: myReviewsErr } = await supabase
-                  .from("reviews")
-                  .select("service_inquiry_id")
-                  .eq("reviewer_id", profileData.id)
-                  .in("service_inquiry_id", inquiryIds)
-                if (!myReviewsErr) {
-                  const reviewedMap = (myReviewsRows ?? []).reduce<Record<string, true>>((acc, row) => {
-                    const inquiryId = String(row.service_inquiry_id ?? "")
-                    if (inquiryId) acc[inquiryId] = true
-                    return acc
-                  }, {})
-                  setHirerReviewedListingInquiryIds(reviewedMap)
-                }
-              } else {
-                setHirerReviewedListingInquiryIds({})
-              }
-            } catch (hInqLoadErr) {
-              if (import.meta.env.DEV) console.warn("[dashboard] hirer service_inquiries:", hInqLoadErr)
-              setHirerListingInquiries([])
-              setHirerReviewedListingInquiryIds({})
-            }
-          })()
-
-          void (async () => {
-            try {
-              const { myJobs, applications, counts } = await fetchHirerDashboardSection(supabase, hirerData.id)
-              setMyJobs(myJobs)
-              setHirerApplications(applications)
-              setJobApplicationsByJobId(counts)
-              await loadHirerApplicationReviewedFlags(applications)
-            } catch (hirerSectionErr) {
-              if (import.meta.env.DEV) console.warn("[dashboard] hirer dashboard section:", hirerSectionErr)
-            }
-          })()
-        }
-      } catch (loadError) {
-        const message = loadError instanceof Error ? loadError.message : "მონაცემები ვერ ჩაიტვირთა."
-        setError(message)
-        setLoading(false)
-      }
-    }
-
-    loadDashboard()
-  }, [navigate])
+    if (!isSupabaseConfigured || !supabase) return
+    void supabase.auth.getUser().then(({ data: { user } }) => {
+      setDashboardUserId(user?.id ?? "")
+    })
+  }, [])
 
   const activeJobsCount = useMemo(
     () => myJobs.filter((job) => job.status === "open").length,
@@ -1385,6 +855,48 @@ export default function DashboardPage() {
     },
     [profile?.id, supabase],
   )
+
+  const {
+    isLoading: loading,
+    isError: dashboardQueryIsError,
+    error: dashboardQueryError,
+  } = useQuery({
+    queryKey: queryKeys.dashboard(dashboardUserId || "pending"),
+    queryFn: () =>
+      fetchDashboard({
+        navigate,
+        supabaseAny,
+        setError,
+        setProfile,
+        setFreelancerProfile,
+        setHirerProfile,
+        setFreelancerListingInquiries,
+        setFreelancerCompletedJobsCount,
+        setFreelancerHirerReviewQueue,
+        setFreelancerCompletedPlatformJobs,
+        setFreelancerPendingJobOffers,
+        setHirerProfileViewerCount,
+        setOverallProfileVisitCount,
+        setMyJobs,
+        setHirerApplications,
+        setJobApplicationsByJobId,
+        setHirerCompletedJobsCount,
+        setHirerListingInquiries,
+        setHirerReviewedListingInquiryIds,
+        setHirerReviewedJobApplicationIds,
+        setServiceDrafts,
+        setInitialServicesSnapshot,
+        setInitialServiceIds,
+        setDashFollowersCount,
+        setDashFollowingCount,
+        loadHirerApplicationReviewedFlags,
+      }),
+    enabled: Boolean(dashboardUserId) && isSupabaseConfigured,
+  })
+  const dashboardLoadError = dashboardQueryIsError
+    ? queryErrorMessage(dashboardQueryError, "მონაცემები ვერ ჩაიტვირთა.")
+    : ""
+  const displayError = error || dashboardLoadError
 
   const reloadFreelancerListingInquiries = useCallback(async () => {
     if (!supabase || !freelancerProfile?.id) return
@@ -2327,7 +1839,7 @@ export default function DashboardPage() {
           <h1 className="text-3xl font-bold text-[#1B2B4B]">მართვის პანელი</h1>
         </div>
 
-        {!loading && !error && successMessage ? (
+        {!loading && !displayError && successMessage ? (
           <div className="mb-6 rounded-xl border border-green-200 bg-green-50 p-4 text-green-700">
             {successMessage}
           </div>
@@ -2337,8 +1849,8 @@ export default function DashboardPage() {
           <div className="flex h-60 items-center justify-center">
             <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-[#D4A843]" />
           </div>
-        ) : error ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>
+        ) : displayError ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">{displayError}</div>
         ) : profile?.user_type === "freelancer" ? (
           <section className="space-y-6">
             <div className="rounded-xl border border-slate-200 bg-white p-6">
@@ -3900,7 +3412,7 @@ export default function DashboardPage() {
             მომხმარებლის ტიპი ვერ მოიძებნა.
           </div>
         )}
-        {!loading && !error && profile ? (
+        {!loading && !displayError && profile ? (
           <FollowListsModal
             open={followListsModalOpen}
             onClose={() => setFollowListsModalOpen(false)}
