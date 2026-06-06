@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import Navbar from "../components/Navbar"
+import FreelancerAvailabilityIndicator from "../components/FreelancerAvailabilityIndicator.tsx"
 import { ViewCountEyeIcon } from "../components/ViewCountEyeIcon.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import StartConversationButton from "../components/StartConversationButton.tsx"
+import SkeletonCard from "../components/ui/SkeletonCard.tsx"
 import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { formatListingPrice } from "../lib/listingPrice.ts"
 import { fetchListingDetail, type ListingDetail } from "../lib/queries/fetchListingDetail.ts"
@@ -45,6 +46,44 @@ function parseListingDescription(raw: string | null): { description: string; met
     return { description: stripLegacyPricePrefix(raw), meta: fallback }
   }
 }
+
+function getInitials(fullName: string) {
+  const parts = fullName.trim().split(" ").filter(Boolean)
+  if (parts.length === 0) return "ფ"
+  return `${parts[0][0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase()
+}
+
+function formatDate(dateString: string) {
+  return new Date(dateString).toLocaleDateString("ka-GE")
+}
+
+function CalendarOutlineIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <path d="M16 2v4M8 2v4M3 10h18" />
+    </svg>
+  )
+}
+
+function StarIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+    </svg>
+  )
+}
+
+function SendOutlineIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path d="M22 2L11 13" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M22 2l-7 20-4-9-9-4 20-7z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+const cardClass = "flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
 
 export default function ListingDetailPage() {
   const navigate = useNavigate()
@@ -268,63 +307,100 @@ export default function ListingDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8F9FC] page-enter">
-      <Navbar />
-      <main className="mx-auto w-full max-w-[1100px] px-4 py-6 md:px-6 md:py-10">
+    <div className="bg-slate-50 page-enter">
+      <main className="mx-auto flex w-full max-w-[1100px] flex-col px-4 py-4 md:px-6 md:py-5 lg:h-[calc(100dvh-11rem)] lg:max-h-[calc(100dvh-11rem)]">
+        <Link
+          to="/listings"
+          className="mb-3 inline-flex shrink-0 items-center gap-1 text-sm font-medium text-slate-600 transition hover:text-[#0088FF]"
+        >
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+            <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          განცხადებები
+        </Link>
+
         {loading ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-600">იტვირთება...</div>
+          <div className="grid min-h-[420px] flex-1 grid-cols-2 gap-4">
+            <SkeletonCard lines={8} />
+            <SkeletonCard lines={8} avatar />
+          </div>
         ) : error || !item ? (
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
-            <p>{error || "ლისტინგი ვერ მოიძებნა."}</p>
-            <Link to="/listings" className="mt-3 inline-block font-semibold text-[#1B2B4B] underline">
+          <div className={`${cardClass} items-center justify-center p-8 text-center`}>
+            <p className="text-lg font-semibold text-[#1B2B4B]">{error || "ლისტინგი ვერ მოიძებნა."}</p>
+            <Link
+              to="/listings"
+              className="mt-4 inline-flex h-10 items-center rounded-lg bg-[#0088FF] px-4 text-sm font-semibold text-white hover:bg-[#006ACC]"
+            >
               დაბრუნდი ლისტინგებზე
             </Link>
           </div>
         ) : (
-          <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-            <section className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
-              <h1 className="text-2xl font-extrabold text-[#1B2B4B]">{item.title}</h1>
-              <p className="mt-1 inline-flex items-center gap-1 text-xs text-slate-500">
-                <ViewCountEyeIcon className="h-3.5 w-3.5 shrink-0" />
-                {item.viewsCount}
-              </p>
-              <p className="mt-2 text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">
-                {parsed.description || "დეტალური აღწერა ჯერ არ არის დამატებული."}
-              </p>
+          <div className="grid min-h-0 flex-1 grid-cols-2 gap-4">
+            <article className={`${cardClass} p-4 md:p-5`}>
+              <div className="flex shrink-0 items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h1 className="text-xl font-bold leading-snug text-[#1B2B4B] md:text-2xl">{item.title}</h1>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                    <span className="inline-flex items-center gap-1">
+                      <ViewCountEyeIcon className="h-3.5 w-3.5" />
+                      {item.viewsCount} ნახვა
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <CalendarOutlineIcon className="h-3.5 w-3.5" />
+                      {formatDate(item.createdAt)}
+                    </span>
+                  </div>
+                </div>
+                {!viewerOwnsListing ? (
+                  <SaveBookmarkButton variant="icon" resourceType="service" resourceId={item.id} />
+                ) : null}
+              </div>
 
               {imagePublicUrls.length > 0 ? (
-                <div className="mt-5">
-                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                <div className="mt-3 shrink-0">
+                  <div className="overflow-hidden rounded-xl bg-slate-100">
                     <img
                       src={imagePublicUrls[Math.min(selectedImage, imagePublicUrls.length - 1)].detail}
                       alt=""
-                      className="h-[320px] w-full object-cover"
+                      className="h-36 w-full object-cover md:h-44"
                     />
                   </div>
                   {imagePublicUrls.length > 1 ? (
-                    <div className="mt-2 grid grid-cols-3 gap-2">
+                    <div className="mt-2 flex gap-1.5 overflow-x-auto">
                       {imagePublicUrls.map((urls, index) => (
                         <button
                           key={urls.thumb}
                           type="button"
                           onClick={() => setSelectedImage(index)}
-                          className={`overflow-hidden rounded-lg border ${selectedImage === index ? "border-[#D4A843]" : "border-slate-200"}`}
+                          className={`h-12 w-14 shrink-0 overflow-hidden rounded-md border-2 ${
+                            selectedImage === index ? "border-[#0088FF]" : "border-slate-200"
+                          }`}
                         >
-                          <img src={urls.thumb} alt="" className="h-20 w-full object-cover" />
+                          <img src={urls.thumb} alt="" className="h-full w-full object-cover" />
                         </button>
                       ))}
                     </div>
                   ) : null}
                 </div>
               ) : null}
-            </section>
 
-            <aside className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
-              <div className="flex items-start gap-3 border-b border-slate-100 pb-4">
-                <div className="flex shrink-0 flex-col items-center gap-2">
+              <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
+                  {parsed.description || "დეტალური აღწერა ჯერ არ არის დამატებული."}
+                </p>
+              </div>
+            </article>
+
+            <aside className={`${cardClass} p-4 md:p-5`}>
+              <div className="flex shrink-0 items-center gap-3 border-b border-slate-100 pb-4">
+                <FreelancerAvailabilityIndicator
+                  available={item.isAcceptingNewWork}
+                  labelWhenAvailable="ხელმისაწვდომია ახალი სამუშაოებისთვის"
+                  labelWhenUnavailable="ამჟამად ახალი სამუშაოებისთვის ხელმიუწვდომელია"
+                >
                   <Link
                     to={`/freelancer/${encodeURIComponent(item.freelancerSlug)}`}
-                    className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-xs font-bold text-[#1B2B4B]"
+                    className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-sm font-bold text-[#1B2B4B]"
                   >
                     {item.avatarUrl ? (
                       <img
@@ -333,103 +409,91 @@ export default function ListingDetailPage() {
                         className="h-full w-full object-cover"
                       />
                     ) : (
-                      item.fullName.slice(0, 2).toUpperCase()
+                      getInitials(item.fullName)
                     )}
                   </Link>
-                  {!viewerOwnsListing ? (
-                    <SaveBookmarkButton resourceType="service" resourceId={item.id} className="w-[88px]" />
-                  ) : null}
+                </FreelancerAvailabilityIndicator>
+                <div className="min-w-0 flex-1">
+                  <Link
+                    to={`/freelancer/${encodeURIComponent(item.freelancerSlug)}`}
+                    className="block truncate font-bold text-[#1B2B4B] hover:text-[#0088FF]"
+                  >
+                    {item.fullName}
+                  </Link>
+                  <p className="truncate text-sm text-slate-600">{item.professionalTitle}</p>
+                  <p className="mt-0.5 inline-flex items-center gap-1 text-sm font-semibold text-[#D4A843]">
+                    <StarIcon className="h-3.5 w-3.5" />
+                    {item.averageRating.toFixed(1)}
+                  </p>
                 </div>
-                <Link to={`/freelancer/${encodeURIComponent(item.freelancerSlug)}`} className="min-w-0 flex-1">
-                  <p className="truncate font-bold text-[#1B2B4B]">{item.fullName}</p>
-                  <p className="truncate text-xs text-slate-600">{item.professionalTitle}</p>
-                  <p className="mt-0.5 text-xs font-semibold text-[#D4A843]">{item.averageRating.toFixed(1)}</p>
-                </Link>
+              </div>
+
+              <div className="mt-4 shrink-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">ფასი</p>
+                <p className="text-2xl font-bold text-[#1B2B4B]">{formatListingPrice(item.price, item.priceType)}</p>
               </div>
 
               {!item.isAcceptingNewWork ? (
-                <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium leading-snug text-amber-900">
-                  ეს ფრილანსერი ამჟამად ახალი სამუშაოებისთვის ხელმიუწვდომელია. შეთავაზების გაგზავნა მაინც შეგიძლიათ.
+                <p className="mt-3 shrink-0 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-snug text-amber-900">
+                  ფრილანსერი ამჟამად დაკავებულია — შეთავაზება მაინც შეგიძლიათ.
                 </p>
               ) : null}
 
-              <div className="mt-4 space-y-2 text-sm text-slate-700">
-                <p>
-                  <span className="font-semibold text-[#1B2B4B]">ფასი:</span>{" "}
-                  {formatListingPrice(item.price, item.priceType)}
-                </p>
-                <p>
-                  <span className="font-semibold text-[#1B2B4B]">დამატებულია:</span>{" "}
-                  {new Date(item.createdAt).toLocaleDateString("ka-GE")}
-                </p>
-              </div>
-
               {subcategoryLabel ? (
-                <p className="mt-4 text-sm text-slate-700">
+                <p className="mt-3 shrink-0 text-xs text-slate-600">
                   <span className="font-semibold text-[#1B2B4B]">ქვეკატეგორია:</span> {subcategoryLabel}
                 </p>
               ) : null}
 
-              {parsed.meta.tags.length > 0 ? (
-                <div className="mt-4 flex flex-wrap gap-1.5">
-                  {parsed.meta.tags.map((tag) => (
-                    <span key={tag} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
-                      {tag}
-                    </span>
-                  ))}
+              {!viewerOwnsListing ? (
+                <div className="mt-4 flex shrink-0 flex-wrap gap-2">
+                  {item.freelancerUserId ? (
+                    <StartConversationButton
+                      otherUserId={item.freelancerUserId}
+                      serviceInquiryId={existingInquiryId}
+                      className="min-w-0 flex-1"
+                    />
+                  ) : null}
+                  <Link
+                    to={`/freelancer/${encodeURIComponent(item.freelancerSlug)}`}
+                    className="inline-flex h-9 flex-1 items-center justify-center rounded-lg bg-[#0088FF] px-3 text-sm font-semibold text-white hover:bg-[#006ACC]"
+                  >
+                    პროფილი
+                  </Link>
+                  <SaveBookmarkButton resourceType="freelancer" resourceId={item.freelancerProfileId} variant="icon" />
                 </div>
               ) : null}
 
-              <div className="mt-5 flex flex-wrap gap-2">
-                {!viewerOwnsListing ? (
-                  <SaveBookmarkButton
-                    variant="icon"
-                    resourceType="freelancer"
-                    resourceId={item.freelancerProfileId}
-                  />
-                ) : null}
-                {!viewerOwnsListing && item.freelancerUserId ? (
-                  <StartConversationButton
-                    otherUserId={item.freelancerUserId}
-                    serviceInquiryId={existingInquiryId}
-                    className="min-w-[10rem] flex-1"
-                  />
-                ) : null}
-                <Link
-                  to={`/freelancer/${encodeURIComponent(item.freelancerSlug)}`}
-                  className="inline-flex h-11 min-w-[10rem] flex-1 items-center justify-center rounded-lg bg-[#1B2B4B] px-4 text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B]"
-                >
-                  ფრილანსერის პროფილი
-                </Link>
-              </div>
-
               {canMakeOffer ? (
-                <div className="mt-3 rounded-xl border border-[#D4A843]/40 bg-amber-50/40 p-3">
-                  <p className="text-sm font-semibold text-[#1B2B4B]">შეთავაზება ამ ლისტინგზე</p>
+                <div className="mt-4 flex min-h-0 flex-1 flex-col border-t border-slate-100 pt-4">
+                  <p className="shrink-0 text-sm font-semibold text-[#1B2B4B]">შეთავაზება</p>
                   <textarea
                     value={offerMessage}
                     onChange={(event) => setOfferMessage(event.target.value)}
-                    rows={3}
-                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-[#D4A843] focus:ring-2"
-                    placeholder="რა გჭირდება, ვადები, კონტექსტი..."
+                    rows={2}
+                    className="mt-2 w-full shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-[#0088FF] focus:ring-2"
+                    placeholder="რა გჭირდება..."
                   />
-                  <input
-                    type="number"
-                    min={0}
-                    value={offerBudget}
-                    onChange={(event) => setOfferBudget(event.target.value)}
-                    className="mt-2 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-[#D4A843] focus:ring-2"
-                    placeholder="შემოთავაზებული თანხა (₾, არასავალდებულო)"
-                  />
-                  {offerError ? <p className="mt-2 text-xs text-red-600">{offerError}</p> : null}
-                  <button
-                    type="button"
-                    onClick={() => void submitOffer()}
-                    disabled={offerSubmitting}
-                    className="mt-2 inline-flex h-10 w-full items-center justify-center rounded-lg border border-[#D4A843] bg-white px-4 text-sm font-semibold text-[#1B2B4B] transition hover:bg-[#D4A843]/20 disabled:opacity-60"
-                  >
-                    {offerSubmitting ? "იგზავნება..." : "შეთავაზების გაგზავნა"}
-                  </button>
+                  <div className="mt-2 flex shrink-0 gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      value={offerBudget}
+                      onChange={(event) => setOfferBudget(event.target.value)}
+                      className="h-9 min-w-0 flex-1 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
+                      placeholder="₾ (არასავალდებულო)"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void submitOffer()}
+                      disabled={offerSubmitting}
+                      className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#1B2B4B] px-3 text-sm font-semibold text-white hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:opacity-60"
+                    >
+                      <SendOutlineIcon className="h-3.5 w-3.5" />
+                      {offerSubmitting ? "..." : "გაგზავნა"}
+                    </button>
+                  </div>
+                  {offerError ? <p className="mt-1.5 shrink-0 text-xs text-red-600">{offerError}</p> : null}
                 </div>
               ) : null}
             </aside>

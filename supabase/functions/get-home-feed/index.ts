@@ -30,6 +30,21 @@ function isCachedSuccessPayload(v: unknown): v is SuccessPayload {
   return o.ok === true && "data" in o
 }
 
+async function deleteExpiredJobs(admin: ReturnType<typeof createClient>): Promise<void> {
+  const nowIso = new Date().toISOString()
+  const todayIso = nowIso.slice(0, 10)
+
+  const { error } = await admin
+    .from("jobs")
+    .delete()
+    .eq("status", "open")
+    .or(`application_deadline.lt.${todayIso},expires_at.lte.${nowIso}`)
+
+  if (error) {
+    throw new Error(`Expired jobs cleanup failed: ${error.message}`)
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeadersFor(req) })
@@ -71,6 +86,13 @@ Deno.serve(async (req) => {
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
   })
+
+  try {
+    await deleteExpiredJobs(admin)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Expired jobs cleanup failed"
+    return jsonResponse(req, { ok: false, error: msg }, 500)
+  }
 
   const { data, error } = await admin.rpc("get_home_feed")
   if (error) return jsonResponse(req, { ok: false, error: error.message }, 500)

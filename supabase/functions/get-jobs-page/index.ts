@@ -40,6 +40,21 @@ function getEnv(name: string): string {
   return denoRuntime?.env?.get(name) ?? ""
 }
 
+async function deleteExpiredJobs(admin: ReturnType<typeof createClient>): Promise<void> {
+  const nowIso = new Date().toISOString()
+  const todayIso = nowIso.slice(0, 10)
+
+  const { error } = await admin
+    .from("jobs")
+    .delete()
+    .eq("status", "open")
+    .or(`application_deadline.lt.${todayIso},expires_at.lte.${nowIso}`)
+
+  if (error) {
+    throw new Error(`Expired jobs cleanup failed: ${error.message}`)
+  }
+}
+
 async function parseParams(req: Request): Promise<{ category: string; page: number }> {
   if (req.method === "GET") {
     const u = new URL(req.url)
@@ -107,6 +122,13 @@ denoRuntime.serve(async (req) => {
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
   })
+
+  try {
+    await deleteExpiredJobs(admin)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Expired jobs cleanup failed"
+    return jsonResponse(req, { ok: false, error: msg }, 500)
+  }
 
   const p_category_id = category === "all" ? null : category
   const p_offset = (page - 1) * PAGE_SIZE

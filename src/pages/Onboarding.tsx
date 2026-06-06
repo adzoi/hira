@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import Navbar from "../components/Navbar"
 import { filterProfileLanguageOptions } from "../lib/profileLanguages.ts"
 import {
   FREELANCER_EDUCATION_DEGREE_OPTIONS,
@@ -489,7 +488,6 @@ export default function OnboardingPage() {
   if (loading || !authReady || onboardingData?.redirect) {
     return (
       <div className="min-h-screen bg-slate-50">
-        <Navbar />
         <div className="mx-auto flex max-w-3xl items-center justify-center py-20">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-300 border-t-[#D4A843]" />
         </div>
@@ -499,7 +497,6 @@ export default function OnboardingPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Navbar />
       <main className="mx-auto max-w-3xl px-6 py-10">
         <div className="mx-auto max-w-[640px] rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
           <h1 className="text-3xl font-bold text-[#0088FF]">ონბორდინგი</h1>

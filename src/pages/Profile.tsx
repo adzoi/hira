@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import Navbar from "../components/Navbar"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
 import { PROFILE_LANGUAGE_OPTIONS } from "../lib/profileLanguages.ts"
 import {
@@ -804,7 +803,6 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Navbar />
       <main className="mx-auto max-w-3xl px-6 py-10">
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
           <div className="mb-6 flex items-start justify-between gap-4">

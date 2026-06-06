@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import FollowListsModal, { FollowStatPills, type FollowModalTab } from "../components/FollowListsModal.tsx"
-import Navbar from "../components/Navbar"
 import VIPUpgrade from "../components/VIPUpgrade"
 import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { formatListingPrice, normalizeListingPriceType } from "../lib/listingPrice.ts"
@@ -1833,7 +1832,6 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Navbar />
       <main className="mx-auto max-w-7xl px-6 py-10">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-[#1B2B4B]">მართვის პანელი</h1>

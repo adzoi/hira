@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import Navbar from "../components/Navbar.tsx"
 import VIPUpgrade from "../components/VIPUpgrade.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
 import { useToast } from "../components/ui/ToastProvider.tsx"
@@ -142,7 +141,7 @@ export default function JobDetailPage() {
     setSubmitSuccess("")
 
     const coverResult = validateCoverLetter(coverLetter)
-    if (!coverResult.ok) {
+    if (coverResult.ok === false) {
       setSubmitError(coverResult.message)
       return
     }
@@ -150,8 +149,12 @@ export default function JobDetailPage() {
     let rateNote: string | null = null
     if (proposedRate.trim()) {
       const rateResult = validateMoneyAmount(proposedRate, { min: 0, label: "ტარიფი" })
-      if (!rateResult.ok || rateResult.value == null) {
-        setSubmitError(rateResult.ok ? "შემოთავაზებული ტარიფი არასწორია." : rateResult.message)
+      if (rateResult.ok === false) {
+        setSubmitError(rateResult.message)
+        return
+      }
+      if (rateResult.value == null) {
+        setSubmitError("შემოთავაზებული ტარიფი არასწორია.")
         return
       }
       rateNote = `შემოთავაზებული ტარიფი: ₾${rateResult.value}`
@@ -216,7 +219,6 @@ export default function JobDetailPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50">
-        <Navbar />
         <main className="mx-auto max-w-[1000px] px-6 py-10">
           <div className="grid gap-4">
             <SkeletonCard lines={4} />
@@ -232,7 +234,6 @@ export default function JobDetailPage() {
     const headline = error.trim().length > 0 ? error : "სამუშაო ვერ მოიძებნა"
     return (
       <div className="min-h-screen bg-slate-50">
-        <Navbar />
         <main className="mx-auto max-w-[1000px] px-6 py-10">
           <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
             <p className="text-5xl opacity-70" aria-hidden>
@@ -259,7 +260,6 @@ export default function JobDetailPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Navbar />
       <main className="mx-auto max-w-[1000px] px-6 py-10">
         <div className="grid gap-6 lg:grid-cols-[1.8fr,1fr]">
           <section className="space-y-6">

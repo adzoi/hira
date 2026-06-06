@@ -83,50 +83,58 @@ export function subscribeToNotifications(
   handlers: NotificationRealtimeHandlers,
 ): RealtimeChannel {
   const filter = `user_id=eq.${userId}`
-  return client
-    .channel(`notifications:${userId}`)
-    .on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "notifications",
-        filter,
-      },
-      (payload) => {
-        const row = payload.new as Record<string, unknown>
-        if (!row?.id) return
-        handlers.onInsert(mapRow(row))
-      },
-    )
-    .on(
-      "postgres_changes",
-      {
-        event: "UPDATE",
-        schema: "public",
-        table: "notifications",
-        filter,
-      },
-      (payload) => {
-        const row = payload.new as Record<string, unknown>
-        if (!row?.id) return
-        handlers.onUpdate(mapRow(row))
-      },
-    )
-    .on(
-      "postgres_changes",
-      {
-        event: "DELETE",
-        schema: "public",
-        table: "notifications",
-        filter,
-      },
-      (payload) => {
-        const row = payload.old as Record<string, unknown>
-        const id = row?.id != null ? String(row.id) : ""
-        if (!id) return
-        handlers.onDelete(id)
-      },
-    )
-    .subscribe()
+  const suffix =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  const channel = client.channel(`notifications:${userId}:${suffix}`)
+
+  channel.on(
+    "postgres_changes",
+    {
+      event: "INSERT",
+      schema: "public",
+      table: "notifications",
+      filter,
+    },
+    (payload) => {
+      const row = payload.new as Record<string, unknown>
+      if (!row?.id) return
+      handlers.onInsert(mapRow(row))
+    },
+  )
+
+  channel.on(
+    "postgres_changes",
+    {
+      event: "UPDATE",
+      schema: "public",
+      table: "notifications",
+      filter,
+    },
+    (payload) => {
+      const row = payload.new as Record<string, unknown>
+      if (!row?.id) return
+      handlers.onUpdate(mapRow(row))
+    },
+  )
+
+  channel.on(
+    "postgres_changes",
+    {
+      event: "DELETE",
+      schema: "public",
+      table: "notifications",
+      filter,
+    },
+    (payload) => {
+      const row = payload.old as Record<string, unknown>
+      const id = row?.id != null ? String(row.id) : ""
+      if (!id) return
+      handlers.onDelete(id)
+    },
+  )
+
+  channel.subscribe()
+  return channel
 }

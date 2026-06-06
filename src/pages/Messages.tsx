@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import Navbar from "../components/Navbar.tsx"
 import ChatIcon from "../components/ui/ChatIcon.tsx"
 import EmptyState from "../components/ui/EmptyState.tsx"
 import ErrorState from "../components/ui/ErrorState.tsx"
@@ -105,6 +104,7 @@ export default function MessagesPage() {
   const [sending, setSending] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const threadViewportRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const otherLastReadAtRef = useRef<string | null>(null)
   const activeIdRef = useRef<string | null>(activeId)
@@ -345,7 +345,12 @@ export default function MessagesPage() {
 
   useEffect(() => {
     if (messages.length === 0) return
-    messagesEndRef.current?.scrollIntoView({ behavior: scrollBehaviorRef.current })
+    const viewport = threadViewportRef.current
+    if (viewport) {
+      viewport.scrollTo({ top: viewport.scrollHeight, behavior: scrollBehaviorRef.current })
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: scrollBehaviorRef.current, block: "end" })
+    }
     scrollBehaviorRef.current = "smooth"
   }, [messages])
 
@@ -388,7 +393,6 @@ export default function MessagesPage() {
   if (!isSupabaseConfigured) {
     return (
       <div className="page-enter min-h-screen bg-[#f8f9fc]">
-        <Navbar />
         <main className="mx-auto max-w-[1200px] px-4 py-8">
           <ErrorState message="Supabase არ არის კონფიგურირებული." />
         </main>
@@ -400,7 +404,6 @@ export default function MessagesPage() {
     <div
       className={`page-enter flex min-h-dvh flex-col bg-[#f8f9fc ${showThreadOnMobile ? "h-dvh overflow-hidden" : ""}`}
     >
-      <Navbar />
       <main
         className={`mx-auto flex w-full max-w-[1200px] min-h-0 flex-1 flex-col ${
           showThreadOnMobile ? "px-0 pb-0 pt-0 md:px-4 md:py-8" : "px-4 py-6 md:py-8"
@@ -550,7 +553,10 @@ export default function MessagesPage() {
                   )}
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-slate-50/50 px-3 py-4 sm:px-4">
+                <div
+                  ref={threadViewportRef}
+                  className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-slate-50/50 px-3 py-4 sm:px-4"
+                >
                   {loadingThread ? (
                     <div className="flex justify-center py-12">
                       <PageLoader />

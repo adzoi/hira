@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import Navbar from "../components/Navbar"
 import VIPUpgrade from "../components/VIPUpgrade"
 import {
   PRICE_TYPE_LABELS,
@@ -267,23 +266,27 @@ export default function ListingFormPage() {
     setError("")
 
     const titleResult = validateListingTitle(title)
-    if (!titleResult.ok) {
+    if (titleResult.ok === false) {
       setError(titleResult.message)
       return
     }
     const descriptionResult = validateListingDescription(description)
-    if (!descriptionResult.ok) {
+    if (descriptionResult.ok === false) {
       setError(descriptionResult.message)
       return
     }
     const tagsResult = validateTags(tags)
-    if (!tagsResult.ok) {
+    if (tagsResult.ok === false) {
       setError(tagsResult.message)
       return
     }
     const priceResult = validateMoneyAmount(price || "0", { min: 0, label: "ფასი" })
-    if (!priceResult.ok || priceResult.value == null) {
-      setError(priceResult.ok ? "ფასი სავალდებულოა." : priceResult.message)
+    if (priceResult.ok === false) {
+      setError(priceResult.message)
+      return
+    }
+    if (priceResult.value == null) {
+      setError("ფასი სავალდებულოა.")
       return
     }
     const parsedPrice = priceResult.value
@@ -380,7 +383,6 @@ export default function ListingFormPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50">
-        <Navbar />
         <main className="mx-auto max-w-4xl px-6 py-10">იტვირთება...</main>
       </div>
     )
@@ -388,7 +390,6 @@ export default function ListingFormPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Navbar />
       <main className="mx-auto max-w-4xl px-6 py-10">
         <div className="rounded-2xl border border-slate-200 bg-white p-6">
           <div className="mb-5 flex items-center justify-between">

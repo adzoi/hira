@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import Navbar from "../components/Navbar.tsx"
 import { useToast } from "../components/ui/ToastProvider.tsx"
 import { countFreelancerProfileVisits } from "../lib/profileVisits.ts"
 import { formatFreelancerEducationDegreeLevel } from "../lib/freelancerEducation.ts"
@@ -573,7 +572,6 @@ export default function FreelancerProfilePage() {
 
   return (
     <div className="min-h-screen bg-[#F9FAFB] page-enter">
-      <Navbar />
       <main className="mx-auto max-w-[900px] px-6 py-10">
         {loading ? (
           <div className="grid gap-5">

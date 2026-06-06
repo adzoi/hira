@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import Navbar from "../components/Navbar.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { jobImageThumbnailUrl } from "../lib/storageImageUrl.ts"
 import { categoryChildrenOf, categoryRoots, type CategoryBranchRow } from "../lib/marketplaceCategoryTree.ts"
@@ -344,7 +343,7 @@ export default function PostJobPage() {
     const e: FieldErrors = {}
 
     const titleResult = validateJobTitle(title)
-    if (!titleResult.ok) e.title = titleResult.message
+    if (titleResult.ok === false) e.title = titleResult.message
 
     if (!rootCategoryId) {
       e.categoryId = "category სავალდებულოა."
@@ -353,7 +352,7 @@ export default function PostJobPage() {
     }
 
     const descriptionResult = validateJobDescription(description)
-    if (!descriptionResult.ok) e.description = descriptionResult.message
+    if (descriptionResult.ok === false) e.description = descriptionResult.message
 
     if (!budgetType) {
       e.budgetType = "აირჩიე ბიუჯეტის ტიპი."
@@ -380,7 +379,7 @@ export default function PostJobPage() {
       max: 100,
       label: "ვაკანსიები",
     })
-    if (!vacanciesResult.ok) {
+    if (vacanciesResult.ok === false) {
       e.vacancies = vacanciesResult.message
     } else if (isEdit && vacanciesResult.value < acceptedCountSnapshot) {
       e.vacancies = `ვაკანსიები არ უნდა იყოს ნაკლები უკვე მიღებული ფრილანსერების (${acceptedCountSnapshot}) რაოდენობაზე.`
@@ -540,7 +539,6 @@ export default function PostJobPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50">
-        <Navbar />
         <div className="mx-auto flex max-w-[720px] items-center justify-center px-6 py-20">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-300 border-t-[#0088FF]" />
         </div>
@@ -550,7 +548,6 @@ export default function PostJobPage() {
 
   return (
     <div className="page-enter min-h-screen bg-[#F8F9FC]">
-      <Navbar />
       <main className="mx-auto max-w-[720px] px-4 py-8 md:px-6 md:py-10">
         <h1 className={`text-[28px] font-bold md:text-5xl ${isEdit ? "text-[#1B2B4B]" : "text-[#0088FF]"}`}>
           {isEdit ? "განცხადების რედაქტირება" : "სამუშაოს განთავსება"}

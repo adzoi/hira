@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import Navbar from "../components/Navbar.tsx"
 import { useToast } from "../components/ui/ToastProvider.tsx"
 import ErrorState from "../components/ui/ErrorState.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
@@ -325,7 +324,6 @@ export default function HirerPublicPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F8F9FC]">
-        <Navbar />
         <main className="mx-auto w-full max-w-[720px] px-4 py-8 md:px-6">
           <SkeletonCard />
           <SkeletonCard />
@@ -337,7 +335,6 @@ export default function HirerPublicPage() {
   if (UUID_RE.test(id ?? "") && !hirer && !error) {
     return (
       <div className="min-h-screen bg-[#F8F9FC]">
-        <Navbar />
         <main className="mx-auto w-full max-w-[720px] px-4 py-16 text-center md:px-6">
           <p className="text-xl font-bold text-[#1B2B4B]">დამქირავებელი ვერ მოიძებნა</p>
           <Link to="/hirers" className="mt-6 inline-flex h-11 items-center rounded-lg bg-[#1B2B4B] px-5 text-sm font-semibold text-white">
@@ -351,7 +348,6 @@ export default function HirerPublicPage() {
   if ((error || invalidId || !hirer) && !UUID_RE.test(id ?? "")) {
     return (
       <div className="min-h-screen bg-[#F8F9FC]">
-        <Navbar />
         <main className="mx-auto w-full max-w-[720px] px-4 py-8 md:px-6">
           {error || invalidId ? <ErrorState message={error || "არასწორი იდენტიფიკატორი."} /> : <ErrorState message="არასწორი ბმული." />}
           <Link to="/hirers" className="mt-6 inline-block text-sm font-semibold text-[#1B2B4B] hover:text-[#D4A843]">
@@ -365,7 +361,6 @@ export default function HirerPublicPage() {
   if (!hirer) {
     return (
       <div className="min-h-screen bg-[#F8F9FC]">
-        <Navbar />
         <main className="mx-auto w-full max-w-[720px] px-4 py-8 md:px-6">
           <ErrorState message={error || "არ ხელმისაწვდომია."} />
         </main>
@@ -375,7 +370,6 @@ export default function HirerPublicPage() {
 
   return (
     <div className="min-h-screen bg-[#F8F9FC] page-enter">
-      <Navbar />
       <main className="mx-auto w-full max-w-[720px] px-4 py-6 md:px-6 md:py-10">
         <Link to="/hirers" className="mb-6 inline-block text-sm font-semibold text-[#1B2B4B] hover:text-[#D4A843]">
           ← დამქირავებლები

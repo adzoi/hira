@@ -9,46 +9,55 @@ export function useUnreadCounts(userId: string | null) {
     if (!userId || !supabase) return
     const client = supabase
 
-    const channel = client
-      .channel(`unread-counts-${userId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "notifications",
-          filter: `user_id=eq.${userId}`,
-        },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["unread-counts", userId] })
-        },
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-        },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["unread-counts", userId] })
-        },
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "conversation_reads",
-          filter: `user_id=eq.${userId}`,
-        },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["unread-counts", userId] })
-        },
-      )
-      .subscribe()
+    // Avoid reusing an existing subscribed channel (React 18 strict-mode effects can mount twice).
+    const suffix =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const channel = client.channel(`unread-counts-${userId}-${suffix}`)
+
+    channel.on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "notifications",
+        filter: `user_id=eq.${userId}`,
+      },
+      () => {
+        queryClient.invalidateQueries({ queryKey: ["unread-counts", userId] })
+      },
+    )
+
+    channel.on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "messages",
+      },
+      () => {
+        queryClient.invalidateQueries({ queryKey: ["unread-counts", userId] })
+      },
+    )
+
+    channel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "conversation_reads",
+        filter: `user_id=eq.${userId}`,
+      },
+      () => {
+        queryClient.invalidateQueries({ queryKey: ["unread-counts", userId] })
+      },
+    )
+
+    channel.subscribe()
 
     return () => {
+      channel.unsubscribe()
       client.removeChannel(channel)
     }
   }, [userId, queryClient])

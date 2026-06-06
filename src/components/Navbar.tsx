@@ -102,7 +102,8 @@ export default function Navbar() {
   const navigate = useNavigate()
   const location = useLocation()
   const queryClient = useQueryClient()
-  const [isAuthed, setIsAuthed] = useState(false)
+  const [authStatus, setAuthStatus] = useState<"loading" | "authed" | "anon">("loading")
+  const isAuthed = authStatus === "authed"
   const [menuOpen, setMenuOpen] = useState(false) // avatar dropdown
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
@@ -155,7 +156,7 @@ export default function Navbar() {
       const { user, session } = await getAuthenticatedSession(client)
       const authed = Boolean(user && session)
       const uid = user?.id ?? null
-      setIsAuthed(authed)
+      setAuthStatus(authed ? "authed" : "anon")
       setUserId(uid)
       if (!authed || !uid) {
         setAvatarUrl(null)
@@ -221,6 +222,7 @@ export default function Navbar() {
       },
     })
     return () => {
+      channel.unsubscribe()
       client.removeChannel(channel)
     }
   }, [userId, isAuthed])
@@ -545,7 +547,12 @@ export default function Navbar() {
               >
                 <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-xs font-bold text-[#1B2B4B]">
                   {avatarUrl ? (
-                    <img src={navbarAvatarSrc ?? avatarUrl} alt="მომხმარებლის ავატარი" loading="lazy" className="h-full w-full object-cover" />
+                    <img
+                      src={navbarAvatarSrc ?? avatarUrl}
+                      alt="მომხმარებლის ავატარი"
+                      loading="lazy"
+                      className="h-full w-full object-cover"
+                    />
                   ) : (
                     initials
                   )}
@@ -580,31 +587,36 @@ export default function Navbar() {
                 </button>
               </div>
             </div>
-          ) : (
+          ) : authStatus === "anon" ? (
             <>
-            <Link
-              to="/login"
-              className="inline-flex h-11 items-center text-sm font-semibold text-[#1B2B4B] transition hover:text-[#D4A843]"
-            >
-              შესვლა
-            </Link>
-            <Link
-              to="/register"
-              className="inline-flex h-11 items-center rounded-md border border-slate-300 px-4 text-sm font-semibold text-[#1B2B4B] transition hover:border-[#D4A843] hover:text-[#D4A843]"
-            >
-              რეგისტრაცია
-            </Link>
-            <Link
-              to="#"
-              onClick={(event) => {
-                event.preventDefault()
-                handlePostJob()
-              }}
-              className="inline-flex h-11 items-center rounded-md bg-[#0088FF] px-4 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC]"
-            >
-              სამუშაოს განთავსება
-            </Link>
+              <Link
+                to="/login"
+                className="inline-flex h-11 items-center text-sm font-semibold text-[#1B2B4B] transition hover:text-[#D4A843]"
+              >
+                შესვლა
+              </Link>
+              <Link
+                to="/register"
+                className="inline-flex h-11 items-center rounded-md border border-slate-300 px-4 text-sm font-semibold text-[#1B2B4B] transition hover:border-[#D4A843] hover:text-[#D4A843]"
+              >
+                რეგისტრაცია
+              </Link>
+              <Link
+                to="#"
+                onClick={(event) => {
+                  event.preventDefault()
+                  handlePostJob()
+                }}
+                className="inline-flex h-11 items-center rounded-md bg-[#0088FF] px-4 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC]"
+              >
+                სამუშაოს განთავსება
+              </Link>
             </>
+          ) : (
+            <div className="inline-flex h-11 items-center gap-3">
+              <div className="h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-[#0088FF]" />
+              <div className="h-4 w-24 animate-pulse rounded bg-slate-100" />
+            </div>
           )}
         </div>
 
@@ -696,7 +708,7 @@ export default function Navbar() {
                 გასვლა
               </button>
             </>
-          ) : (
+          ) : authStatus === "anon" ? (
             <div className="grid gap-2 pt-2">
               <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="inline-flex h-11 items-center justify-center rounded-md border border-slate-300 text-sm font-semibold text-[#1B2B4B]">
                 შესვლა
@@ -714,6 +726,12 @@ export default function Navbar() {
               >
                 სამუშაოს განთავსება
               </button>
+            </div>
+          ) : (
+            <div className="grid gap-2 pt-2 animate-pulse">
+              <div className="h-11 rounded-md bg-slate-100" />
+              <div className="h-11 rounded-md bg-slate-100" />
+              <div className="h-11 rounded-md bg-slate-100" />
             </div>
           )}
         </div>
