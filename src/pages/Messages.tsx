@@ -121,8 +121,7 @@ export default function MessagesPage() {
   const activeIdRef = useRef<string | null>(activeId)
   const scrollBehaviorRef = useRef<ScrollBehavior>("auto")
   const startChatInFlightRef = useRef(false)
-  const MOBILE_NAVBAR_HEIGHT = 72
-  const [mobileChatFrame, setMobileChatFrame] = useState({ top: MOBILE_NAVBAR_HEIGHT, bottom: 0 })
+  const [mobileChatFrame, setMobileChatFrame] = useState({ top: 0, bottom: 0 })
   const [isMobileViewport, setIsMobileViewport] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches,
   )
@@ -475,16 +474,17 @@ export default function MessagesPage() {
 
   useEffect(() => {
     if (!mobileThreadActive || !isMobileViewport) return
+    window.scrollTo(0, 0)
     const prev = document.body.style.overflow
     document.body.style.overflow = "hidden"
     return () => {
       document.body.style.overflow = prev
     }
-  }, [mobileThreadActive, isMobileViewport])
+  }, [mobileThreadActive, isMobileViewport, validatedActiveId])
 
   useEffect(() => {
     if (!mobileThreadActive || !isMobileViewport) {
-      setMobileChatFrame({ top: MOBILE_NAVBAR_HEIGHT, bottom: 0 })
+      setMobileChatFrame({ top: 0, bottom: 0 })
       return
     }
 
@@ -494,7 +494,7 @@ export default function MessagesPage() {
     const updateMobileChatFrame = () => {
       const bottom = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
       setMobileChatFrame({
-        top: MOBILE_NAVBAR_HEIGHT + vv.offsetTop,
+        top: vv.offsetTop,
         bottom,
       })
       if (bottom > 0) {
