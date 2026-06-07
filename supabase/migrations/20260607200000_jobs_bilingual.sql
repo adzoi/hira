@@ -172,6 +172,7 @@ GRANT EXECUTE ON FUNCTION public.get_home_feed() TO anon, authenticated;
 -- Jobs catalog: return English fields and search them too.
 DROP FUNCTION IF EXISTS public.get_jobs_page(text, integer, integer, text);
 DROP FUNCTION IF EXISTS public.get_jobs_page(text, integer, integer, uuid);
+DROP FUNCTION IF EXISTS public.get_jobs_page(text, uuid, integer, integer);
 
 CREATE OR REPLACE FUNCTION public.get_jobs_page(
   p_search text DEFAULT NULL,

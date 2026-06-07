@@ -2,38 +2,38 @@ import InfoPageLayout, { type InfoSection } from "../components/InfoPageLayout.t
 
 const sections: readonly InfoSection[] = [
   {
-    headingKey: "cookies.section1Heading",
-    paragraphKeys: ["cookies.section1P1", "cookies.section1P2"],
+    heading: "cookies.section1Heading",
+    paragraphs: ["cookies.section1P1", "cookies.section1P2"],
   },
   {
-    headingKey: "cookies.section2Heading",
-    paragraphKeys: ["cookies.section2P1", "cookies.section2P2"],
+    heading: "cookies.section2Heading",
+    paragraphs: ["cookies.section2P1", "cookies.section2P2"],
   },
   {
-    headingKey: "cookies.section3Heading",
-    paragraphKeys: ["cookies.section3P1", "cookies.section3P2", "cookies.section3P3"],
+    heading: "cookies.section3Heading",
+    paragraphs: ["cookies.section3P1", "cookies.section3P2", "cookies.section3P3"],
   },
   {
-    headingKey: "cookies.section4Heading",
-    paragraphKeys: ["cookies.section4P1", "cookies.section4P2", "cookies.section4P3"],
+    heading: "cookies.section4Heading",
+    paragraphs: ["cookies.section4P1", "cookies.section4P2", "cookies.section4P3"],
   },
   {
-    headingKey: "cookies.section5Heading",
-    paragraphKeys: ["cookies.section5P1", "cookies.section5P2"],
+    heading: "cookies.section5Heading",
+    paragraphs: ["cookies.section5P1", "cookies.section5P2"],
   },
   {
-    headingKey: "cookies.section6Heading",
-    paragraphKeys: ["cookies.section6P1"],
+    heading: "cookies.section6Heading",
+    paragraphs: ["cookies.section6P1"],
   },
 ]
 
 export default function CookiesPage() {
   return (
     <InfoPageLayout
-      pageTitleKey="cookies.pageTitle"
-      heroHeadingKey="cookies.heroHeading"
-      heroSubtitleKey="cookies.heroSubtitle"
-      lastUpdatedKey="cookies.lastUpdated"
+      pageTitle="cookies.pageTitle"
+      heroHeading="cookies.heroHeading"
+      heroSubtitle="cookies.heroSubtitle"
+      lastUpdated="cookies.lastUpdated"
       sections={sections}
     />
   )

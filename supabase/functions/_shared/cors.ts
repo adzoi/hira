@@ -14,7 +14,8 @@ function allowedOrigins(): string[] {
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean)
-  return configured.length > 0 ? configured : FALLBACK_ORIGINS
+  if (configured.length === 0) return FALLBACK_ORIGINS
+  return [...new Set([...configured, ...FALLBACK_ORIGINS])]
 }
 
 /** Reflect request Origin when it matches the allowlist; otherwise use first allowed origin. */

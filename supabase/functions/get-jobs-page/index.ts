@@ -125,9 +125,8 @@ denoRuntime.serve(async (req) => {
 
   try {
     await deleteExpiredJobs(admin)
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Expired jobs cleanup failed"
-    return jsonResponse(req, { ok: false, error: msg }, 500)
+  } catch {
+    /* Non-fatal: catalog should still load if cleanup fails */
   }
 
   const p_category_id = category === "all" ? null : category

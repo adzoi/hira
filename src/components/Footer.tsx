@@ -51,17 +51,17 @@ const socialLinks = [
 ]
 
 type FooterColumn = {
-  headingKey: string
+  heading: string
   links: { labelKey: string; to: string }[]
 }
 
-function FooterLinkColumn({ headingKey, links }: FooterColumn) {
+function FooterLinkColumn({ heading, links }: FooterColumn) {
   const { t } = useTranslation()
 
   return (
     <div>
       <I18nText
-        i18nKey={headingKey}
+        i18nKey={heading}
         as="p"
         className="text-xs font-bold uppercase tracking-wider text-white/90"
       />
@@ -83,7 +83,7 @@ export default function Footer() {
 
   const navColumns: FooterColumn[] = [
     {
-      headingKey: "footer.platform",
+      heading: "footer.platform",
       links: [
         { labelKey: "footer.services", to: "/listings" },
         { labelKey: "footer.categories", to: "/listings" },
@@ -91,14 +91,14 @@ export default function Footer() {
       ],
     },
     {
-      headingKey: "footer.resources",
+      heading: "footer.resources",
       links: [
         { labelKey: "footer.guide", to: "/guide" },
         { labelKey: "footer.faq", to: "/faq" },
       ],
     },
     {
-      headingKey: "footer.aboutUs",
+      heading: "footer.aboutUs",
       links: [
         { labelKey: "footer.whatIsHira", to: "/about" },
         { labelKey: "footer.terms", to: "/terms" },
@@ -134,7 +134,7 @@ export default function Footer() {
           </div>
 
           {navColumns.map((col) => (
-            <FooterLinkColumn key={col.headingKey} headingKey={col.headingKey} links={col.links} />
+            <FooterLinkColumn key={col.heading} heading={col.heading} links={col.links} />
           ))}
         </div>
 

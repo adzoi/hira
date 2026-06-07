@@ -4,6 +4,8 @@ title = "hira gitleaks config"
 useDefault = true
 
 [allowlist]
+description = "Static info pages use i18n key props (headingKey) that match generic-api-key false positives."
 paths = [
   '''\.env\.example$''',
+  '''src/pages/(Privacy|Terms|Cookies|Guide|Faq)\.tsx$''',
 ]
