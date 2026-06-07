@@ -117,10 +117,13 @@ export default function MessagesPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const threadViewportRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<HTMLTextAreaElement>(null)
+  const composerBarRef = useRef<HTMLDivElement>(null)
   const otherLastReadAtRef = useRef<string | null>(null)
   const activeIdRef = useRef<string | null>(activeId)
   const scrollBehaviorRef = useRef<ScrollBehavior>("auto")
   const startChatInFlightRef = useRef(false)
+  const [keyboardInset, setKeyboardInset] = useState(0)
+  const [composerHeight, setComposerHeight] = useState(72)
 
   const validatedActiveId = useMemo(() => {
     if (!activeId) return null
@@ -458,16 +461,69 @@ export default function MessagesPage() {
     }
   }
 
-  const showThreadOnMobile = Boolean(validatedActiveId)
+  const mobileThreadActive = Boolean(validatedActiveId)
 
   useEffect(() => {
-    if (!showThreadOnMobile || window.matchMedia("(min-width: 768px)").matches) return
+    if (!mobileThreadActive || window.matchMedia("(min-width: 768px)").matches) return
     const prev = document.body.style.overflow
     document.body.style.overflow = "hidden"
     return () => {
       document.body.style.overflow = prev
     }
-  }, [showThreadOnMobile])
+  }, [mobileThreadActive])
+
+  useEffect(() => {
+    if (!mobileThreadActive || window.matchMedia("(min-width: 768px)").matches) {
+      setKeyboardInset(0)
+      return
+    }
+
+    const vv = window.visualViewport
+    if (!vv) return
+
+    const updateKeyboardInset = () => {
+      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+      setKeyboardInset(inset)
+      if (inset > 0) {
+        requestAnimationFrame(() => {
+          threadViewportRef.current?.scrollTo({
+            top: threadViewportRef.current.scrollHeight,
+            behavior: "smooth",
+          })
+        })
+      }
+    }
+
+    vv.addEventListener("resize", updateKeyboardInset)
+    vv.addEventListener("scroll", updateKeyboardInset)
+    updateKeyboardInset()
+    return () => {
+      vv.removeEventListener("resize", updateKeyboardInset)
+      vv.removeEventListener("scroll", updateKeyboardInset)
+    }
+  }, [mobileThreadActive, validatedActiveId])
+
+  useEffect(() => {
+    const bar = composerBarRef.current
+    if (!bar) return
+    const updateHeight = () => setComposerHeight(bar.offsetHeight)
+    updateHeight()
+    const observer = new ResizeObserver(updateHeight)
+    observer.observe(bar)
+    return () => observer.disconnect()
+  }, [validatedActiveId, mobileThreadActive, draft])
+
+  const scrollThreadToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    threadViewportRef.current?.scrollTo({
+      top: threadViewportRef.current.scrollHeight,
+      behavior,
+    })
+  }, [])
+
+  const onComposerFocus = () => {
+    if (!mobileThreadActive || window.matchMedia("(min-width: 768px)").matches) return
+    window.setTimeout(() => scrollThreadToBottom("smooth"), 300)
+  }
 
   if (!isSupabaseConfigured) {
     return (
@@ -481,28 +537,32 @@ export default function MessagesPage() {
 
   return (
     <div
-      className={`page-enter flex min-h-dvh flex-col bg-[#f8f9fc ${showThreadOnMobile ? "h-dvh overflow-hidden" : ""}`}
+      className={`page-enter bg-[#f8f9fc] ${
+        mobileThreadActive
+          ? "fixed inset-x-0 bottom-0 top-[4.5rem] z-30 flex flex-col overflow-hidden md:static md:inset-auto md:top-auto md:z-auto md:min-h-dvh md:overflow-visible"
+          : "flex min-h-dvh flex-col"
+      }`}
     >
       <main
         className={`mx-auto flex w-full max-w-[1200px] min-h-0 flex-1 flex-col ${
-          showThreadOnMobile ? "px-0 pb-0 pt-0 md:px-4 md:py-8" : "px-4 py-6 md:py-8"
+          mobileThreadActive ? "overflow-hidden px-0 py-0 md:px-4 md:py-8" : "px-4 py-6 md:py-8"
         }`}
       >
-        <header className={`shrink-0 ${showThreadOnMobile ? "mb-4 hidden md:block md:mb-6" : "mb-4 md:mb-6"}`}>
+        <header className={`shrink-0 ${mobileThreadActive ? "mb-4 hidden md:block md:mb-6" : "mb-4 md:mb-6"}`}>
           <h1 className="text-2xl font-bold text-[#1B2B4B] md:text-3xl">{t("messages.heading")}</h1>
           <p className="mt-1 text-sm text-slate-600">{t("messages.subtitle")}</p>
         </header>
 
         <div
           className={`flex min-h-0 flex-1 overflow-hidden bg-white shadow-sm md:h-[min(72vh,640px)] md:flex-none ${
-            showThreadOnMobile
+            mobileThreadActive
               ? "border-t border-slate-200 md:rounded-2xl md:border"
               : "h-[min(calc(100dvh-12rem),640px)] rounded-2xl border border-slate-200"
           }`}
         >
           <aside
             className={`flex w-full shrink-0 flex-col border-r border-slate-100 md:w-[320px] lg:w-[360px] ${
-              showThreadOnMobile ? "hidden md:flex" : "flex"
+              mobileThreadActive ? "hidden md:flex" : "flex"
             }`}
           >
             <div className="border-b border-slate-100 px-4 py-3">
@@ -584,7 +644,7 @@ export default function MessagesPage() {
             </div>
           </aside>
 
-          <section className={`flex min-w-0 flex-1 flex-col ${showThreadOnMobile ? "flex" : "hidden md:flex"}`}>
+          <section className={`flex min-w-0 flex-1 flex-col ${mobileThreadActive ? "flex" : "hidden md:flex"}`}>
             {!validatedActiveId ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center text-slate-500">
                 <ChatIcon className="h-12 w-12 text-slate-300" />
@@ -592,7 +652,7 @@ export default function MessagesPage() {
               </div>
             ) : (
               <>
-                <div className="flex shrink-0 items-center gap-3 border-b border-slate-100 px-3 py-3 sm:px-4">
+                <div className="z-10 flex shrink-0 items-center gap-3 border-b border-slate-100 bg-white px-3 py-3 sm:px-4">
                   <button
                     type="button"
                     aria-label={t("messages.backToList")}
@@ -635,6 +695,11 @@ export default function MessagesPage() {
                 <div
                   ref={threadViewportRef}
                   className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-slate-50/50 px-3 py-4 sm:px-4"
+                  style={
+                    mobileThreadActive
+                      ? { paddingBottom: `${composerHeight + keyboardInset + 12}px` }
+                      : undefined
+                  }
                 >
                   {loadingThread ? (
                     <div className="flex justify-center py-12">
@@ -679,13 +744,30 @@ export default function MessagesPage() {
                   )}
                 </div>
 
-                <div className="shrink-0 border-t border-slate-100 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
+                <div
+                  ref={composerBarRef}
+                  className={`shrink-0 border-t border-slate-100 bg-white p-3 sm:p-4 md:static ${
+                    mobileThreadActive ? "fixed inset-x-0 z-40 md:relative md:inset-auto md:z-auto" : ""
+                  }`}
+                  style={
+                    mobileThreadActive
+                      ? {
+                          bottom: keyboardInset,
+                          paddingBottom:
+                            keyboardInset > 0 ? "0.75rem" : "max(0.75rem, env(safe-area-inset-bottom))",
+                        }
+                      : {
+                          paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))",
+                        }
+                  }
+                >
                   <div className="flex items-end gap-2">
                     <textarea
                       ref={composerRef}
                       value={draft}
                       onChange={(e) => setDraft(e.target.value.slice(0, LIMITS.chatMessage))}
                       onKeyDown={onComposerKeyDown}
+                      onFocus={onComposerFocus}
                       rows={1}
                       maxLength={LIMITS.chatMessage}
                       placeholder={t("messages.writeMessage")}

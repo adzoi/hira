@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom"
+import { Link, useLocation } from "react-router-dom"
 import I18nText from "../i18n/I18nText.tsx"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 
@@ -79,6 +79,8 @@ function FooterLinkColumn({ heading, links }: FooterColumn) {
 }
 
 export default function Footer() {
+  const location = useLocation()
+  const hideOnMobileChatThread = /^\/messages\/[^/]+$/.test(location.pathname)
   const year = 2026
 
   const navColumns: FooterColumn[] = [
@@ -109,7 +111,7 @@ export default function Footer() {
   ]
 
   return (
-    <footer className="border-t border-brand/40 bg-brand text-white">
+    <footer className={`border-t border-brand/40 bg-brand text-white ${hideOnMobileChatThread ? "hidden md:block" : ""}`}>
       <div className="mx-auto w-full max-w-[1200px] px-4 py-12 md:px-6 md:py-16">
         <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-5">
           <div className="sm:col-span-2">
