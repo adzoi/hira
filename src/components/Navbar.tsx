@@ -111,7 +111,6 @@ function truncateNotificationBody(text: string | null, max = 60): string | null 
 export default function Navbar() {
   const navigate = useNavigate()
   const location = useLocation()
-  const hideOnMobileChatThread = /^\/messages\/[^/]+$/.test(location.pathname)
   const queryClient = useQueryClient()
   const { t, locale, setLocale } = useTranslation()
   const navLinks = useMemo(() => buildNavLinks(t), [t])
@@ -377,7 +376,7 @@ export default function Navbar() {
 
   return (
     <>
-    <header className={`sticky top-0 z-40 border-b border-slate-200 bg-white font-sans ${isScrolled ? "shadow-sm" : ""} ${hideOnMobileChatThread ? "hidden md:block" : ""}`}>
+    <header className={`sticky top-0 z-40 border-b border-slate-200 bg-white font-sans ${isScrolled ? "shadow-sm" : ""}`}>
       <div className="mx-auto grid w-full max-w-none grid-cols-[auto_1fr_auto] items-center gap-2 px-4 py-3 md:gap-3 md:pl-12 md:pr-6 lg:pl-16 lg:pr-8">
         <Link to="/" className="inline-flex shrink-0 items-center" aria-label={t("nav.home")}>
           <img src={logoImage} alt={t("brand.name")} className="h-[52px] w-auto object-contain" />

@@ -758,9 +758,23 @@ function OnboardingPage() {
 }
 
 function MainLayout() {
+  const location = useLocation()
+  const isMobileChatThread = /^\/messages\/[^/]+$/.test(location.pathname)
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches,
+  )
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)")
+    const update = () => setIsMobile(mq.matches)
+    update()
+    mq.addEventListener("change", update)
+    return () => mq.removeEventListener("change", update)
+  }, [])
+
   return (
     <>
-      <Navbar />
+      {!(isMobileChatThread && isMobile) && <Navbar />}
       <Outlet />
     </>
   )

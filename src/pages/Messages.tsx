@@ -121,7 +121,6 @@ export default function MessagesPage() {
   const activeIdRef = useRef<string | null>(activeId)
   const scrollBehaviorRef = useRef<ScrollBehavior>("auto")
   const startChatInFlightRef = useRef(false)
-  const [mobileChatFrame, setMobileChatFrame] = useState({ top: 0, bottom: 0 })
   const [isMobileViewport, setIsMobileViewport] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches,
   )
@@ -474,47 +473,16 @@ export default function MessagesPage() {
 
   useEffect(() => {
     if (!mobileThreadActive || !isMobileViewport) return
+    const previous = history.scrollRestoration
+    history.scrollRestoration = "manual"
     window.scrollTo(0, 0)
     const prev = document.body.style.overflow
     document.body.style.overflow = "hidden"
     return () => {
+      history.scrollRestoration = previous
       document.body.style.overflow = prev
     }
   }, [mobileThreadActive, isMobileViewport, validatedActiveId])
-
-  useEffect(() => {
-    if (!mobileThreadActive || !isMobileViewport) {
-      setMobileChatFrame({ top: 0, bottom: 0 })
-      return
-    }
-
-    const vv = window.visualViewport
-    if (!vv) return
-
-    const updateMobileChatFrame = () => {
-      const bottom = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
-      setMobileChatFrame({
-        top: vv.offsetTop,
-        bottom,
-      })
-      if (bottom > 0) {
-        requestAnimationFrame(() => {
-          threadViewportRef.current?.scrollTo({
-            top: threadViewportRef.current.scrollHeight,
-            behavior: "smooth",
-          })
-        })
-      }
-    }
-
-    vv.addEventListener("resize", updateMobileChatFrame)
-    vv.addEventListener("scroll", updateMobileChatFrame)
-    updateMobileChatFrame()
-    return () => {
-      vv.removeEventListener("resize", updateMobileChatFrame)
-      vv.removeEventListener("scroll", updateMobileChatFrame)
-    }
-  }, [mobileThreadActive, validatedActiveId, isMobileViewport])
 
   const scrollThreadToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     threadViewportRef.current?.scrollTo({
@@ -538,22 +506,19 @@ export default function MessagesPage() {
     )
   }
 
+  const mobileThreadFullscreen = mobileThreadActive && isMobileViewport
+
   return (
     <div
       className={`page-enter bg-[#f8f9fc] ${
-        mobileThreadActive
-          ? "fixed inset-x-0 z-30 flex flex-col overflow-hidden md:static md:inset-auto md:top-auto md:bottom-auto md:z-auto md:min-h-dvh md:overflow-visible"
+        mobileThreadFullscreen
+          ? "fixed inset-0 z-50 flex h-dvh max-h-dvh flex-col overflow-hidden pt-[env(safe-area-inset-top)] md:static md:z-auto md:h-auto md:max-h-none md:min-h-dvh md:overflow-visible md:pt-0"
           : "flex min-h-dvh flex-col"
       }`}
-      style={
-        mobileThreadActive && isMobileViewport
-          ? { top: mobileChatFrame.top, bottom: mobileChatFrame.bottom }
-          : undefined
-      }
     >
       <main
         className={`mx-auto flex w-full max-w-[1200px] min-h-0 flex-1 flex-col ${
-          mobileThreadActive ? "overflow-hidden px-0 py-0 md:px-4 md:py-8" : "px-4 py-6 md:py-8"
+          mobileThreadFullscreen ? "overflow-hidden px-0 py-0 md:px-4 md:py-8" : mobileThreadActive ? "overflow-hidden px-0 py-0 md:px-4 md:py-8" : "px-4 py-6 md:py-8"
         }`}
       >
         <header className={`shrink-0 ${mobileThreadActive ? "mb-4 hidden md:block md:mb-6" : "mb-4 md:mb-6"}`}>
