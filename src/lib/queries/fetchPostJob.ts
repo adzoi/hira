@@ -24,8 +24,10 @@ export type PostJobEditData = {
   categoryId: string
   subcategories: SubcategoryRow[]
   title: string
+  titleEn: string
   subcategoryId: string
   description: string
+  descriptionEn: string
   isUrgent: boolean
   budgetType: string
   budgetMin: string
@@ -129,15 +131,6 @@ export async function fetchPostJob(jobId?: string): Promise<PostJobQueryData> {
     if (loneSub?.category_id) midForQuery = loneSub.category_id
   }
 
-  const { data: subRows, error: subErr } = await supabase
-    .from("subcategories")
-    .select("id,name_ka,category_id,is_active")
-    .eq("category_id", midForQuery)
-    .eq("is_active", true)
-    .order("name_ka", { ascending: true })
-
-  if (subErr) throw subErr
-
   let resolvedMid = midForQuery
   let resolvedRoot = ""
   if (resolvedMid) {
@@ -151,6 +144,19 @@ export async function fetchPostJob(jobId?: string): Promise<PostJobQueryData> {
     } else {
       resolvedRoot = resolvedMid
     }
+  }
+
+  let subRows: SubcategoryRow[] = []
+  if (midForQuery) {
+    const { data, error: subErr } = await supabase
+      .from("subcategories")
+      .select("id,name_ka,category_id,is_active")
+      .eq("category_id", midForQuery)
+      .eq("is_active", true)
+      .order("name_ka", { ascending: true })
+
+    if (subErr) throw subErr
+    subRows = data ?? []
   }
 
   const parsedContact = parseJobContactPreference(
@@ -168,8 +174,10 @@ export async function fetchPostJob(jobId?: string): Promise<PostJobQueryData> {
       categoryId: resolvedMid,
       subcategories: subRows ?? [],
       title: jobRow.title,
+      titleEn: (jobRow as { title_en?: string | null }).title_en ?? "",
       subcategoryId: jobRow.subcategory_id ?? "",
       description: jobRow.description,
+      descriptionEn: (jobRow as { description_en?: string | null }).description_en ?? "",
       isUrgent: jobRow.is_urgent,
       budgetType: jobRow.budget_type,
       budgetMin: jobRow.budget_min == null ? "" : String(jobRow.budget_min),

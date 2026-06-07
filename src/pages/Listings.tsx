@@ -8,7 +8,7 @@ import FreelancerAvailabilityIndicator from "../components/FreelancerAvailabilit
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
 import { useToast } from "../components/ui/ToastProvider.tsx"
-import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
+import { META_SUFFIX, resolveListingMetaPrefix, stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { formatListingPrice } from "../lib/listingPrice.ts"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
@@ -28,20 +28,21 @@ import {
 import { ViewCountEyeIcon } from "../components/ViewCountEyeIcon.tsx"
 import VipBadge from "../components/VipBadge.tsx"
 import { normalizeSearchInput, validateInquiryMessage, validateMoneyAmount } from "../lib/validation.ts"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { localizedNameFromMap, pickCategoryName, type LocalizedNameEntry } from "../lib/categoryLocale.ts"
+import { pickListingDescription, pickListingTitle } from "../lib/listingLocale.ts"
 type ListingMeta = { categoryId: string | null; subcategoryId: string | null; tags: string[] }
 type Availability = "full_time" | "part_time" | "weekends"
 type SkillItem = { id: string; name: string; category_id: string | null }
 
-const META_PREFIX = "<!--gigori-meta:"
-const META_SUFFIX = "-->"
-
 function parseListingDescription(raw: string | null): { description: string; meta: ListingMeta } {
   const fallback: ListingMeta = { categoryId: null, subcategoryId: null, tags: [] }
   if (!raw) return { description: "", meta: fallback }
-  if (!raw.startsWith(META_PREFIX)) return { description: stripLegacyPricePrefix(raw), meta: fallback }
+  const metaPrefix = resolveListingMetaPrefix(raw)
+  if (!metaPrefix) return { description: stripLegacyPricePrefix(raw), meta: fallback }
   const endIndex = raw.indexOf(META_SUFFIX)
   if (endIndex < 0) return { description: stripLegacyPricePrefix(raw), meta: fallback }
-  const metaChunk = raw.slice(META_PREFIX.length, endIndex).trim()
+  const metaChunk = raw.slice(metaPrefix.length, endIndex).trim()
   const body = stripLegacyPricePrefix(raw.slice(endIndex + META_SUFFIX.length))
   try {
     const parsed = JSON.parse(metaChunk) as Partial<ListingMeta>
@@ -66,7 +67,9 @@ type ListingRow = {
   id: string
   freelancerProfileId: string
   title: string
+  titleEn: string | null
   descriptionRaw: string | null
+  descriptionEn: string | null
   price: number
   priceType: string
   createdAt: string
@@ -89,7 +92,7 @@ type ListingRow = {
   vipActive: boolean
 }
 
-type CategoryItem = { id: string; name_ka: string; parent_id: string | null }
+type CategoryItem = { id: string; name_ka: string; name_en?: string | null; parent_id: string | null }
 
 function getInitials(fullName: string) {
   const parts = fullName.trim().split(" ").filter(Boolean)
@@ -158,8 +161,10 @@ const mockListings: ListingRow[] = [
     id: "mock-1",
     freelancerProfileId: "00000000-0000-4000-8000-000000000001",
     title: "React პაკეტი — პატარა ფიჩერების შექმნა",
+    titleEn: null,
     descriptionRaw:
-      '<!--gigori-meta:{"categoryId":null,"subcategoryId":null,"tags":["React","TypeScript"]}-->ლეიაუტის აწყობა, ფორმების დაკავშირება API-თან.',
+      '<!--hira-meta:{"categoryId":null,"subcategoryId":null,"tags":["React","TypeScript"]}-->ლეიაუტის აწყობა, ფორმების დაკავშირება API-თან.',
+    descriptionEn: null,
     price: 450,
     priceType: "fixed",
     createdAt: new Date().toISOString(),
@@ -184,7 +189,9 @@ const mockListings: ListingRow[] = [
     id: "mock-2",
     freelancerProfileId: "00000000-0000-4000-8000-000000000002",
     title: "UI/UX რევიუს პაკეტი (Figma)",
+    titleEn: null,
     descriptionRaw: "ვახდენთ ინტერფეისის აუდიტს და იუზაბილითის რეკომენდაციებს.",
+    descriptionEn: null,
     price: 280,
     priceType: "fixed",
     createdAt: new Date().toISOString(),
@@ -211,7 +218,7 @@ type ListingsCatalogPage = {
   listings: ListingRow[]
   categories: CategoryItem[]
   skills: SkillItem[]
-  subcategoryNamesById: Map<string, string>
+  subcategoryNamesById: Map<string, LocalizedNameEntry>
   subcategoryParentById: Map<string, string>
   total: number
 }
@@ -249,7 +256,9 @@ async function loadListingsCatalogPage(page: number): Promise<ListingsCatalogPag
       id: string
       freelancer_profile_id: string
       title: string | null
+      title_en?: string | null
       description: string | null
+      description_en?: string | null
       price: number | string | null
       price_type: string | null
       views_count?: number | string | null
@@ -281,7 +290,9 @@ async function loadListingsCatalogPage(page: number): Promise<ListingsCatalogPag
       id: r.id,
       freelancerProfileId: String(r.freelancer_profile_id ?? ""),
       title: r.title ?? "სერვისი",
+      titleEn: r.title_en?.trim() || null,
       descriptionRaw: r.description,
+      descriptionEn: r.description_en?.trim() || null,
       price: Number(r.price ?? 0),
       priceType: String(r.price_type ?? "fixed"),
       createdAt: r.created_at ?? new Date().toISOString(),
@@ -317,10 +328,11 @@ async function loadListingsCatalogPage(page: number): Promise<ListingsCatalogPag
   }
 
   const categories = categoriesData.map((c) => {
-    const row = c as { id?: string; name_ka?: string; parent_id?: string | null }
+    const row = c as { id?: string; name_ka?: string; name_en?: string | null; parent_id?: string | null }
     return {
       id: String(row.id ?? ""),
       name_ka: String(row.name_ka ?? ""),
+      name_en: row.name_en ?? null,
       parent_id: row.parent_id ?? null,
     }
   })
@@ -334,7 +346,7 @@ async function loadListingsCatalogPage(page: number): Promise<ListingsCatalogPag
     }
   })
 
-  let subcategoryNamesById = new Map<string, string>()
+  let subcategoryNamesById = new Map<string, LocalizedNameEntry>()
   let subcategoryParentById = new Map<string, string>()
   if (page === 1) {
     try {
@@ -342,7 +354,7 @@ async function loadListingsCatalogPage(page: number): Promise<ListingsCatalogPag
         (from, to) =>
           client
             .from("subcategories")
-            .select("id,name_ka,category_id")
+            .select("id,name_ka,name_en,category_id")
             .eq("is_active", true)
             .order("name_ka")
             .range(from, to),
@@ -351,8 +363,11 @@ async function loadListingsCatalogPage(page: number): Promise<ListingsCatalogPag
       )
       subcategoryNamesById = new Map(
         subRows.map((r) => {
-          const row = r as { id?: string; name_ka?: string }
-          return [String(row.id ?? ""), String(row.name_ka ?? "")] as const
+          const row = r as { id?: string; name_ka?: string; name_en?: string | null }
+          return [
+            String(row.id ?? ""),
+            { name_ka: String(row.name_ka ?? ""), name_en: String(row.name_en ?? "") },
+          ] as const
         }),
       )
       subcategoryParentById = new Map(
@@ -377,6 +392,7 @@ async function loadListingsCatalogPage(page: number): Promise<ListingsCatalogPag
 }
 
 export default function ListingsPage() {
+  const { t, locale } = useTranslation()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { pushToast } = useToast()
@@ -414,7 +430,7 @@ export default function ListingsPage() {
   const firstPage = catalogData?.pages[0]
   const categories = firstPage?.categories ?? []
   const skills = firstPage?.skills ?? []
-  const subcategoryNamesById = firstPage?.subcategoryNamesById ?? new Map<string, string>()
+  const subcategoryNamesById = firstPage?.subcategoryNamesById ?? new Map<string, LocalizedNameEntry>()
   const subcategoryParentById = firstPage?.subcategoryParentById ?? new Map<string, string>()
 
   const listings = useMemo(() => {
@@ -472,11 +488,14 @@ export default function ListingsPage() {
   const specializationOptions = useMemo(() => {
     const parent = specializationParentCategoryId
     if (!parent) return [] as { id: string; name_ka: string }[]
-    const out: { id: string; name_ka: string }[] = []
+    const out: { id: string; name_ka: string; name_en: string }[] = []
     for (const [subId, catId] of subcategoryParentById) {
       if (catId === parent) {
-        const name = (subcategoryNamesById.get(subId) ?? "").trim()
-        if (subId && name) out.push({ id: subId, name_ka: name })
+        const entry = subcategoryNamesById.get(subId)
+        const nameKa = (entry?.name_ka ?? "").trim()
+        if (subId && nameKa) {
+          out.push({ id: subId, name_ka: nameKa, name_en: entry?.name_en ?? "" })
+        }
       }
     }
     return out.sort((a, b) => a.name_ka.localeCompare(b.name_ka, "ka"))
@@ -587,11 +606,11 @@ export default function ListingsPage() {
   }
 
   useEffect(() => {
-    document.title = "სერვისების ლისტინგები — გიგორი"
+    document.title = t("listings.title")
     return () => {
-      document.title = "გიგორი"
+      document.title = t("brand.name")
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     const query = searchParams.get("q")
@@ -657,11 +676,14 @@ export default function ListingsPage() {
     setDraftMaxPrice("")
   }
 
-  const availabilityLabel: Record<Availability, string> = {
-    full_time: "სრული განაკვეთი",
-    part_time: "ნახევარი განაკვეთი",
-    weekends: "შაბათ-კვირა",
-  }
+  const availabilityLabel: Record<Availability, string> = useMemo(
+    () => ({
+      full_time: t("common.availabilityFullTime"),
+      part_time: t("common.availabilityPartTime"),
+      weekends: t("common.availabilityWeekends"),
+    }),
+    [t],
+  )
   const availabilityBadgeClass: Record<Availability, string> = {
     full_time: "bg-green-100 text-green-700",
     part_time: "bg-[#D4EEFF] text-[#006ACC]",
@@ -756,14 +778,11 @@ export default function ListingsPage() {
       }
 
       if (!q) return true
-      const subQ =
-        item.subcategoryId && subcategoryNamesById.has(item.subcategoryId)
-          ? String(subcategoryNamesById.get(item.subcategoryId) ?? "").toLowerCase()
-          : ""
-      const catKa = item.categoryId
-        ? (categories.find((c) => c.id === item.categoryId)?.name_ka ?? "").toLowerCase()
-        : ""
-      const hay = `${item.title} ${item.tags.join(" ")} ${item.professionalTitle} ${description} ${subQ} ${catKa}`
+      const subEntry = item.subcategoryId ? subcategoryNamesById.get(item.subcategoryId) : undefined
+      const subQ = subEntry ? `${subEntry.name_ka} ${subEntry.name_en}`.trim().toLowerCase() : ""
+      const catRow = item.categoryId ? categories.find((c) => c.id === item.categoryId) : undefined
+      const catQ = catRow ? `${catRow.name_ka} ${catRow.name_en ?? ""}`.trim().toLowerCase() : ""
+      const hay = `${item.title} ${item.titleEn ?? ""} ${item.tags.join(" ")} ${item.professionalTitle} ${description} ${item.descriptionEn ?? ""} ${subQ} ${catQ}`
         .toLowerCase()
       return hay.includes(q)
     })
@@ -869,12 +888,12 @@ export default function ListingsPage() {
                   value={searchText}
                   onChange={(event) => setSearchText(normalizeSearchInput(event.target.value))}
                   className="h-10 w-full rounded-full border border-slate-300 bg-white px-2.5 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:border-[#0088FF] focus:ring-2 focus:ring-inset focus:ring-[#0088FF]"
-                  placeholder="ძიება"
+                  placeholder={t("common.search")}
                 />
               </div>
 
               <label className="relative inline-flex h-10 min-w-[7.25rem] max-w-[9.5rem] shrink-0 items-center gap-1 rounded-full border border-slate-300 bg-white px-2 text-xs font-medium text-slate-500 sm:min-w-[7.75rem] sm:px-2.5 sm:text-sm">
-                <span className="pointer-events-none min-w-0 flex-1 truncate">კატეგორია</span>
+                <span className="pointer-events-none min-w-0 flex-1 truncate">{t("common.category")}</span>
                 <span className="shrink-0 text-slate-400">▾</span>
                 <select
                   value={filterRootCategoryId}
@@ -885,19 +904,19 @@ export default function ListingsPage() {
                     setFilterSpecializationId("")
                   }}
                   className="absolute inset-0 z-10 h-full w-full min-h-[2.5rem] min-w-0 cursor-pointer opacity-0"
-                  aria-label="კატეგორია"
+                  aria-label={t("common.category")}
                 >
-                  <option value="">ყველა</option>
+                  <option value="">{t("common.all")}</option>
                   {categoryRootsList.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name_ka}
+                      {pickCategoryName(c, locale)}
                     </option>
                   ))}
                 </select>
               </label>
 
               <label className="relative inline-flex h-10 min-w-[7.25rem] max-w-[9.5rem] shrink-0 items-center gap-1 rounded-full border border-slate-300 bg-white px-2 text-xs font-medium text-slate-500 sm:min-w-[7.75rem] sm:px-2.5 sm:text-sm">
-                <span className="pointer-events-none min-w-0 flex-1 truncate">ქვეკატეგორია</span>
+                <span className="pointer-events-none min-w-0 flex-1 truncate">{t("common.subcategory")}</span>
                 <span className="shrink-0 text-slate-400">▾</span>
                 <select
                   value={filterMidCategoryId}
@@ -907,43 +926,43 @@ export default function ListingsPage() {
                     setFilterSpecializationId("")
                   }}
                   className="absolute inset-0 z-10 h-full w-full min-h-[2.5rem] min-w-0 cursor-pointer opacity-0 disabled:cursor-not-allowed"
-                  aria-label="ქვეკატეგორია"
+                  aria-label={t("common.subcategory")}
                 >
                   <option value="">
                     {!filterRootCategoryId
-                      ? "ჯერ კატეგორია"
+                      ? t("common.categoryFirst")
                       : categoryMidsList.length === 0
-                        ? "არ არის"
-                        : "ყველა (ამ დონეზე)"}
+                        ? t("common.none")
+                        : t("common.allAtLevel")}
                   </option>
                   {categoryMidsList.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name_ka}
+                      {pickCategoryName(c, locale)}
                     </option>
                   ))}
                 </select>
               </label>
 
               <label className="relative inline-flex h-10 min-w-[7.25rem] max-w-[10rem] shrink-0 items-center gap-1 rounded-full border border-slate-300 bg-white px-2 text-xs font-medium text-slate-500 sm:min-w-[8rem] sm:px-2.5 sm:text-sm">
-                <span className="pointer-events-none min-w-0 flex-1 truncate">სპეციალიზაცია</span>
+                <span className="pointer-events-none min-w-0 flex-1 truncate">{t("common.specialization")}</span>
                 <span className="shrink-0 text-slate-400">▾</span>
                 <select
                   value={filterSpecializationId}
                   disabled={!specializationParentCategoryId || specializationOptions.length === 0}
                   onChange={(event) => setFilterSpecializationId(event.target.value)}
                   className="absolute inset-0 z-10 h-full w-full min-h-[2.5rem] min-w-0 cursor-pointer opacity-0 disabled:cursor-not-allowed"
-                  aria-label="სპეციალიზაცია"
+                  aria-label={t("common.specialization")}
                 >
                   <option value="">
                     {!specializationParentCategoryId
-                      ? "ჯერ ზემოთ"
+                      ? t("common.selectAbove")
                       : specializationOptions.length === 0
-                        ? "არ არის"
-                        : "ყველა (არასავალდებულო)"}
+                        ? t("common.none")
+                        : t("common.allOptional")}
                   </option>
                   {specializationOptions.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name_ka}
+                      {pickCategoryName(s, locale)}
                     </option>
                   ))}
                 </select>
@@ -951,7 +970,7 @@ export default function ListingsPage() {
 
               <label className="relative inline-flex h-10 min-w-[6.5rem] max-w-[11rem] shrink-0 items-center gap-1 rounded-full border border-slate-300 bg-white px-2 text-xs font-medium text-slate-500 sm:px-2.5 sm:text-sm">
                 <span className="pointer-events-none min-w-0 flex-1 truncate">
-                  {locationFilter.trim() ? formatCityForDisplay(locationFilter) ?? locationFilter : "ლოკაცია"}
+                  {locationFilter.trim() ? formatCityForDisplay(locationFilter) ?? locationFilter : t("common.location")}
                 </span>
                 <span className="shrink-0 text-slate-400">▾</span>
                 <LocationFilterSelect
@@ -970,7 +989,7 @@ export default function ListingsPage() {
                   className="inline-flex h-10 shrink-0 items-center gap-1 rounded-full border border-slate-300 bg-white px-2 text-xs font-medium text-slate-500 transition hover:border-slate-400 sm:px-2.5 sm:text-sm"
                 >
                   <span aria-hidden></span>
-                  <span className="whitespace-nowrap">დეტალური ძებნა</span>
+                  <span className="whitespace-nowrap">{t("listings.detailedSearch")}</span>
                   <span className="text-slate-400">▾</span>
                   {advancedFilterCount > 0 ? (
                     <span className="ml-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#0088FF] px-1 text-xs font-bold text-white">
@@ -985,14 +1004,14 @@ export default function ListingsPage() {
                     <div
                       role="dialog"
                       aria-modal="true"
-                      aria-label="დეტალური ფილტრები"
+                      aria-label={t("common.detailedFilters")}
                       className="absolute right-0 z-50 mt-2 flex max-h-[min(72vh,560px)] w-[min(100vw-2rem,24rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
                     >
                       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-4">
-                        <h2 className="border-l-4 border-[#0088FF] pl-3 text-base font-bold text-[#1B2B4B]">დეტალური ფილტრები</h2>
+                        <h2 className="border-l-4 border-[#0088FF] pl-3 text-base font-bold text-[#1B2B4B]">{t("common.detailedFilters")}</h2>
                         <div className="mt-4 space-y-4">
                           <div>
-                            <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">უნარები</p>
+                            <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">{t("common.skills")}</p>
                             <div className="max-h-40 space-y-2 overflow-auto rounded-lg border border-slate-200 p-2">
                               {topSkills.map((skill) => (
                                 <label key={skill.id} className="flex items-center gap-2 text-sm text-slate-700">
@@ -1004,7 +1023,7 @@ export default function ListingsPage() {
                           </div>
 
                           <div>
-                            <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">დატვირთვა</p>
+                            <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">{t("browse.availability")}</p>
                             <div className="space-y-2">
                               {(Object.keys(availabilityLabel) as Availability[]).map((value) => (
                                 <label key={value} className="flex items-center gap-2 text-sm text-slate-700">
@@ -1016,13 +1035,13 @@ export default function ListingsPage() {
                           </div>
 
                           <label className="block">
-                            <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">მინ. რეიტინგი (ფრილანსერი)</span>
+                            <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("listings.minFreelancerRating")}</span>
                             <select
                               value={draftMinRating}
                               onChange={(event) => setDraftMinRating(Number(event.target.value) as 0 | 3 | 4 | 5)}
                               className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
                             >
-                              <option value={0}>ნებისმიერი</option>
+                              <option value={0}>{t("common.anyLocation")}</option>
                               <option value={3}>3+</option>
                               <option value={4}>4+</option>
                               <option value={5}>5</option>
@@ -1030,15 +1049,15 @@ export default function ListingsPage() {
                           </label>
 
                           <div>
-                            <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">ფასის დიაპაზონი (ლისტინგი ₾)</p>
-                            <p className="mb-2 text-xs text-slate-500">შეთანხმებით ფასები ფასის საზღვრებს არ ექვემდებარება.</p>
+                            <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">{t("listings.listingPriceRange")}</p>
+                            <p className="mb-2 text-xs text-slate-500">{t("listings.negotiablePriceHint")}</p>
                             <div className="grid grid-cols-2 gap-2">
                               <input
                                 type="number"
                                 min={0}
                                 value={draftMinPrice}
                                 onChange={(event) => setDraftMinPrice(event.target.value)}
-                                placeholder="მინ"
+                                placeholder={t("common.min")}
                                 className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
                               />
                               <input
@@ -1046,7 +1065,7 @@ export default function ListingsPage() {
                                 min={0}
                                 value={draftMaxPrice}
                                 onChange={(event) => setDraftMaxPrice(event.target.value)}
-                                placeholder="მაქს"
+                                placeholder={t("common.max")}
                                 className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
                               />
                             </div>
@@ -1060,7 +1079,7 @@ export default function ListingsPage() {
                           onClick={clearDraftAdvanced}
                           className="h-11 w-full rounded-lg border border-[#0088FF] text-sm font-semibold text-[#1B2B4B] hover:bg-[#E8F4FF]"
                         >
-                          ფილტრების გასუფთავება
+                          {t("common.clearFilters")}
                         </button>
                         <div className="flex gap-2">
                           <button
@@ -1068,14 +1087,14 @@ export default function ListingsPage() {
                             onClick={() => setAdvancedDropdownOpen(false)}
                             className="h-11 flex-1 rounded-lg border border-slate-300 text-sm font-semibold text-[#1B2B4B] hover:bg-slate-50"
                           >
-                            გაუქმება
+                            {t("common.cancel")}
                           </button>
                           <button
                             type="button"
                             onClick={saveAdvancedFilters}
                             className="h-11 flex-1 rounded-lg bg-[#0088FF] text-sm font-semibold text-white hover:bg-[#006ACC]"
                           >
-                            შენახვა
+                            {t("common.save")}
                           </button>
                         </div>
                       </div>
@@ -1086,17 +1105,17 @@ export default function ListingsPage() {
 
               <label className="relative inline-flex h-10 min-w-[6.5rem] shrink-0 items-center gap-1 rounded-full border border-slate-300 bg-white px-2 text-xs font-medium text-slate-500 sm:px-2.5 sm:text-sm">
                 <span aria-hidden></span>
-                <span className="truncate">სორტირება</span>
+                <span className="truncate">{t("common.sort")}</span>
                 <span className="ml-auto shrink-0 text-slate-400">▾</span>
                 <select
                   value={sortBy}
                   onChange={(event) => setSortBy(event.target.value as SortOption)}
                   className="absolute inset-0 cursor-pointer opacity-0"
-                  aria-label="სორტირება"
+                  aria-label={t("common.sort")}
                 >
-                  <option value="newest">უახლესი</option>
-                  <option value="price_asc">ფასი: იაფიდან</option>
-                  <option value="price_desc">ფასი: ძვირიდან</option>
+                  <option value="newest">{t("common.newest")}</option>
+                  <option value="price_asc">{t("common.priceAsc")}</option>
+                  <option value="price_desc">{t("common.priceDesc")}</option>
                 </select>
               </label>
 
@@ -1105,7 +1124,7 @@ export default function ListingsPage() {
                 onClick={() => setAdvancedDropdownOpen(false)}
                 className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-[#0088FF] px-4 text-sm font-bold text-white transition hover:bg-[#006ACC] sm:px-5 sm:text-base"
               >
-                ძიება
+                {t("common.search")}
               </button>
             </div>
           </div>
@@ -1123,19 +1142,28 @@ export default function ListingsPage() {
           ) : (
             <>
               <div className="mb-4 flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-slate-600">მოიძებნა {filteredSorted.length} განცხადება</p>
+                <p className="text-sm font-medium text-slate-600">{t("listings.found", { count: filteredSorted.length })}</p>
               </div>
 
               {filteredSorted.length === 0 ? (
                 <EmptyState
-                  message="ახლა საჯარო აქტიური სერვისები არ ჩანს. სცადეთ განსხვავებული ძიება ან მოგვიანებით."
-                  actionLabel="ფილტრების გასუფთავება"
+                  message={t("listings.empty")}
+                  actionLabel={t("common.clearFilters")}
                   onAction={clearFilters}
                 />
               ) : (
                 <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {filteredSorted.map((item) => {
                     const { description } = parseListingDescription(item.descriptionRaw)
+                    const displayTitle = pickListingTitle(
+                      { title: item.title, titleEn: item.titleEn },
+                      locale,
+                      t("listingDetail.defaultTitle"),
+                    )
+                    const displayDescription = pickListingDescription(
+                      { description, descriptionEn: item.descriptionEn },
+                      locale,
+                    )
                     const negotiable = isNegotiable(item.price, description)
                     const availKey = item.availability as Availability | null
                     const hasAvailBadge =
@@ -1169,8 +1197,8 @@ export default function ListingsPage() {
                             >
                               <FreelancerAvailabilityIndicator
                                 available={item.isAcceptingNewWork}
-                                labelWhenAvailable="ფრილანსერი ახალი სამუშაოებისთვის ხელმისაწვდომია."
-                                labelWhenUnavailable="ეს ფრილანსერი ამჟამად ახალი სამუშაოებისთვის ხელმიუწვდომელია. შეთავაზების გაგზავნა მაინც შეგიძლიათ."
+                                labelWhenAvailable={t("listings.freelancerAvailable")}
+                                labelWhenUnavailable={t("listings.freelancerUnavailable")}
                               >
                                 {item.avatarUrl ? (
                                   <img
@@ -1197,7 +1225,7 @@ export default function ListingsPage() {
                                 </Link>
                                 {item.vipActive ? <VipBadge /> : null}
                               </div>
-                              <p className="truncate text-sm text-slate-500">{item.professionalTitle || "ფრილანსერი"}</p>
+                              <p className="truncate text-sm text-slate-500">{item.professionalTitle || t("common.freelancerFallback")}</p>
                               {formatCityForDisplay(item.city) ? (
                                 <p className="mt-1 text-xs text-slate-500">📍 {formatCityForDisplay(item.city)}</p>
                               ) : null}
@@ -1205,11 +1233,11 @@ export default function ListingsPage() {
                           </div>
 
                           <p className="mt-2 line-clamp-2 text-sm font-semibold text-gray-900">
-                            {item.title}
+                            {displayTitle}
                           </p>
 
                           <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-slate-600">
-                            {description.trim() || "დეტალური აღწერა გიგორში."}
+                            {displayDescription.trim() || t("listings.defaultCardDescription")}
                           </p>
 
                           <div className="mt-3 flex items-center justify-between text-sm">
@@ -1219,11 +1247,12 @@ export default function ListingsPage() {
 
                         {/* Fills vertical space: tag chips or blank white area */}
                         <div className="mt-3 flex min-h-0 flex-1 flex-col">
-                          {item.tags.length > 0 || (item.subcategoryId && subcategoryNamesById.get(item.subcategoryId)) ? (
+                          {item.tags.length > 0 ||
+                          (item.subcategoryId && localizedNameFromMap(subcategoryNamesById, item.subcategoryId, locale)) ? (
                             <div className="flex flex-wrap gap-2">
-                              {item.subcategoryId && subcategoryNamesById.get(item.subcategoryId) ? (
+                              {item.subcategoryId && localizedNameFromMap(subcategoryNamesById, item.subcategoryId, locale) ? (
                                 <span className="rounded-full border border-[#0088FF]/35 bg-[#E8F4FF] px-2 py-1 text-xs font-semibold text-[#0088FF]">
-                                  {subcategoryNamesById.get(item.subcategoryId)}
+                                  {localizedNameFromMap(subcategoryNamesById, item.subcategoryId, locale)}
                                 </span>
                               ) : null}
                               {item.tags.slice(0, 4).map((tag) => (
@@ -1239,7 +1268,7 @@ export default function ListingsPage() {
                         <div className="mt-3 shrink-0 space-y-2">
                           <div className="flex items-center justify-between gap-2">
                             <p className="text-sm font-semibold text-gray-900">
-                              {formatListingPrice(item.price, item.priceType, { negotiable })}
+                              {formatListingPrice(item.price, item.priceType, { negotiable, locale })}
                             </p>
                             {hasAvailBadge && availabilityText ? (
                               <span
@@ -1250,7 +1279,7 @@ export default function ListingsPage() {
                             ) : null}
                           </div>
                           <p className="text-xs text-slate-500">
-                            💼 {item.completedJobsCount} შესრულებული ·{" "}
+                            💼 {t("common.completed", { count: item.completedJobsCount })} ·{" "}
                             <span className="inline-flex items-center gap-0.5 align-middle">
                               <ViewCountEyeIcon className="relative -top-px inline h-3.5 w-3.5 text-slate-500" />
                               {item.viewsCount}
@@ -1274,14 +1303,14 @@ export default function ListingsPage() {
                                 }}
                                 className="inline-flex h-11 min-w-0 flex-1 items-center justify-center rounded-lg border border-[#0088FF] bg-white px-2 text-sm font-semibold text-[#0088FF] transition hover:bg-[#E8F4FF]"
                               >
-                                შეთავაზება
+                                {t("listings.makeOffer")}
                               </button>
                               <Link
                                 to={`/freelancer/${item.freelancerSlug}`}
                                 className="inline-flex h-11 min-w-0 flex-1 items-center justify-center rounded-lg bg-[#0088FF] px-2 text-sm font-semibold text-white transition hover:bg-[#006ACC]"
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                პროფილის ნახვა
+                                {t("nav.viewProfile")}
                               </Link>
                             </>
                           ) : (
@@ -1298,7 +1327,7 @@ export default function ListingsPage() {
                                 className="inline-flex h-11 w-full min-w-0 flex-1 items-center justify-center rounded-lg bg-[#0088FF] px-4 text-sm font-semibold text-white transition hover:bg-[#006ACC]"
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                პროფილის ნახვა
+                                {t("nav.viewProfile")}
                               </Link>
                             </>
                           )}
@@ -1317,7 +1346,7 @@ export default function ListingsPage() {
                     onClick={() => void fetchNextPage()}
                     className="h-11 rounded-lg border border-[#0088FF] px-6 text-sm font-semibold text-[#0088FF] hover:bg-[#E8F4FF] disabled:opacity-60"
                   >
-                    {listingsLoadingMore ? "იტვირთება…" : "მეტის ნახვა"}
+                    {listingsLoadingMore ? t("common.loading") : t("common.loadMoreView")}
                   </button>
                 </div>
               ) : null}
@@ -1335,30 +1364,30 @@ export default function ListingsPage() {
             }}
           >
             <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
-              <h3 className="text-lg font-bold text-[#1B2B4B]">შეთავაზება ფრილანსერს</h3>
+              <h3 className="text-lg font-bold text-[#1B2B4B]">{t("listings.offerToFreelancer")}</h3>
               <p className="mt-1 text-sm text-slate-600 line-clamp-2">{inquiryListing.title}</p>
               <p className="mt-2 text-xs text-slate-500">
-                ტექსტი გამოჩნდება ფრილანსერის მართვის პანელზე „შეთავაზებები ლისტინგებზე“. სამუშაოს დასრულება იქვე ფიქსირდება (სტატუსი „დასრულებული“) — განცხადების გარეშე.
+                {t("listings.inquiryModalHint")}
               </p>
               <label className="mt-4 block">
-                <span className="mb-1 block text-xs font-semibold uppercase text-slate-500">შეტყობინება</span>
+                <span className="mb-1 block text-xs font-semibold uppercase text-slate-500">{t("listings.inquiryMessage")}</span>
                 <textarea
                   value={inquiryMessage}
                   onChange={(e) => setInquiryMessage(e.target.value)}
                   rows={4}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-[#0088FF] focus:ring-2"
-                  placeholder="რა გჭირდება, ვადები, კონტექსტი…"
+                  placeholder={t("listings.messagePlaceholder")}
                 />
               </label>
               <label className="mt-3 block">
-                <span className="mb-1 block text-xs font-semibold uppercase text-slate-500">შემოთავაზებული თანხა (₾, არასავალდებულო)</span>
+                <span className="mb-1 block text-xs font-semibold uppercase text-slate-500">{t("listings.proposedAmountOptional")}</span>
                 <input
                   type="number"
                   min={0}
                   value={inquiryBudget}
                   onChange={(e) => setInquiryBudget(e.target.value)}
                   className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
-                  placeholder="მაგ. 500"
+                  placeholder={t("listings.exampleAmount")}
                 />
               </label>
               {inquiryFormError ? <p className="mt-2 text-sm text-red-600">{inquiryFormError}</p> : null}
@@ -1369,7 +1398,7 @@ export default function ListingsPage() {
                   onClick={() => void submitListingInquiry()}
                   className="flex-1 rounded-lg bg-[#0088FF] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#006ACC] disabled:opacity-60"
                 >
-                  {inquirySubmitting ? "იგზავნება…" : "გაგზავნა"}
+                  {inquirySubmitting ? t("common.sending") : t("common.send")}
                 </button>
                 <button
                   type="button"
@@ -1377,7 +1406,7 @@ export default function ListingsPage() {
                   onClick={() => setInquiryListing(null)}
                   className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
-                  გაუქმება
+                  {t("common.cancel")}
                 </button>
               </div>
             </div>

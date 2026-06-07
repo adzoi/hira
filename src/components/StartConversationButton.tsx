@@ -1,5 +1,6 @@
 import { useEffect, useState, type MouseEvent } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { startConversationPath } from "../lib/chat.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase.ts"
 
@@ -23,13 +24,15 @@ export default function StartConversationButton({
   otherUserId,
   serviceInquiryId,
   jobApplicationId,
-  label = "საუბრის დაწყება",
+  label,
   variant = "outline",
   className = "",
 }: StartConversationButtonProps) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
   const [viewerId, setViewerId] = useState<string | null>(null)
+  const buttonLabel = label ?? t("common.startConversation")
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return
@@ -60,7 +63,7 @@ export default function StartConversationButton({
       onClick={handleClick}
       className={`${variantClass[variant]} ${className}`.trim()}
     >
-      {label}
+      {buttonLabel}
     </Link>
   )
 }

@@ -9,8 +9,10 @@ import { queryKeys } from "../lib/queryKeys.ts"
 import { useToast } from "../components/ui/ToastProvider.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { getAuthenticatedSession } from "../lib/supabaseAuth.ts"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
 
 export default function CVGeneratorPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { pushToast } = useToast()
   const [userId, setUserId] = useState("")
@@ -25,22 +27,22 @@ export default function CVGeneratorPage() {
     enabled: Boolean(userId),
   })
   const error = !isSupabaseConfigured
-    ? "Supabase არ არის კონფიგურირებული."
+    ? t("validation.supabaseMissing")
     : isError
-      ? queryErrorMessage(queryError, "CV-ის ჩატვირთვა ვერ მოხერხდა.")
+      ? queryErrorMessage(queryError, t("cv.loadFailed"))
       : ""
 
   const notifyCv = useMemo(() => {
     return (evt: { type: string; message: string }) => {
-      const t =
+      const toastType =
         evt.type === "success" || evt.type === "error" || evt.type === "info" ? evt.type : ("info" as const)
-      pushToast({ type: t, message: evt.message })
+      pushToast({ type: toastType, message: evt.message })
     }
   }, [pushToast])
 
   useEffect(() => {
-    document.title = "CV გენერატორი — გიგორი"
-  }, [])
+    document.title = t("cv.generatorTitle")
+  }, [t])
 
   useEffect(() => {
     let cancelled = false
@@ -63,7 +65,7 @@ export default function CVGeneratorPage() {
     <div className="min-h-screen bg-slate-50">
       <Navbar />
       <main className="mx-auto max-w-5xl px-4 py-8 md:px-6">
-        {loading ? <p className="text-sm text-slate-600">იტვირთება...</p> : null}
+        {loading ? <p className="text-sm text-slate-600">{t("common.loading")}</p> : null}
         {!loading && error ? (
           <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
         ) : null}

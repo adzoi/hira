@@ -22,9 +22,11 @@ import {
 } from "./lib/validation.ts"
 import ProtectedRoute from "./components/ProtectedRoute.tsx"
 import LocationFilterSelect from "./components/LocationFilterSelect.tsx"
+import CookieBanner from "./components/CookieBanner.tsx"
 import Footer from "./components/Footer.tsx"
 import HomeFeedSection from "./components/HomeFeedSection.tsx"
 import { useHomeStatsQuery } from "./lib/queries/useHomeStatsQuery.ts"
+import { useTranslation } from "./i18n/LocaleContext.tsx"
 import mainHeroImage from "../images/main.png"
 
 const DashboardPage = lazy(() => import("./pages/Dashboard.tsx"))
@@ -42,6 +44,12 @@ const PublicCVPage = lazy(() => import("./pages/PublicCV.tsx"))
 const ListingsPage = lazy(() => import("./pages/Listings.tsx"))
 const HirersPage = lazy(() => import("./pages/Hirers.tsx"))
 const HirerPublicPage = lazy(() => import("./pages/HirerPublic.tsx"))
+const AboutPage = lazy(() => import("./pages/About.tsx"))
+const TermsPage = lazy(() => import("./pages/Terms.tsx"))
+const PrivacyPage = lazy(() => import("./pages/Privacy.tsx"))
+const CookiesPage = lazy(() => import("./pages/Cookies.tsx"))
+const GuidePage = lazy(() => import("./pages/Guide.tsx"))
+const FaqPage = lazy(() => import("./pages/Faq.tsx"))
 const ForgotPasswordPage = lazy(() => import("./pages/ForgotPassword.tsx"))
 const ResetPasswordPage = lazy(() => import("./pages/ResetPassword.tsx"))
 const PayPalCheckoutE2EPage = lazy(() => import("./pages/PayPalCheckoutE2E.tsx"))
@@ -68,13 +76,14 @@ function sanitizeLoginRedirect(raw: string | null): string | null {
 }
 
 function HomePage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [searchText, setSearchText] = useState("")
   const [viewerType, setViewerType] = useState<"freelancer" | "hirer" | null>(null)
   const { data: stats = { freelancerCount: 0, jobCount: 0, completedCount: 0 } } = useHomeStatsQuery()
   useEffect(() => {
-    document.title = "გიგორი — ქართული freelance პლატფორმა"
-  }, [])
+    document.title = t("home.title")
+  }, [t])
 
   useEffect(() => {
     let cancelled = false
@@ -112,10 +121,13 @@ function HomePage() {
       <section className="bg-[#0088FF]">
         <div className="mx-auto grid w-full max-w-[1200px] items-stretch gap-8 px-4 py-10 md:px-6 lg:grid-cols-2 lg:py-16">
           <div className="flex flex-col justify-center">
-            <h1 className="mt-3 text-[28px] font-extrabold leading-tight text-white lg:text-[48px]">
-              საუკეთესო
-              <br />
-              ფრილანსერები
+            <h1 className="home-hero-title mt-3">
+              <span className="block text-[36px] font-bold tracking-tight text-[#D4A843] drop-shadow-sm lg:text-[58px]">
+                {t("home.heroBrand")}
+              </span>
+              <span className="mt-1 block text-[22px] font-bold text-white lg:mt-2 lg:text-[38px]">
+                {t("home.heroTagline")}
+              </span>
             </h1>
 
 
@@ -127,7 +139,7 @@ function HomePage() {
                 onKeyDown={(event) => {
                   if (event.key === "Enter") handleSearch()
                 }}
-                placeholder="რას ეძებ?"
+                placeholder={t("home.searchPlaceholder")}
                 className="h-10 min-w-0 flex-1 rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#0088FF]"
               />
               <button
@@ -135,7 +147,7 @@ function HomePage() {
                 onClick={handleSearch}
                 className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-white px-8 text-base font-bold text-[#0088FF] transition hover:bg-[#E8F4FF]"
               >
-                ძებნა
+                {t("common.search")}
               </button>
             </div>
           </div>
@@ -143,7 +155,7 @@ function HomePage() {
           <div className="flex min-h-0 items-center justify-center">
             <img
               src={mainHeroImage}
-              alt="გიგორი — ფრილანს პლატფორმა"
+              alt={`${t("brand.name")} — ${t("brand.taglineShort")}`}
               className="h-auto w-full max-w-lg rounded-2xl object-contain drop-shadow-lg lg:max-w-none"
             />
           </div>
@@ -157,21 +169,21 @@ function HomePage() {
           <div className="mx-auto grid w-full max-w-[1200px] grid-cols-1 gap-6 px-4 py-8 text-center md:grid-cols-3 md:px-6">
             <div>
               <p className="text-3xl font-bold text-[#1B2B4B]">
-                {stats.freelancerCount > 0 ? formatNumber(stats.freelancerCount) : "იზრდება ყოველდღე"}
+                {stats.freelancerCount > 0 ? formatNumber(stats.freelancerCount) : t("home.growingDaily")}
               </p>
-              <p className="mt-1 text-sm text-slate-500">რეგისტრირებული ფრილანსერი</p>
+              <p className="mt-1 text-sm text-slate-500">{t("home.registeredFreelancers")}</p>
             </div>
             <div>
               <p className="text-3xl font-bold text-[#1B2B4B]">
-                {stats.jobCount > 0 ? formatNumber(stats.jobCount) : "იზრდება ყოველდღე"}
+                {stats.jobCount > 0 ? formatNumber(stats.jobCount) : t("home.growingDaily")}
               </p>
-              <p className="mt-1 text-sm text-slate-500">განთავსებული განცხადება</p>
+              <p className="mt-1 text-sm text-slate-500">{t("home.postedListings")}</p>
             </div>
             <div>
               <p className="text-3xl font-bold text-[#1B2B4B]">
-                {stats.completedCount > 0 ? formatNumber(stats.completedCount) : "იზრდება ყოველდღე"}
+                {stats.completedCount > 0 ? formatNumber(stats.completedCount) : t("home.growingDaily")}
               </p>
-              <p className="mt-1 text-sm text-slate-500">შესრულებული სამუშაო</p>
+              <p className="mt-1 text-sm text-slate-500">{t("home.completedJobs")}</p>
             </div>
           </div>
         </section>
@@ -181,6 +193,7 @@ function HomePage() {
 }
 
 function LoginPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
@@ -199,8 +212,8 @@ function LoginPage() {
     (location.state as { reason?: string }).reason === "password-reset"
 
   useEffect(() => {
-    document.title = "შესვლა — გიგორი"
-  }, [])
+    document.title = t("auth.loginTitle")
+  }, [t])
 
   useEffect(() => {
     if (!cooldownUntil) {
@@ -228,7 +241,7 @@ function LoginPage() {
     setError("")
 
     if (!isSupabaseConfigured || !supabase) {
-      setError("Supabase პარამეტრები ვერ მოიძებნა. შეამოწმე .env ფაილი.")
+      setError(t("validation.supabaseMissing"))
       return
     }
 
@@ -245,7 +258,7 @@ function LoginPage() {
 
     if (cooldownUntil && Date.now() < cooldownUntil) {
       const secondsLeft = Math.ceil((cooldownUntil - Date.now()) / 1000)
-      setError(`ზედმეტი მცდელობები დაფიქსირდა. სცადე ${secondsLeft} წამში.`)
+      setError(t("validation.rateLimitedSeconds", { seconds: secondsLeft }))
       return
     }
 
@@ -257,13 +270,13 @@ function LoginPage() {
       const message = loginError.message.toLowerCase()
       if (isAuthRateLimited(loginError.status, loginError.message)) {
         setCooldownUntil(authCooldownUntil())
-        setError("ზედმეტი მცდელობები დაფიქსირდა. გთხოვ, სცადე 15 წუთში.")
+        setError(t("validation.rateLimited"))
       } else if (message.includes("invalid login credentials")) {
-        setError("ელფოსტა ან პაროლი არასწორია.")
+        setError(t("validation.invalidCredentials"))
       } else if (message.includes("invalid email")) {
-        setError("ელფოსტის ფორმატი არასწორია.")
+        setError(t("validation.emailInvalid"))
       } else {
-        setError("შესვლა ვერ მოხერხდა. სცადეთ თავიდან.")
+        setError(t("validation.loginFailed"))
       }
       return
     }
@@ -293,17 +306,16 @@ function LoginPage() {
     <div className="min-h-screen bg-[#F8F9FC] page-enter">
       <div className="mx-auto w-full max-w-xl px-4 py-10 md:px-6 md:py-16">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-8">
-          <h1 className="text-[28px] font-bold text-[#0088FF] md:text-4xl">ანგარიშში შესვლა</h1>
+          <h1 className="text-[28px] font-bold text-[#0088FF] md:text-4xl">{t("auth.loginHeading")}</h1>
 
           {reason === "post-job" ? (
             <div className="mt-5 flex items-center gap-3 rounded-lg border border-[#D4A843] bg-[#FFF8E7] px-4 py-3">
               <span className="text-xl">💼</span>
               <div>
-                <p className="m-0 font-medium text-[#1B2B4B]">სამუშაოს განსათავსებლად გაიარე ავტორიზაცია</p>
+                <p className="m-0 font-medium text-[#1B2B4B]">{t("auth.loginForPostJob")}</p>
                 <p className="m-0 mt-0.5 text-[13px] text-[#6B7280]">
-                  არ გაქვს ანგარიში?{" "}
                   <Link to="/register" className="text-[#D4A843] hover:underline">
-                    დარეგისტრირდი უფასოდ
+                    {t("auth.noAccountSignup")}
                   </Link>
                 </p>
               </div>
@@ -314,9 +326,9 @@ function LoginPage() {
             <div className="mt-5 flex items-center gap-3 rounded-lg border border-[#D4A843] bg-[#FFF8E7] px-4 py-3">
               <span className="text-xl">📇</span>
               <div>
-                <p className="m-0 font-medium text-[#1B2B4B]">საკონტაქტო დეტალების სანახავად გაიარე ავტორიზაცია</p>
+                <p className="m-0 font-medium text-[#1B2B4B]">{t("auth.loginForContact")}</p>
                 <p className="m-0 mt-0.5 text-[13px] text-[#6B7280]">
-                  გაიარეთ შესვლა და თქვენ დაგიბრუნდებათ იმ გვერდზე, სადაც კონტაქტს ამოაჩენთ.
+                  {t("auth.loginForContactHint")}
                 </p>
               </div>
             </div>
@@ -324,27 +336,27 @@ function LoginPage() {
 
           {passwordResetDone ? (
             <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-              პაროლი განახლდა. შეგიძლიათ შეხვიდეთ ახალი პაროლით.
+              {t("auth.passwordUpdated")}
             </div>
           ) : null}
 
           <form onSubmit={handleLogin} className="mt-6 space-y-4">
             <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">ელფოსტა</span>
+              <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("common.email")}</span>
               <input
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#D4A843] focus:ring-2"
-                placeholder="მაგ: user@gigori.ge"
+                placeholder="მაგ: user@hira.ge"
               />
             </label>
 
             <label className="block">
               <div className="mb-1 flex items-center justify-between">
-                <span className="text-sm font-semibold text-[#1B2B4B]">პაროლი</span>
+                <span className="text-sm font-semibold text-[#1B2B4B]">{t("common.password")}</span>
                 <Link to="/forgot-password" className="text-xs font-semibold text-[#0088FF] hover:underline">
-                  დაგავიწყდა პაროლი?
+                  {t("auth.forgotPassword")}
                 </Link>
               </div>
               <div className="relative">
@@ -353,14 +365,14 @@ function LoginPage() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 className="h-11 w-full rounded-lg border border-slate-300 px-3 pr-12 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
-                placeholder="შეიყვანე პაროლი"
+                placeholder={t("auth.enterPassword")}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((prev) => !prev)}
                 className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs text-slate-500"
               >
-                {showPassword ? "დამალვა" : "ჩვენება"}
+                {showPassword ? t("common.hide") : t("common.show")}
               </button>
               </div>
             </label>
@@ -377,17 +389,17 @@ function LoginPage() {
               className="h-11 w-full rounded-lg bg-[#0088FF] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC] disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isSubmitting
-                ? "მიმდინარეობს..."
+                ? t("common.inProgress")
                 : cooldownSeconds > 0
-                  ? `სცადე ${cooldownSeconds} წამში`
-                  : "შესვლა"}
+                  ? t("auth.tryAgainIn", { seconds: cooldownSeconds })
+                  : t("nav.login")}
             </button>
           </form>
 
           <p className="mt-5 text-center text-sm text-slate-600">
-            ჯერ არ გაქვს ანგარიში?{" "}
+            {t("auth.noAccountYet")}{" "}
             <Link to="/register" className="font-semibold text-[#0088FF] hover:underline">
-              რეგისტრაცია
+              {t("nav.register")}
             </Link>
           </p>
         </div>
@@ -397,6 +409,7 @@ function LoginPage() {
 }
 
 function RegisterPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [step, setStep] = useState<1 | 2>(1)
   const [userType, setUserType] = useState<"freelancer" | "hirer" | null>(null)
@@ -415,8 +428,8 @@ function RegisterPage() {
   const registerInFlightRef = useRef(false)
 
   useEffect(() => {
-    document.title = "რეგისტრაცია — გიგორი"
-  }, [])
+    document.title = t("auth.registerTitle")
+  }, [t])
 
   useEffect(() => {
     if (!cooldownUntil) {
@@ -448,25 +461,25 @@ function RegisterPage() {
     }
 
     if (!isSupabaseConfigured || !supabase) {
-      setError("Supabase პარამეტრები ვერ მოიძებნა. შეამოწმე .env ფაილი.")
+      setError(t("validation.supabaseMissing"))
       return
     }
 
     if (cooldownUntil && Date.now() < cooldownUntil) {
       const secondsLeft = Math.ceil((cooldownUntil - Date.now()) / 1000)
-      setError(`ზედმეტი მცდელობები დაფიქსირდა. სცადე ${secondsLeft} წამში.`)
+      setError(t("validation.rateLimitedSeconds", { seconds: secondsLeft }))
       return
     }
 
     if (!userType) {
-      setError("გთხოვთ აირჩიოთ ანგარიშის ტიპი.")
+      setError(t("validation.selectAccountType"))
       return
     }
 
     const fullNameResult = validateTextField(fullName, {
       min: LIMITS.fullNameMin,
       max: LIMITS.fullName,
-      label: "სახელი",
+      label: t("common.fullName"),
     })
     if (fullNameResult.ok === false) {
       setError(fullNameResult.message)
@@ -483,15 +496,15 @@ function RegisterPage() {
       return
     }
     if (passwordResult.value !== confirmPassword) {
-      setError("პაროლები ერთმანეთს არ ემთხვევა.")
+      setError(t("validation.passwordsMismatch"))
       return
     }
-    const cityResult = validateTextField(city, { max: LIMITS.city, label: "ქალაქი" })
+    const cityResult = validateTextField(city, { max: LIMITS.city, label: t("common.city") })
     if (cityResult.ok === false) {
       setError(cityResult.message)
       return
     }
-    const phoneResult = validateOptionalTextField(phone, { max: LIMITS.phone, label: "ტელეფონი" })
+    const phoneResult = validateOptionalTextField(phone, { max: LIMITS.phone, label: t("common.phone") })
     if (phoneResult.ok === false) {
       setError(phoneResult.message)
       return
@@ -526,7 +539,7 @@ function RegisterPage() {
       const rateCheck = await consumeAuthRateLimit("register", formData.email)
       if (rateCheck.ok === false) {
         setCooldownUntil(authCooldownUntil(rateCheck.retryAfterSeconds))
-        setError(`ზედმეტი მცდელობები დაფიქსირდა. გთხოვ, სცადე ${rateCheck.retryAfterSeconds} წამში.`)
+        setError(t("validation.rateLimitedSeconds", { seconds: rateCheck.retryAfterSeconds }))
         return
       }
 
@@ -542,16 +555,16 @@ function RegisterPage() {
         if (message.includes("user already registered")) {
           setError("ეს ელფოსტა უკვე გამოყენებულია.")
         } else if (message.includes("invalid email")) {
-          setError("ელფოსტის ფორმატი არასწორია.")
+          setError(t("validation.emailInvalid"))
         } else if (isAuthRateLimited(registerError.status, registerError.message)) {
           setCooldownUntil(authCooldownUntil())
-          setError("ზედმეტი მცდელობები დაფიქსირდა. გთხოვ, სცადე 15 წუთში.")
+          setError(t("validation.rateLimited"))
         } else if (message.includes("email signups are disabled")) {
           setError("ელფოსტით რეგისტრაცია გათიშულია Supabase პროექტში.")
         } else if (message.includes("password")) {
           setError("პაროლი არ აკმაყოფილებს მოთხოვნებს.")
         } else {
-          setError(`რეგისტრაცია ვერ მოხერხდა: ${registerError.message}`)
+          setError(t("validation.registerFailed"))
         }
         return
       }
@@ -581,9 +594,9 @@ function RegisterPage() {
     <div className="min-h-screen bg-[#F8F9FC] page-enter">
       <div className="mx-auto w-full max-w-3xl px-4 py-10 md:px-6 md:py-14">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-8">
-          <h1 className="text-[28px] font-bold text-[#0088FF] md:text-4xl">რეგისტრაცია</h1>
+          <h1 className="text-[28px] font-bold text-[#0088FF] md:text-4xl">{t("auth.registerHeading")}</h1>
           <p className="mt-2 text-sm text-slate-500">
-            ნაბიჯი {step}/2 — შექმენი ანგარიში გიგორზე.
+            {t("auth.registerStep", { step })}
           </p>
 
           {step === 1 ? (
@@ -596,9 +609,9 @@ function RegisterPage() {
                 }}
                 className="rounded-xl border-2 border-slate-200 p-5 text-left transition hover:border-[#D4A843] hover:bg-amber-50"
               >
-                <p className="text-xl font-bold text-[#1B2B4B]">ფრილანსერი</p>
+                <p className="text-xl font-bold text-[#1B2B4B]">{t("auth.freelancer")}</p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  შემოგვიერთდი როგორც სპეციალისტი, მიიღე შეკვეთები და გაზარდე შემოსავალი.
+                  {t("auth.freelancerDesc")}
                 </p>
               </button>
 
@@ -610,30 +623,30 @@ function RegisterPage() {
                 }}
                 className="rounded-xl border-2 border-slate-200 p-5 text-left transition hover:border-[#D4A843] hover:bg-amber-50"
               >
-                <p className="text-xl font-bold text-[#1B2B4B]">დამქირავებელი</p>
+                <p className="text-xl font-bold text-[#1B2B4B]">{t("auth.hirer")}</p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  განათავსე პროექტები, იპოვე პროფესიონალი ფრილანსერები და დაიქირავე სწრაფად.
+                  {t("auth.hirerDesc")}
                 </p>
               </button>
             </div>
           ) : (
             <form onSubmit={handleRegister} className="mt-7 space-y-4">
               <div className="rounded-lg border border-[#D4A843]/40 bg-amber-50 px-4 py-2 text-sm text-[#1B2B4B]">
-                არჩეული ტიპი:{" "}
+                {t("auth.selectedType")}{" "}
                 <span className="font-semibold">
-                  {userType === "freelancer" ? "ფრილანსერი" : "დამქირავებელი"}
+                  {userType === "freelancer" ? t("auth.freelancer") : t("auth.hirer")}
                 </span>
                 <button
                   type="button"
                   onClick={() => setStep(1)}
                   className="ml-3 font-semibold text-[#D4A843] hover:underline"
                 >
-                  შეცვლა
+                  {t("common.change")}
                 </button>
               </div>
 
               <label className="block">
-                <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">სრული სახელი</span>
+                <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("common.fullName")}</span>
                 <input
                   type="text"
                   value={fullName}
@@ -643,7 +656,7 @@ function RegisterPage() {
               </label>
 
               <label className="block">
-                <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">ელფოსტა</span>
+                <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("common.email")}</span>
                 <input
                   type="email"
                   value={email}
@@ -654,7 +667,7 @@ function RegisterPage() {
 
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="block">
-                  <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">პაროლი</span>
+                  <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("common.password")}</span>
                   <div className="relative">
                   <input
                     type={showPassword ? "text" : "password"}
@@ -663,13 +676,13 @@ function RegisterPage() {
                     className="h-11 w-full rounded-lg border border-slate-300 px-3 pr-12 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
                   />
                   <button type="button" onClick={() => setShowPassword((prev) => !prev)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs text-slate-500">
-                    {showPassword ? "დამალვა" : "ჩვენება"}
+                    {showPassword ? t("common.hide") : t("common.show")}
                   </button>
                   </div>
                 </label>
                 <label className="block">
                   <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">
-                    გაიმეორე პაროლი
+                    {t("auth.confirmPassword")}
                   </span>
                   <div className="relative">
                   <input
@@ -679,7 +692,7 @@ function RegisterPage() {
                     className="h-11 w-full rounded-lg border border-slate-300 px-3 pr-12 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
                   />
                   <button type="button" onClick={() => setShowConfirmPassword((prev) => !prev)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs text-slate-500">
-                    {showConfirmPassword ? "დამალვა" : "ჩვენება"}
+                    {showConfirmPassword ? t("common.hide") : t("common.show")}
                   </button>
                   </div>
                 </label>
@@ -687,7 +700,7 @@ function RegisterPage() {
 
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="block">
-                  <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">ქალაქი / ლოკაცია</span>
+                  <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("common.city")}</span>
                   <LocationFilterSelect
                     value={city}
                     onChange={setCity}
@@ -697,7 +710,7 @@ function RegisterPage() {
                 </label>
                 <label className="block">
                   <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">
-                    ტელეფონი (არასავალდებულო)
+                    {t("auth.phoneOptional")}
                   </span>
                   <input
                     type="tel"
@@ -720,18 +733,18 @@ function RegisterPage() {
                 className="h-11 w-full rounded-lg bg-[#0088FF] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC] disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {isSubmitting
-                  ? "მიმდინარეობს..."
+                  ? t("common.inProgress")
                   : cooldownSeconds > 0
-                    ? `სცადე ${cooldownSeconds} წამში`
-                    : "რეგისტრაცია"}
+                    ? t("auth.tryAgainIn", { seconds: cooldownSeconds })
+                    : t("nav.register")}
               </button>
             </form>
           )}
 
           <p className="mt-6 text-center text-sm text-slate-600">
-            უკვე გაქვს ანგარიში?{" "}
+            {t("auth.alreadyHaveAccount")}{" "}
             <Link to="/login" className="font-semibold text-[#D4A843] hover:underline">
-              შესვლა
+              {t("nav.login")}
             </Link>
           </p>
         </div>
@@ -786,6 +799,12 @@ function App() {
           <Route path="/cv/:slug" element={<PublicCVPage />} />
           <Route path="/hirers" element={<HirersPage />} />
           <Route path="/hirer/:id" element={<HirerPublicPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/cookies" element={<CookiesPage />} />
+          <Route path="/guide" element={<GuidePage />} />
+          <Route path="/faq" element={<FaqPage />} />
           <Route path="/freelancer/:slug" element={<FreelancerProfilePage />} />
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/job/:id" element={<JobDetailPage />} />
@@ -917,6 +936,7 @@ function App() {
       <>
         {routes}
         <Footer />
+        <CookieBanner />
       </>
     )
   }
@@ -925,6 +945,7 @@ function App() {
     <PayPalScriptProvider options={paypalProviderOptions}>
       {routes}
       <Footer />
+      <CookieBanner />
     </PayPalScriptProvider>
   )
 }

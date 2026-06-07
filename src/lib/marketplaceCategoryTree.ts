@@ -2,6 +2,7 @@
 export type CategoryBranchRow = {
   id: string
   name_ka: string
+  name_en?: string | null
   parent_id: string | null
 }
 

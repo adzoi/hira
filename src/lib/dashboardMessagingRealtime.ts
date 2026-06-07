@@ -1,4 +1,5 @@
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js"
+import { subscribeRealtimeChannel } from "./realtimeAuth.ts"
 
 /**
  * Subscribes to listing inquiries and job applications. RLS on the tables determines
@@ -9,7 +10,7 @@ export function subscribeToDashboardMessaging(
   channelKey: string,
   onActivity: () => void,
 ): RealtimeChannel {
-  return client
+  const channel = client
     .channel(`dashboard-messaging:${channelKey}`)
     .on("postgres_changes", { event: "*", schema: "public", table: "service_inquiries" }, () => {
       onActivity()
@@ -17,5 +18,6 @@ export function subscribeToDashboardMessaging(
     .on("postgres_changes", { event: "*", schema: "public", table: "job_applications" }, () => {
       onActivity()
     })
-    .subscribe()
+
+  return subscribeRealtimeChannel(client, channel)
 }

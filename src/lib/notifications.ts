@@ -1,5 +1,6 @@
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js"
 import type { Json } from "./database.types.ts"
+import { subscribeRealtimeChannel } from "./realtimeAuth.ts"
 
 export type AppNotification = {
   id: string
@@ -11,6 +12,11 @@ export type AppNotification = {
   created_at: string
   /** Present when inserted from DB (e.g. job_application modal). */
   payload?: Json | null
+}
+
+/** Chat messages use the chat icon; they must not appear on the bell. */
+export function isBellNotification(n: Pick<AppNotification, "type">): boolean {
+  return n.type !== "chat_message"
 }
 
 function mapRow(row: Record<string, unknown>): AppNotification {
@@ -39,6 +45,7 @@ export async function fetchNotifications(client: SupabaseClient): Promise<AppNot
     .from("notifications")
     .select("id,title,body,link,type,is_read,created_at,payload")
     .eq("user_id", user.id)
+    .neq("type", "chat_message")
     .order("created_at", { ascending: false })
     .limit(30)
 
@@ -82,12 +89,13 @@ export function subscribeToNotifications(
   userId: string,
   handlers: NotificationRealtimeHandlers,
 ): RealtimeChannel {
-  const filter = `user_id=eq.${userId}`
   const suffix =
     typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(16).slice(2)}`
   const channel = client.channel(`notifications:${userId}:${suffix}`)
+
+  const isForUser = (row: Record<string, unknown>) => String(row.user_id ?? "") === userId
 
   channel.on(
     "postgres_changes",
@@ -95,12 +103,13 @@ export function subscribeToNotifications(
       event: "INSERT",
       schema: "public",
       table: "notifications",
-      filter,
     },
     (payload) => {
       const row = payload.new as Record<string, unknown>
-      if (!row?.id) return
-      handlers.onInsert(mapRow(row))
+      if (!row?.id || !isForUser(row)) return
+      const n = mapRow(row)
+      if (!isBellNotification(n)) return
+      handlers.onInsert(n)
     },
   )
 
@@ -110,12 +119,13 @@ export function subscribeToNotifications(
       event: "UPDATE",
       schema: "public",
       table: "notifications",
-      filter,
     },
     (payload) => {
       const row = payload.new as Record<string, unknown>
-      if (!row?.id) return
-      handlers.onUpdate(mapRow(row))
+      if (!row?.id || !isForUser(row)) return
+      const n = mapRow(row)
+      if (!isBellNotification(n)) return
+      handlers.onUpdate(n)
     },
   )
 
@@ -125,7 +135,6 @@ export function subscribeToNotifications(
       event: "DELETE",
       schema: "public",
       table: "notifications",
-      filter,
     },
     (payload) => {
       const row = payload.old as Record<string, unknown>
@@ -135,6 +144,5 @@ export function subscribeToNotifications(
     },
   )
 
-  channel.subscribe()
-  return channel
+  return subscribeRealtimeChannel(client, channel)
 }

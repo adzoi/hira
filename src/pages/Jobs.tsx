@@ -25,7 +25,9 @@ import {
   type CategoryBranchRow,
 } from "../lib/marketplaceCategoryTree.ts"
 import { formatJobBudget, PRICE_TYPE_LABELS } from "../lib/listingPrice.ts"
+import { pickListingDescription, pickListingTitle } from "../lib/listingLocale.ts"
 import { normalizeSearchInput } from "../lib/validation.ts"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
 
 type SortOption = "newest" | "budget_high" | "budget_low" | "applicants" | "deadline"
 type BudgetType = "fixed" | "hourly" | "monthly"
@@ -35,7 +37,9 @@ type JobItem = {
   id: string
   categoryId: string
   title: string
+  titleEn: string | null
   description: string
+  descriptionEn: string | null
   imagePath: string | null
   createdAt: string
   budgetType: string
@@ -69,6 +73,7 @@ const mockJobs: JobItem[] = [
     id: "1",
     categoryId: "mock-programming",
     title: "React Developer საჭიროა E-Commerce პროექტისთვის",
+    titleEn: null,
     companyName: "TechStart Georgia",
     city: "თბილისი",
     categoryName: "პროგრამირება",
@@ -76,6 +81,7 @@ const mockJobs: JobItem[] = [
     subcategoryId: null,
     description:
       "გვჭირდება გამოცდილი React დეველოპერი ონლაინ მაღაზიის შესაქმნელად. პროექტი მოიცავს პროდუქტების გვერდს, კალათას და გადახდის სისტემას.",
+    descriptionEn: null,
     imagePath: null,
     budgetMin: 800,
     budgetMax: 1500,
@@ -103,6 +109,7 @@ const mockJobs: JobItem[] = [
     id: "2",
     categoryId: "mock-design",
     title: "ლოგოს და ბრენდინგის დიზაინი სტარტაპისთვის",
+    titleEn: null,
     companyName: "Startup Hub Tbilisi",
     city: "თბილისი",
     categoryName: "დიზაინი",
@@ -110,6 +117,7 @@ const mockJobs: JobItem[] = [
     subcategoryId: null,
     description:
       "ვეძებთ კრეატიულ დიზაინერს ახალი ტექნოლოგიური სტარტაპის ვიზუალური იდენტობის შესაქმნელად. საჭიროა ლოგო, ფერთა პალიტრა და ბრენდბუქი.",
+    descriptionEn: null,
     imagePath: null,
     budgetMin: 300,
     budgetMax: 600,
@@ -137,6 +145,7 @@ const mockJobs: JobItem[] = [
     id: "3",
     categoryId: "mock-marketing",
     title: "სოციალური მედიის მენეჯერი თვიური თანამშრომლობით",
+    titleEn: null,
     companyName: "Café Leila",
     city: "თბილისი",
     categoryName: "მარკეტინგი",
@@ -144,6 +153,7 @@ const mockJobs: JobItem[] = [
     subcategoryId: null,
     description:
       "კაფეს სოციალური მედიის მართვა Instagram და Facebook-ზე. კვირაში 3-4 პოსტი, სტორიები, კომენტარებზე პასუხი. ქართული და ინგლისური ენები.",
+    descriptionEn: null,
     imagePath: null,
     budgetMin: 400,
     budgetMax: 400,
@@ -171,6 +181,7 @@ const mockJobs: JobItem[] = [
     id: "4",
     categoryId: "mock-writing",
     title: "ვებსაიტის ქართულ-ინგლისური თარგმანი",
+    titleEn: null,
     companyName: "Georgian Tours Ltd",
     city: "თბილისი",
     categoryName: "წერა და თარგმანი",
@@ -178,6 +189,7 @@ const mockJobs: JobItem[] = [
     subcategoryId: null,
     description:
       "80 გვერდიანი სატურისტო ვებსაიტის თარგმნა ინგლისურიდან ქართულზე. ტექსტი მოიცავს ტურების აღწერებს, ბლოგ პოსტებს და FAQ გვერდს.",
+    descriptionEn: null,
     imagePath: null,
     budgetMin: 200,
     budgetMax: 350,
@@ -258,7 +270,9 @@ function mapRpcRowsToJobs(jobRows: unknown[]): JobItem[] {
       id: String(row.id ?? ""),
       categoryId: String(row.category_id ?? ""),
       title: String(row.title ?? ""),
+      titleEn: row.title_en != null ? String(row.title_en).trim() || null : null,
       description: String(row.description ?? ""),
+      descriptionEn: row.description_en != null ? String(row.description_en).trim() || null : null,
       imagePath: imagePaths[0] ?? (row.image_path != null ? String(row.image_path) : null),
       createdAt: String(row.created_at ?? ""),
       budgetType: String(row.budget_type ?? ""),
@@ -364,6 +378,7 @@ async function loadJobsCatalogPage(category: string, page: number): Promise<Jobs
 }
 
 export default function JobsPage() {
+  const { t, locale } = useTranslation()
   const [searchParams] = useSearchParams()
 
   const [advancedDropdownOpen, setAdvancedDropdownOpen] = useState(false)
@@ -488,7 +503,7 @@ export default function JobsPage() {
   const jobsCategoryFilterSlot = (
     <div className="flex flex-wrap items-center gap-2">
       <label className="relative inline-flex h-10 min-w-[8.5rem] max-w-[10.5rem] shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 text-sm font-medium text-slate-600">
-        <span className="pointer-events-none min-w-0 flex-1 truncate">კატეგორია</span>
+        <span className="pointer-events-none min-w-0 flex-1 truncate">{t("common.category")}</span>
         <span className="shrink-0 text-slate-400">▾</span>
         <select
           value={filterRootCategoryId}
@@ -499,9 +514,9 @@ export default function JobsPage() {
             setFilterSpecializationId("")
           }}
           className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-          aria-label="კატეგორია"
+          aria-label={t("common.category")}
         >
-          <option value="">ყველა</option>
+          <option value="">{t("common.all")}</option>
           {categoryRootsList.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name_ka}
@@ -510,7 +525,7 @@ export default function JobsPage() {
         </select>
       </label>
       <label className="relative inline-flex h-10 min-w-[8.5rem] max-w-[10.5rem] shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 text-sm font-medium text-slate-600">
-        <span className="pointer-events-none min-w-0 flex-1 truncate">ქვეკატეგორია</span>
+        <span className="pointer-events-none min-w-0 flex-1 truncate">{t("common.subcategory")}</span>
         <span className="shrink-0 text-slate-400">▾</span>
         <select
           value={filterMidCategoryId}
@@ -520,14 +535,14 @@ export default function JobsPage() {
             setFilterSpecializationId("")
           }}
           className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
-          aria-label="ქვეკატეგორია"
+          aria-label={t("common.subcategory")}
         >
           <option value="">
             {!filterRootCategoryId
-              ? "ჯერ კატეგორია"
+              ? t("common.categoryFirst")
               : categoryMidsList.length === 0
-                ? "არ არის"
-                : "ყველა"}
+                ? t("common.none")
+                : t("common.all")}
           </option>
           {categoryMidsList.map((c) => (
             <option key={c.id} value={c.id}>
@@ -537,21 +552,21 @@ export default function JobsPage() {
         </select>
       </label>
       <label className="relative inline-flex h-10 min-w-[8.5rem] max-w-[11rem] shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 text-sm font-medium text-slate-600">
-        <span className="pointer-events-none min-w-0 flex-1 truncate">სპეციალიზაცია</span>
+        <span className="pointer-events-none min-w-0 flex-1 truncate">{t("common.specialization")}</span>
         <span className="shrink-0 text-slate-400">▾</span>
         <select
           value={filterSpecializationId}
           disabled={!specializationParentCategoryId || specializationOptions.length === 0}
           onChange={(event) => setFilterSpecializationId(event.target.value)}
           className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
-          aria-label="სპეციალიზაცია"
+          aria-label={t("common.specialization")}
         >
           <option value="">
             {!specializationParentCategoryId
-              ? "ჯერ ზემოთ"
+              ? t("common.selectAbove")
               : specializationOptions.length === 0
-                ? "არ არის"
-                : "ყველა"}
+                ? t("common.none")
+                : t("common.all")}
           </option>
           {specializationOptions.map((s) => (
             <option key={s.id} value={s.id}>
@@ -564,11 +579,11 @@ export default function JobsPage() {
   )
 
   useEffect(() => {
-    document.title = "სამუშაოები — გიგორი"
+    document.title = t("jobs.title")
     return () => {
-      document.title = "გიგორი"
+      document.title = t("brand.name")
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     const query = searchParams.get("q")
@@ -596,17 +611,23 @@ export default function JobsPage() {
 
   const budgetTypeLabels = PRICE_TYPE_LABELS
 
-  const locationLabelsLegacy: Record<string, string> = {
-    remote: "დისტანციური",
-    tbilisi: "თბილისი",
-    hybrid: "შერეული",
-    anywhere: "ნებისმიერი",
-  }
+  const durationLabels: Record<DurationType, string> = useMemo(
+    () => ({
+      one_time: t("jobDetail.oneTime"),
+      ongoing: t("jobDetail.ongoing"),
+    }),
+    [t],
+  )
 
-  const durationLabels: Record<DurationType, string> = {
-    one_time: "ერთჯერადი",
-    ongoing: "მიმდინარე",
-  }
+  const locationLabelsLegacy: Record<string, string> = useMemo(
+    () => ({
+      remote: t("common.remote"),
+      tbilisi: "თბილისი",
+      hybrid: t("common.hybrid"),
+      anywhere: t("common.anywhere"),
+    }),
+    [t],
+  )
 
   const topSkills = useMemo(() => {
     const count: Record<string, { id: string; name: string; n: number }> = {}
@@ -715,7 +736,9 @@ export default function JobsPage() {
       const matchesSearch =
         search.length === 0 ||
         job.title.toLowerCase().includes(search) ||
+        (job.titleEn ?? "").toLowerCase().includes(search) ||
         job.description.toLowerCase().includes(search) ||
+        (job.descriptionEn ?? "").toLowerCase().includes(search) ||
         skillsBlob.includes(search) ||
         taxonomyBlob.includes(search) ||
         (cityBlob.length > 0 && cityBlob.includes(search))
@@ -825,17 +848,17 @@ export default function JobsPage() {
             showPageHeader={false}
             searchValue={searchText}
             onSearchChange={(value) => setSearchText(normalizeSearchInput(value))}
-            searchPlaceholder="სათაური, აღწერა, უნარები, კატეგორია..."
+            searchPlaceholder={t("jobs.searchPlaceholder")}
             categorySlot={jobsCategoryFilterSlot}
             locationDisplay={appliedLocationFilter}
             sortValue={sortBy}
             onSortChange={(value) => setSortBy(value as SortOption)}
             sortOptions={[
-              { value: "newest", label: "ახალი" },
-              { value: "budget_high", label: "ბიუჯეტი: მაღალი" },
-              { value: "budget_low", label: "ბიუჯეტი: დაბალი" },
-              { value: "applicants", label: "განმცხადებლები" },
-              { value: "deadline", label: "ვადა იწურება" },
+              { value: "newest", label: t("jobs.sortNew") },
+              { value: "budget_high", label: t("jobs.budgetHigh") },
+              { value: "budget_low", label: t("jobs.budgetLow") },
+              { value: "applicants", label: t("common.sortApplicants") },
+              { value: "deadline", label: t("jobs.deadlineSoon") },
             ]}
             advancedDropdownOpen={advancedDropdownOpen}
             advancedFilterCount={advancedFilterCount}
@@ -847,7 +870,7 @@ export default function JobsPage() {
             childrenAdvancedBody={
             <>
               <div>
-                <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">უნარები</p>
+                <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">{t("common.skills")}</p>
                 <div className="max-h-36 space-y-2 overflow-auto rounded-lg border border-slate-200 p-2">
                   {topSkills.map((skill) => (
                     <label key={skill.id} className="flex items-center gap-2 text-sm text-slate-700">
@@ -859,7 +882,7 @@ export default function JobsPage() {
               </div>
 
               <div>
-                <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">ბიუჯეტის ტიპი</p>
+                <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">{t("jobs.budgetType")}</p>
                 <div className="space-y-2">
                   {(Object.keys(budgetTypeLabels) as BudgetType[]).map((key) => (
                     <label key={key} className="flex items-center gap-2 text-sm text-slate-700">
@@ -871,14 +894,14 @@ export default function JobsPage() {
               </div>
 
               <div>
-                <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">ბიუჯეტის დიაპაზონი (₾)</p>
+                <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">{t("jobs.budgetRange")} (₾)</p>
                 <div className="grid grid-cols-2 gap-2">
                   <input
                     type="number"
                     min={0}
                     value={draftBudgetMin}
                     onChange={(event) => setDraftBudgetMin(event.target.value)}
-                    placeholder="მინ"
+                    placeholder={t("common.min")}
                     className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
                   />
                   <input
@@ -886,14 +909,14 @@ export default function JobsPage() {
                     min={0}
                     value={draftBudgetMax}
                     onChange={(event) => setDraftBudgetMax(event.target.value)}
-                    placeholder="მაქს"
+                    placeholder={t("common.max")}
                     className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
                   />
                 </div>
               </div>
 
               <label className="block pb-1">
-                <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">ლოკაცია</span>
+                <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("common.location")}</span>
                 <LocationFilterSelect
                   value={draftLocationFilter}
                   onChange={setDraftLocationFilter}
@@ -902,7 +925,7 @@ export default function JobsPage() {
               </label>
 
               <div>
-                <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">ხანგრძლივობა</p>
+                <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">{t("jobs.duration")}</p>
                 <div className="space-y-2">
                   {(Object.keys(durationLabels) as DurationType[]).map((key) => (
                     <label key={key} className="flex items-center gap-2 text-sm text-slate-700">
@@ -914,7 +937,7 @@ export default function JobsPage() {
               </div>
 
               <label className="flex items-center justify-between rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-[#1B2B4B]">
-                <span>მხოლოდ გადაუდებელი</span>
+                <span>{t("common.urgentOnly")}</span>
                 <input type="checkbox" checked={draftUrgentOnly} onChange={(event) => setDraftUrgentOnly(event.target.checked)} />
               </label>
             </>
@@ -934,10 +957,10 @@ export default function JobsPage() {
           </div>
         ) : (
           <>
-            <p className="mt-6 text-sm font-medium text-slate-600">მოიძებნა {sortedJobs.length} განცხადება</p>
+            <p className="mt-6 text-sm font-medium text-slate-600">{t("jobs.found", { count: sortedJobs.length })}</p>
             {sortedJobs.length === 0 ? (
               <div className="mt-6">
-                <EmptyState message="განცხადებები ჯერ არ არის. იყავი პირველი!" actionLabel="ფილტრების გასუფთავება" onAction={clearFilters} />
+                <EmptyState message={t("jobs.empty")} actionLabel={t("common.clearFilters")} onAction={clearFilters} />
               </div>
             ) : (
               <div className="mt-6 space-y-4">
@@ -950,7 +973,7 @@ export default function JobsPage() {
                       {job.companyAvatar ? (
                         <img
                           src={avatarImageUrl(supabase, job.companyAvatar) ?? job.companyAvatar}
-                          alt={`${job.companyName} ავატარი`}
+                          alt={t("common.avatarAlt", { name: job.companyName })}
                           loading="lazy"
                           className="h-14 w-14 shrink-0 rounded-full object-cover"
                         />
@@ -974,7 +997,7 @@ export default function JobsPage() {
                           </div>
                           {job.isUrgent ? (
                             <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">
-                              გადაუდებელი
+                              {t("common.urgent")}
                             </span>
                           ) : null}
                         </div>
@@ -982,7 +1005,9 @@ export default function JobsPage() {
                     </div>
 
                     <Link to={`/job/${job.id}`} className="group mt-3 block">
-                      <h2 className="text-lg font-bold text-gray-900 group-hover:text-[#0088FF] md:text-xl">{job.title}</h2>
+                      <h2 className="text-lg font-bold text-gray-900 group-hover:text-[#0088FF] md:text-xl">
+                        {pickListingTitle({ title: job.title, titleEn: job.titleEn }, locale, job.title)}
+                      </h2>
                     </Link>
 
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -990,7 +1015,12 @@ export default function JobsPage() {
                       {job.subcategoryName ? <span className={tagChipClass}>{job.subcategoryName}</span> : null}
                     </div>
 
-                    <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-slate-600">{job.description}</p>
+                    <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-slate-600">
+                      {pickListingDescription(
+                        { description: job.description, descriptionEn: job.descriptionEn },
+                        locale,
+                      )}
+                    </p>
 
                     <div className="mt-3 flex flex-wrap gap-2">
                       {job.skills.slice(0, 3).map((skill) => (
@@ -1014,7 +1044,7 @@ export default function JobsPage() {
                             isDeadlineSoon(job.applicationDeadline) ? "font-medium text-red-600" : ""
                           }`}
                         >
-                          📅 ბოლო ვადა: {deadlineText(job.applicationDeadline)}
+                          📅 {t("jobs.lastDeadline", { date: deadlineText(job.applicationDeadline) })}
                         </span>
                       ) : null}
                     </div>
@@ -1025,7 +1055,7 @@ export default function JobsPage() {
                         to={`/job/${job.id}`}
                         className="inline-flex h-10 min-w-0 flex-1 items-center justify-center rounded-lg bg-[#0088FF] px-4 text-sm font-semibold text-white transition hover:bg-[#006ACC] sm:flex-none sm:px-5"
                       >
-                        დეტალების ნახვა
+                        {t("common.viewDetails")}
                       </Link>
                     </div>
                   </article>
@@ -1040,8 +1070,8 @@ export default function JobsPage() {
                   onClick={() => void fetchNextPage()}
                   className="h-11 rounded-lg border border-[#0088FF] px-4 text-sm font-semibold text-[#0088FF] transition hover:bg-[#E8F4FF] disabled:opacity-60"
                 >
-                  მეტის ჩატვირთვა
-                </button>
+                  {t("common.loadMore")}
+                  </button>
               </div>
             ) : null}
           </>

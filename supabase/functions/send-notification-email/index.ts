@@ -91,7 +91,7 @@ async function sendWithGmailSmtp(params: {
 
   try {
     // Keep subject pure ASCII — no Georgian — to avoid denomailer encoding it badly
-    const subject = "Gigori - New Notification"
+    const subject = "Hira - New Notification"
 
     // All Georgian goes inside the HTML body which denomailer sends as quoted-printable
     // but Gmail renders correctly as long as the subject is ASCII
@@ -102,10 +102,10 @@ async function sendWithGmailSmtp(params: {
 <body style="margin:0;padding:0;background:#f1f5f9;font-family:system-ui,-apple-system,sans-serif;">
   <div style="max-width:520px;margin:32px auto;background:#fff;border-radius:10px;overflow:hidden;">
     <div style="background:#0088FF;padding:16px 24px;">
-      <span style="color:#fff;font-size:20px;font-weight:700;">Gigori</span>
+      <span style="color:#fff;font-size:20px;font-weight:700;">Hira</span>
     </div>
     <div style="padding:28px 24px;color:#1B2B4B;line-height:1.6;">
-      <p style="font-size:15px;margin:0 0 20px;">You have a new notification on Gigori. Click below to check it.</p>
+      <p style="font-size:15px;margin:0 0 20px;">You have a new notification on Hira. Click below to check it.</p>
       <a href="${href}" style="display:inline-block;background:#0088FF;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:600;font-size:15px;">Check it</a>
     </div>
     <div style="padding:14px 24px;font-size:12px;color:#94a3b8;border-top:1px solid #e2e8f0;">
@@ -204,17 +204,17 @@ Deno.serve(async (req: Request) => {
   const href = safeNotificationHref(linkRaw, siteUrl)
 
   if (resendKey) {
-    const from = Deno.env.get("RESEND_FROM")?.trim() || "Gigori <onboarding@resend.dev>"
+    const from = Deno.env.get("RESEND_FROM")?.trim() || "Hira <onboarding@resend.dev>"
     const html = `<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#f1f5f9;font-family:system-ui,-apple-system,sans-serif;">
   <div style="max-width:520px;margin:32px auto;background:#fff;border-radius:10px;overflow:hidden;">
     <div style="background:#0088FF;padding:16px 24px;">
-      <span style="color:#fff;font-size:20px;font-weight:700;">Gigori</span>
+      <span style="color:#fff;font-size:20px;font-weight:700;">Hira</span>
     </div>
     <div style="padding:28px 24px;color:#1B2B4B;line-height:1.6;">
-      <p style="font-size:15px;margin:0 0 20px;">You have a new notification on Gigori.</p>
+      <p style="font-size:15px;margin:0 0 20px;">You have a new notification on Hira.</p>
       <a href="${escapeHtml(href)}" style="display:inline-block;background:#0088FF;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:600;font-size:15px;">Check it</a>
     </div>
     <div style="padding:14px 24px;font-size:12px;color:#94a3b8;border-top:1px solid #e2e8f0;">
@@ -223,7 +223,7 @@ Deno.serve(async (req: Request) => {
   </div>
 </body>
 </html>`
-    const r = await sendWithResend({ resendKey, from, to: email, subject: "Gigori - New Notification", html })
+    const r = await sendWithResend({ resendKey, from, to: email, subject: "Hira - New Notification", html })
     if (!r.ok) {
       console.error("[send-notification-email] Resend:", r.status, r.detail)
       return jsonResponse(req, { error: "Resend failed", detail: r.detail }, 502)
@@ -231,7 +231,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse(req, { ok: true, transport: "resend" })
   }
 
-  const fromHeader = Deno.env.get("GMAIL_SMTP_FROM")?.trim() || `Gigori <${gmailUser}>`
+  const fromHeader = Deno.env.get("GMAIL_SMTP_FROM")?.trim() || `Hira <${gmailUser}>`
   const g = await sendWithGmailSmtp({ to: email, gmailUser, gmailAppPassword, fromHeader })
   if (!g.ok) {
     console.error("[send-notification-email] Gmail SMTP:", g.detail)

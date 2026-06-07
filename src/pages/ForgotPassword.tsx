@@ -9,8 +9,10 @@ import {
   isAuthRateLimited,
 } from "../lib/authRateLimit"
 import { validateEmail } from "../lib/validation.ts"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
 
 export default function ForgotPasswordPage() {
+  const { t } = useTranslation()
   const [email, setEmail] = useState("")
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
@@ -19,8 +21,8 @@ export default function ForgotPasswordPage() {
   const [cooldownSeconds, setCooldownSeconds] = useState(0)
 
   useEffect(() => {
-    document.title = "პაროლის აღდგენა — გიგორი"
-  }, [])
+    document.title = t("auth.forgotTitle")
+  }, [t])
 
   useEffect(() => {
     if (!cooldownUntil) {
@@ -48,7 +50,7 @@ export default function ForgotPasswordPage() {
     setError("")
 
     if (!isSupabaseConfigured || !supabase) {
-      setError("Supabase პარამეტრები ვერ მოიძებნა. შეამოწმე .env ფაილი.")
+      setError(t("validation.supabaseMissing"))
       return
     }
 
@@ -61,7 +63,7 @@ export default function ForgotPasswordPage() {
 
     if (cooldownUntil && Date.now() < cooldownUntil) {
       const secondsLeft = Math.ceil((cooldownUntil - Date.now()) / 1000)
-      setError(`ზედმეტი მცდელობები დაფიქსირდა. სცადე ${secondsLeft} წამში.`)
+      setError(t("validation.rateLimitedSeconds", { seconds: secondsLeft }))
       return
     }
 
@@ -70,7 +72,7 @@ export default function ForgotPasswordPage() {
       const rateCheck = await consumeAuthRateLimit("recover", trimmed)
       if (!rateCheck.ok) {
         setCooldownUntil(authCooldownUntil(rateCheck.retryAfterSeconds))
-        setError(`ზედმეტი მცდელობები დაფიქსირდა. გთხოვ, სცადე ${rateCheck.retryAfterSeconds} წამში.`)
+        setError(t("validation.rateLimitedSeconds", { seconds: rateCheck.retryAfterSeconds }))
         return
       }
 
@@ -79,13 +81,13 @@ export default function ForgotPasswordPage() {
       if (resetErr) {
         if (isAuthRateLimited(resetErr.status, resetErr.message)) {
           setCooldownUntil(authCooldownUntil())
-          throw new Error("ზედმეტი მცდელობები დაფიქსირდა. გთხოვ, სცადე 15 წუთში.")
+          throw new Error(t("validation.rateLimited"))
         }
         throw resetErr
       }
       setSent(true)
     } catch (e) {
-      setError(e instanceof Error ? e.message : "მოთხოვნა ვერ გაიგზავნა. სცადეთ მოგვიანებით.")
+      setError(e instanceof Error ? e.message : t("auth.requestFailed"))
     } finally {
       setBusy(false)
     }
@@ -96,26 +98,24 @@ export default function ForgotPasswordPage() {
       <Navbar />
       <div className="mx-auto w-full max-w-xl px-4 py-10 md:px-6 md:py-16">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-8">
-          <h1 className="text-[26px] font-bold text-[#1B2B4B] md:text-4xl">პაროლის აღდგენა</h1>
-          <p className="mt-2 text-sm text-slate-600">
-            მიუთითეთ ელფოსტა, რომლითაც დარეგისტრირებული ხართ. იქ მიიღებთ ბმულს ახალი პაროლის შესაყენებლად. თუ წერილი არ ჩანს, შეამოწმეთ Spam.
-          </p>
+          <h1 className="text-[26px] font-bold text-[#1B2B4B] md:text-4xl">{t("auth.forgotHeading")}</h1>
+          <p className="mt-2 text-sm text-slate-600">{t("auth.forgotHintLong")}</p>
 
           {sent ? (
             <div className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-              თუ ეს მისამართი დარეგისტრირებულია გიგორზე, ბმული უკვე გამოიგზავნა. გახსენით და მიუთითეთ ახალი პაროლი.
+              {t("auth.linkSentLong")}
             </div>
           ) : (
             <form onSubmit={submit} className="mt-6 space-y-4">
               <label className="block">
-                <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">ელფოსტა</span>
+                <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("common.email")}</span>
                 <input
                   type="email"
                   value={email}
                   autoComplete="email"
                   onChange={(e) => setEmail(e.target.value)}
                   className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#D4A843] focus:ring-2"
-                  placeholder="მაგ: user@gigori.ge"
+                  placeholder="user@hira.ge"
                 />
               </label>
               {error ? (
@@ -127,17 +127,17 @@ export default function ForgotPasswordPage() {
                 className="h-11 w-full rounded-lg bg-[#1B2B4B] text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {busy
-                  ? "მიმდინარეობს..."
+                  ? t("common.inProgress")
                   : cooldownSeconds > 0
-                    ? `სცადე ${cooldownSeconds} წამში`
-                    : "ბმულის გაგზავნა"}
+                    ? t("auth.tryAgainIn", { seconds: cooldownSeconds })
+                    : t("auth.sendLink")}
               </button>
             </form>
           )}
 
           <p className="mt-6 text-center text-sm text-slate-600">
             <Link to="/login" className="font-semibold text-[#D4A843] hover:underline">
-              ← შესვლის გვერდზე დაბრუნება
+              {t("auth.backToLogin")}
             </Link>
           </p>
         </div>

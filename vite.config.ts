@@ -11,7 +11,7 @@ const isDev = process.env.NODE_ENV !== 'production'
 function securityHeadersPlugin() {
   let forDev = isDev
   return {
-    name: 'gigori-security-headers',
+    name: 'hira-security-headers',
     configResolved(config: ResolvedConfig) {
       forDev = config.command === 'serve'
     },

@@ -36,9 +36,13 @@ function oneLine(raw: unknown, max = 120): string {
 
 function stripServiceMeta(raw: unknown): string {
   const value = String(raw ?? "")
-  const prefix = "<!--gigori-meta:"
   const suffix = "-->"
-  if (!value.startsWith(prefix)) return value
+  const prefix = value.startsWith("<!--hira-meta:")
+    ? "<!--hira-meta:"
+    : value.startsWith("<!--gigori-meta:")
+      ? "<!--gigori-meta:"
+      : null
+  if (!prefix) return value
   const endIdx = value.indexOf(suffix)
   if (endIdx < 0) return value
   return value.slice(endIdx + suffix.length).trim()

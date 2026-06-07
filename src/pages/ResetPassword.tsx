@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom"
 import Navbar from "../components/Navbar.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { validatePassword } from "../lib/validation.ts"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
 
 function recoveryHintFromBrowser(): boolean {
   if (typeof window === "undefined") return false
@@ -15,6 +16,7 @@ function recoveryHintFromBrowser(): boolean {
 }
 
 export default function ResetPasswordPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const recoveryHintRef = useRef(recoveryHintFromBrowser())
   const [password, setPassword] = useState("")
@@ -26,8 +28,8 @@ export default function ResetPasswordPage() {
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    document.title = "ახალი პაროლი — გიგორი"
-  }, [])
+    document.title = t("auth.resetTitle")
+  }, [t])
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
@@ -70,14 +72,14 @@ export default function ResetPasswordPage() {
       if (!cancelled) setChecking(false)
     })()
 
-    const t = window.setTimeout(() => {
+    const timeoutId = window.setTimeout(() => {
       if (cancelled) return
       setChecking(false)
     }, 2500)
 
     return () => {
       cancelled = true
-      window.clearTimeout(t)
+      window.clearTimeout(timeoutId)
       data.subscription.unsubscribe()
     }
   }, [])
@@ -93,7 +95,7 @@ export default function ResetPasswordPage() {
       return
     }
     if (passwordResult.value !== confirm) {
-      setError("პაროლები არ ემთხვევა ერთმანეთს.")
+      setError(t("validation.passwordsMismatch"))
       return
     }
 
@@ -104,7 +106,7 @@ export default function ResetPasswordPage() {
       await supabase.auth.signOut({ scope: "local" }).catch(() => {})
       navigate("/login", { replace: true, state: { reason: "password-reset" as const } })
     } catch (e) {
-      setError(e instanceof Error ? e.message : "პაროლი ვერ შეინახვა.")
+      setError(e instanceof Error ? e.message : t("auth.passwordSaveFailed"))
     } finally {
       setBusy(false)
     }
@@ -115,9 +117,9 @@ export default function ResetPasswordPage() {
       <div className="min-h-screen bg-[#F8F9FC] page-enter">
         <Navbar />
         <div className="mx-auto w-full max-w-xl px-4 py-16 text-center text-sm text-slate-700">
-          Supabase არ არის კონფიგურირებული.
+          {t("auth.supabaseNotConfigured")}
           <Link to="/login" className="mt-4 block font-semibold text-[#D4A843] hover:underline">
-            შესვლა
+            {t("nav.login")}
           </Link>
         </div>
       </div>
@@ -129,25 +131,25 @@ export default function ResetPasswordPage() {
       <Navbar />
       <div className="mx-auto w-full max-w-xl px-4 py-10 md:px-6 md:py-16">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-8">
-          <h1 className="text-[26px] font-bold text-[#1B2B4B] md:text-4xl">ახალი პაროლი</h1>
+          <h1 className="text-[26px] font-bold text-[#1B2B4B] md:text-4xl">{t("auth.newPassword")}</h1>
 
           {checking ? (
-            <p className="mt-6 text-sm text-slate-600">მიმდინარეობს ბმულის შემოწმება…</p>
+            <p className="mt-6 text-sm text-slate-600">{t("auth.checkingLink")}</p>
           ) : !ready ? (
             <div className="mt-6 space-y-3 text-sm text-slate-700">
-              <p>აღდგენის ბმული არ იძებნება, ვადა გაუვიდა ან იგი უკვე გამოყენებული იყო.</p>
+              <p>{t("auth.invalidRecoveryLink")}</p>
               <Link to="/forgot-password" className="font-semibold text-[#D4A843] hover:underline">
-                ხელახლა მოთხოვნა
+                {t("auth.requestAgain")}
               </Link>
               {" · "}
               <Link to="/login" className="font-semibold text-[#1B2B4B] hover:underline">
-                შესვლა
+                {t("nav.login")}
               </Link>
             </div>
           ) : (
             <form onSubmit={submit} className="mt-6 space-y-4">
               <label className="block">
-                <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">ახალი პაროლი</span>
+                <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("auth.newPassword")}</span>
                 <div className="relative">
                   <input
                     type={showPassword ? "text" : "password"}
@@ -155,26 +157,26 @@ export default function ResetPasswordPage() {
                     autoComplete="new-password"
                     onChange={(e) => setPassword(e.target.value)}
                     className="h-11 w-full rounded-lg border border-slate-300 px-3 pr-24 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
-                    placeholder="მინ. 6 სიმბოლო"
+                    placeholder={t("auth.passwordMinPlaceholder")}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
                     className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs text-slate-500"
                   >
-                    {showPassword ? "დამალვა" : "ჩვენება"}
+                    {showPassword ? t("common.hide") : t("common.show")}
                   </button>
                 </div>
               </label>
               <label className="block">
-                <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">გამეორება</span>
+                <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("auth.repeatPassword")}</span>
                 <input
                   type={showPassword ? "text" : "password"}
                   value={confirm}
                   autoComplete="new-password"
                   onChange={(e) => setConfirm(e.target.value)}
                   className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
-                  placeholder="გამეორე პაროლი"
+                  placeholder={t("auth.confirmPassword")}
                 />
               </label>
               {error ? (
@@ -185,7 +187,7 @@ export default function ResetPasswordPage() {
                 disabled={busy}
                 className="h-11 w-full rounded-lg bg-[#1B2B4B] text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {busy ? "მიმდინარეობს..." : "პაროლის შენახვა"}
+                {busy ? t("common.inProgress") : t("auth.savePassword")}
               </button>
             </form>
           )}

@@ -64,5 +64,5 @@ server.on("error", (err) => {
 })
 
 server.listen(port, host, () => {
-  console.log(`gigori listening on http://${host}:${port}`)
+  console.log(`hira listening on http://${host}:${port}`)
 })

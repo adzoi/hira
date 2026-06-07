@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
 import type { ProfileJobApplication, ProfileListingOffer } from "../lib/profileOffers.ts"
 
 function formatOfferDate(dateString: string) {
@@ -44,6 +45,8 @@ function OfferActions({
   onAccept: () => void
   onReject: () => void
 }) {
+  const { t } = useTranslation()
+
   return (
     <div className="mt-3 flex flex-wrap gap-2">
       <button
@@ -52,7 +55,7 @@ function OfferActions({
         onClick={onAccept}
         className="rounded-lg bg-[#1B2B4B] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:opacity-50"
       >
-        მიღება
+        {t("common.accept")}
       </button>
       <button
         type="button"
@@ -60,19 +63,19 @@ function OfferActions({
         onClick={onReject}
         className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
       >
-        უარყოფა
+        {t("common.decline")}
       </button>
     </div>
   )
 }
 
 export default function ProfilePendingOffers(props: ProfilePendingOffersProps) {
+  const { t } = useTranslation()
+
   if (props.offers.length === 0) return null
 
   const title =
-    props.variant === "listing"
-      ? "ამ დამქირავებლისგან გაქვთ შეთავაზება"
-      : "ამ ფრილანსერისგან გაქვთ განცხადება"
+    props.variant === "listing" ? t("offers.fromHirer") : t("offers.fromFreelancer")
 
   return (
     <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/80 p-5 shadow-sm">
@@ -97,7 +100,9 @@ export default function ProfilePendingOffers(props: ProfilePendingOffersProps) {
                 </div>
                 {offer.proposedBudget != null ? (
                   <p className="mt-2 text-sm text-slate-700">
-                    შემოთავაზებული: {offer.proposedBudget.toLocaleString("ka-GE")} ₾
+                    {t("common.proposedAmount", {
+                      amount: offer.proposedBudget.toLocaleString("ka-GE"),
+                    })}
                   </p>
                 ) : null}
                 {offer.message.trim() ? (

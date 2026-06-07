@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { avatarImageUrl } from "./storageImageUrl.ts"
+import { broadcastChatMessage } from "./chatBroadcast.ts"
 import { assertField, LIMITS, validateTextField, validateUuid } from "./validation.ts"
 
 export type ChatMessage = {
@@ -362,7 +363,7 @@ export async function sendMessage(client: SupabaseClient, conversationId: string
   if (error) throw error
 
   const createdAt = String(data.created_at)
-  return {
+  const message: ChatMessage = {
     id: String(data.id),
     conversationId: String(data.conversation_id),
     senderId: String(data.sender_id),
@@ -371,6 +372,33 @@ export async function sendMessage(client: SupabaseClient, conversationId: string
     isOwn: true,
     readByOther: false,
   }
+
+  void (async () => {
+    try {
+      const { data: conv } = await client
+        .from("conversations")
+        .select("participant_low, participant_high")
+        .eq("id", convId)
+        .maybeSingle()
+      if (!conv) return
+
+      const recipientId =
+        conv.participant_low === user.id ? conv.participant_high : conv.participant_low
+
+      const { data: profile } = await client
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .maybeSingle()
+
+      const senderName = profile?.full_name?.trim() || "მომხმარებელი"
+      await broadcastChatMessage(client, message, senderName, recipientId)
+    } catch (e) {
+      console.warn("[chat] broadcast:", e instanceof Error ? e.message : e)
+    }
+  })()
+
+  return message
 }
 
 export async function fetchUnreadConversationCount(client: SupabaseClient): Promise<number> {

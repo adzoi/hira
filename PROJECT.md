@@ -1,6 +1,6 @@
-# Gigori — Project Documentation
+# Hira — Project Documentation
 
-**Gigori** (გიგორი) is a Georgian-language freelance marketplace that connects **freelancers** (specialists offering services) with **hirers** (clients posting jobs or buying services). The product is built as a single-page React application backed by **Supabase** (Postgres, Auth, Storage, Realtime, Edge Functions) and deployed as a static frontend with a small Node static server.
+**Hira** (ჰირა) is a Georgian-language freelance marketplace that connects **freelancers** (specialists offering services) with **hirers** (clients posting jobs or buying services). The product is built as a single-page React application backed by **Supabase** (Postgres, Auth, Storage, Realtime, Edge Functions) and deployed as a static frontend with a small Node static server.
 
 This document explains what the system does, how it works, and why key design choices were made.
 
@@ -8,7 +8,7 @@ This document explains what the system does, how it works, and why key design ch
 
 ## Table of contents
 
-1. [What problem Gigori solves](#what-problem-gigori-solves)
+1. [What problem Hira solves](#what-problem-hira-solves)
 2. [High-level architecture](#high-level-architecture)
 3. [Tech stack](#tech-stack)
 4. [User types and roles](#user-types-and-roles)
@@ -32,7 +32,7 @@ This document explains what the system does, how it works, and why key design ch
 
 ---
 
-## What problem Gigori solves
+## What problem Hira solves
 
 Freelance work in Georgia lacks a dedicated, localized platform where:
 
@@ -41,7 +41,7 @@ Freelance work in Georgia lacks a dedicated, localized platform where:
 - Both sides can discover each other through search, categories, a home feed, and saved/bookmarked items.
 - Trust is built through **reviews**, **completed work history**, profile visits, and optional VIP promotion.
 
-Gigori addresses this with a bilingual-ready data model (Georgian UI, `name_ka` / `name_en` in categories), Georgian copy throughout the UI, and flows tuned for the local market (cities, GEL pricing display, PayPal USD capture where GEL checkout is unavailable).
+Hira addresses this with a bilingual-ready data model (Georgian UI, `name_ka` / `name_en` in categories), Georgian copy throughout the UI, and flows tuned for the local market (cities, GEL pricing display, PayPal USD capture where GEL checkout is unavailable).
 
 ---
 
@@ -203,7 +203,7 @@ Protected routes use `ProtectedRoute`, which checks `supabase.auth.getUser()` an
 
 ## Marketplace model: two sides of the platform
 
-Gigori runs two parallel marketplaces that mirror each other:
+Hira runs two parallel marketplaces that mirror each other:
 
 | Freelancer side | Hirer side |
 |-----------------|------------|
@@ -552,7 +552,7 @@ npm start
 ## Project directory layout
 
 ```
-gigori/
+hira/
 ├── src/
 │   ├── App.tsx              # Routes, home/login/register
 │   ├── main.tsx

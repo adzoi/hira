@@ -1,3 +1,5 @@
+import { useTranslation } from "../i18n/LocaleContext.tsx"
+
 type OptionalSocialUrlFieldProps = {
   label: string
   noLabel?: string
@@ -11,7 +13,7 @@ type OptionalSocialUrlFieldProps = {
 
 export default function OptionalSocialUrlField({
   label,
-  noLabel = "არ მაქვს",
+  noLabel,
   placeholder,
   value,
   onChange,
@@ -19,6 +21,9 @@ export default function OptionalSocialUrlField({
   onDisabledChange,
   hint,
 }: OptionalSocialUrlFieldProps) {
+  const { t } = useTranslation()
+  const resolvedNoLabel = noLabel ?? t("common.dontHaveOne")
+
   return (
     <div>
       <label className="mb-1 block text-base font-semibold text-gray-900">{label}</label>
@@ -32,7 +37,7 @@ export default function OptionalSocialUrlField({
             if (on) onChange("")
           }}
         />
-        {noLabel}
+        {resolvedNoLabel}
       </label>
       <input
         type="url"

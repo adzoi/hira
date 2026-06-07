@@ -1,5 +1,6 @@
 import { PayPalButtons } from "@paypal/react-paypal-js"
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type PointerEvent } from "react"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { VIP_JOB_TIERS, vipTierPayPalUsd, type VipJobTier } from "../lib/vipJobTiers.ts"
 
@@ -112,6 +113,7 @@ const VipTierPayPalPanel = memo(function VipTierPayPalPanel({
   e2eSkipServerActivation,
   onCheckoutSessionChange,
 }: VipTierPayPalPanelProps) {
+  const { t } = useTranslation()
   const cfg = VIP_JOB_TIERS[tier]
 
   /**
@@ -327,7 +329,7 @@ const VipTierPayPalPanel = memo(function VipTierPayPalPanel({
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-lg font-bold text-[#1B2B4B]">{TIER_LABELS[tier]} · გადახდა</p>
       <p className="mt-1 text-sm text-slate-600">
-        ₾{cfg.priceGel} (~${payUsd} USD PayPal) · {cfg.days} დღე featured
+        ₾{cfg.priceGel} (~${payUsd} USD PayPal) · {t("vip.daysFeatured", { days: cfg.days })}
       </p>
       <p className="mt-2 text-xs text-slate-500">PayPal · {cfg.currency}</p>
       <div className="mt-4 min-h-[140px]">
@@ -359,6 +361,7 @@ export default function VIPUpgrade({
   tiers: tiersProp,
   e2eSkipServerActivation,
 }: VIPUpgradeProps) {
+  const { t } = useTranslation()
   const [message, setMessage] = useState("")
   const [sdkIssue, setSdkIssue] = useState("")
   const [selectedTier, setSelectedTier] = useState<VipJobTier | null>(null)
@@ -391,13 +394,13 @@ export default function VIPUpgrade({
   }, [])
 
   const handlePaid = useCallback(() => {
-    setMessage("VIP წარმატებით ჩაირთო!")
+    setMessage(t("vip.success"))
     onSuccess()
     window.setTimeout(() => {
       setMessage("")
       onClose()
     }, 1200)
-  }, [onClose, onSuccess])
+  }, [onClose, onSuccess, t])
 
   const handleTierError = useCallback(
     (msg: string) => {
@@ -435,7 +438,7 @@ export default function VIPUpgrade({
         <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
           <p className="text-sm text-red-600">PayPal client ID არ არის დაყენებული (VITE_PAYPAL_CLIENT_ID).</p>
           <button type="button" onClick={onClose} className="mt-4 text-sm font-semibold text-[#1B2B4B] underline">
-            დახურვა
+            {t("common.close")}
           </button>
         </div>
       </div>
@@ -452,14 +455,14 @@ export default function VIPUpgrade({
       <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-slate-200 bg-[#F8F9FC] p-5 shadow-xl sm:p-6">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-xl font-bold text-[#1B2B4B]">VIP / Featured განცხადება</h2>
+            <h2 className="text-xl font-bold text-[#1B2B4B]">{t("vip.heading")}</h2>
             <p className="mt-1 text-sm text-slate-600 line-clamp-2">{jobTitle}</p>
           </div>
           <button
             type="button"
             onClick={requestClose}
             className="shrink-0 rounded-lg border border-slate-300 px-2 py-1 text-sm text-slate-600 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="დახურვა"
+            aria-label={t("common.close")}
             disabled={checkoutLocked}
             title={checkoutLocked ? "დახურვა შესაძლებელია გადახდის დასრულების შემდეგ" : undefined}
           >
@@ -478,7 +481,7 @@ export default function VIPUpgrade({
           ტესტირებისთვის გადახდა USD-ში ხდება. რეალურ რეჟიმში GEL იმუშავებს.
         </p>
 
-        <p className="mt-4 text-sm font-semibold text-[#1B2B4B]">1. აირჩიე ტარიფი</p>
+        <p className="mt-4 text-sm font-semibold text-[#1B2B4B]">{t("vip.choosePlan")}</p>
         <div className="mt-3 grid gap-4 md:grid-cols-3">
           {tiersToShow.map((tier) => {
             const cfg = VIP_JOB_TIERS[tier]
@@ -499,7 +502,9 @@ export default function VIPUpgrade({
                 <span className="mt-1 text-xl font-extrabold text-[#D4A843]">
                   ₾{cfg.priceGel} (~${vipTierPayPalUsd(tier)} USD)
                 </span>
-                <span className="mt-1 text-sm font-semibold text-slate-600">{cfg.days} დღე featured</span>
+                <span className="mt-1 text-sm font-semibold text-slate-600">
+                  {t("vip.daysFeatured", { days: cfg.days })}
+                </span>
               </button>
             )
           })}
@@ -508,7 +513,7 @@ export default function VIPUpgrade({
         {selectedTier ? (
           <div className="mt-6 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-[#1B2B4B]">2. გადახდა PayPal-ით</p>
+              <p className="text-sm font-semibold text-[#1B2B4B]">{t("vip.payPaypal")}</p>
               {tiersToShow.length > 1 ? (
                 <button
                   type="button"

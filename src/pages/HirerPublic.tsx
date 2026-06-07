@@ -12,7 +12,7 @@ import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import StartConversationButton from "../components/StartConversationButton.tsx"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
-import { formatCityForDisplay } from "../lib/marketplaceFilters.ts"
+import { formatCityForDisplay, formatIndustryForDisplay } from "../lib/marketplaceFilters.ts"
 import { safeExternalHref } from "../lib/validation.ts"
 import { formatJobBudget } from "../lib/listingPrice.ts"
 import ProfilePendingOffers from "../components/ProfilePendingOffers.tsx"
@@ -28,6 +28,7 @@ import {
 } from "../lib/queries/fetchHirerPublic.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
 
 function companyInitials(name: string) {
   const trimmed = name.trim()
@@ -52,6 +53,7 @@ function reviewerInitials(fullName: string) {
 
 
 export default function HirerPublicPage() {
+  const { t } = useTranslation()
   const { pushToast } = useToast()
   const navigate = useNavigate()
   const { id } = useParams()
@@ -152,8 +154,11 @@ export default function HirerPublicPage() {
   }, [canRespondToListingOffers, hirer?.id, viewerFreelancerProfileId])
 
   useEffect(() => {
-    document.title = data?.documentTitle ?? "დამქირავებლის პროფილი — გიგორი"
-  }, [data?.documentTitle])
+    document.title = data?.documentTitle ?? t("hirerPublic.title")
+    return () => {
+      document.title = t("brand.name")
+    }
+  }, [data?.documentTitle, t])
 
   useEffect(() => {
     if (!hirer?.ownerUserId || !isSupabaseConfigured || !supabase) {
@@ -336,9 +341,9 @@ export default function HirerPublicPage() {
     return (
       <div className="min-h-screen bg-[#F8F9FC]">
         <main className="mx-auto w-full max-w-[720px] px-4 py-16 text-center md:px-6">
-          <p className="text-xl font-bold text-[#1B2B4B]">დამქირავებელი ვერ მოიძებნა</p>
+          <p className="text-xl font-bold text-[#1B2B4B]">{t("hirerPublic.notFound")}</p>
           <Link to="/hirers" className="mt-6 inline-flex h-11 items-center rounded-lg bg-[#1B2B4B] px-5 text-sm font-semibold text-white">
-            ყველა დამქირავებელზე
+            {t("hirerPublic.allHirers")}
           </Link>
         </main>
       </div>
@@ -351,7 +356,7 @@ export default function HirerPublicPage() {
         <main className="mx-auto w-full max-w-[720px] px-4 py-8 md:px-6">
           {error || invalidId ? <ErrorState message={error || "არასწორი იდენტიფიკატორი."} /> : <ErrorState message="არასწორი ბმული." />}
           <Link to="/hirers" className="mt-6 inline-block text-sm font-semibold text-[#1B2B4B] hover:text-[#D4A843]">
-            ← დამქირავებლები
+            {t("hirerPublic.backToHirers")}
           </Link>
         </main>
       </div>
@@ -372,7 +377,7 @@ export default function HirerPublicPage() {
     <div className="min-h-screen bg-[#F8F9FC] page-enter">
       <main className="mx-auto w-full max-w-[720px] px-4 py-6 md:px-6 md:py-10">
         <Link to="/hirers" className="mb-6 inline-block text-sm font-semibold text-[#1B2B4B] hover:text-[#D4A843]">
-          ← დამქირავებლები
+          {t("hirerPublic.backToHirers")}
         </Link>
 
         <header className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -407,19 +412,19 @@ export default function HirerPublicPage() {
                   }}
                 />
               ) : null}
-              {[hirer.industry, formatCityForDisplay(hirer.city)].filter(Boolean).length > 0 ? (
+              {[formatIndustryForDisplay(hirer.industry), formatCityForDisplay(hirer.city)].filter(Boolean).length > 0 ? (
                 <p className="mt-1 text-sm font-semibold text-slate-600">
-                  {[hirer.industry, formatCityForDisplay(hirer.city)].filter(Boolean).join(" · ")}
+                  {[formatIndustryForDisplay(hirer.industry), formatCityForDisplay(hirer.city)].filter(Boolean).join(" · ")}
                 </p>
               ) : null}
-              <p className="mt-2 text-sm text-slate-700">საკონტაქტო: {hirer.contactName}</p>
+              <p className="mt-2 text-sm text-slate-700">{t("common.contactLabel", { name: hirer.contactName })}</p>
               <p className="mt-2 text-sm font-semibold text-[#D4A843]">
                 {hirerRatingSummary.count === 0 ? (
-                  <span className="text-slate-500">შეფასებები ჯერ არ არის</span>
+                  <span className="text-slate-500">{t("freelancerProfile.noReviews")}</span>
                 ) : (
                   <>
                     {hirerRatingSummary.average.toFixed(1)} ·{" "}
-                    {hirerRatingSummary.count} შეფასება
+                    {t("common.reviewsCount", { count: hirerRatingSummary.count })}
                   </>
                 )}
               </p>
@@ -430,7 +435,7 @@ export default function HirerPublicPage() {
                   rel="noopener noreferrer"
                   className="mt-2 inline-block text-sm font-semibold text-[#D4A843] underline"
                 >
-                  ვებგვერდი
+                  {t("common.website")}
                 </a>
               ) : null}
             </div>
@@ -450,12 +455,12 @@ export default function HirerPublicPage() {
                     }`}
                   >
                     {followBusy
-                      ? "მიმდინარეობს..."
+                      ? t("common.inProgress")
                       : followButtonMode === "loading"
-                        ? "იტვირთება…"
+                        ? t("common.loading")
                         : followButtonMode === "unfollow"
-                          ? "გამოწერილი"
-                          : "გამოწერა"}
+                          ? t("common.following")
+                          : t("common.follow")}
                   </button>
                 ) : null}
                 {viewerUserId && !viewerOwnsHirer && hirer.ownerUserId ? (
@@ -470,21 +475,21 @@ export default function HirerPublicPage() {
           </div>
           <dl className="mt-6 grid gap-4 border-t border-slate-100 pt-6 text-sm sm:grid-cols-2">
             <div>
-              <dt className="text-xs uppercase text-slate-500">აქტიური განცხადებები</dt>
+              <dt className="text-xs uppercase text-slate-500">{t("hirerPublic.activeListings")}</dt>
               <dd className="mt-1 text-lg font-black text-[#1B2B4B]">{openJobs.length}</dd>
             </div>
             <div className="min-w-0">
-              <dt className="text-xs uppercase text-slate-500">სტატისტიკა</dt>
+              <dt className="text-xs uppercase text-slate-500">{t("common.statistics")}</dt>
               <dd className="mt-1 break-words text-lg font-black text-[#1B2B4B] [overflow-wrap:anywhere]">
-                განცხადებები: {hirer.jobsPosted} · დასრულებული: {hirer.completedJobs}
+                {t("hirers.statsJobsCompleted", { posted: hirer.jobsPosted, completed: hirer.completedJobs })}
               </dd>
             </div>
             {ownerVisitCount !== null ? (
               <div>
-                <dt className="text-xs uppercase text-slate-500">საჯარო ნახვები (ვიზიტორები)</dt>
+                <dt className="text-xs uppercase text-slate-500">{t("hirerPublic.publicViewsVisitors")}</dt>
                 <dd
                   className="mt-1 text-lg font-black tabular-nums text-[#1B2B4B]"
-                  title="ხელმისაწვდომია მხოლოდ პროფილის მფლობელისთვის"
+                  title={t("common.publicViewsOwnerOnly")}
                 >
                   {ownerVisitCount}
                 </dd>
@@ -493,7 +498,7 @@ export default function HirerPublicPage() {
           </dl>
           {hirer.description ? (
             <div className="mt-6 border-t border-slate-100 pt-6">
-              <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-600">აღწერა</h2>
+              <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-600">{t("common.description")}</h2>
               <p className="mt-3 break-words whitespace-pre-wrap text-[15px] leading-relaxed text-slate-800 [overflow-wrap:anywhere]">
                 {hirer.description}
               </p>
@@ -513,7 +518,7 @@ export default function HirerPublicPage() {
 
         {hirerReviews.length > 0 ? (
           <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="border-l-4 border-[#D4A843] pl-3 text-lg font-extrabold text-[#1B2B4B]">შეფასებები</h2>
+            <h2 className="border-l-4 border-[#D4A843] pl-3 text-lg font-extrabold text-[#1B2B4B]">{t("common.reviews")}</h2>
             <ul className="mt-4 space-y-3">
               {hirerReviews.map((review) => (
                 <li key={review.id} className="rounded-xl border border-slate-200 p-4">
@@ -538,14 +543,14 @@ export default function HirerPublicPage() {
 
         <section className="mt-8">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-extrabold text-[#1B2B4B]">აქტიური განცხადებები:</h2>
+            <h2 className="text-lg font-extrabold text-[#1B2B4B]">{t("hirerPublic.activeListingsHeading")}</h2>
             <Link to="/jobs" className="text-sm font-semibold text-[#1B2B4B] hover:text-[#D4A843]">
-              მეტის ნახვა სამუშაოებში →
+              {t("hirerPublic.seeMoreJobs")}
             </Link>
           </div>
           {openJobs.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-600">
-              ამ წუთას არც ერთი ვაკანსია არ ჩანს.
+              {t("hirerPublic.noVacanciesNow")}
             </p>
           ) : (
             <ul className="space-y-3">
@@ -563,10 +568,14 @@ export default function HirerPublicPage() {
                       </p>
                       <p className="mt-1 text-xs text-slate-500">
                         {vac.isFull ? (
-                          <span className="font-semibold text-amber-800">დაკომლექტებული</span>
+                          <span className="font-semibold text-amber-800">{t("status.filled")}</span>
                         ) : (
                           <>
-                            {vac.remaining} თავისუფალი ადგილი · {vac.acceptedCount}/{vac.vacancies} შევსებული
+                            {t("common.spotsRemaining", {
+                              remaining: vac.remaining,
+                              accepted: vac.acceptedCount,
+                              vacancies: vac.vacancies,
+                            })}
                           </>
                         )}
                       </p>

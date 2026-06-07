@@ -12,6 +12,7 @@ import { avatarPublicUrl } from "../lib/storageImageUrl.ts"
 import { fetchOnboarding } from "../lib/queries/fetchOnboarding.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { LIMITS, validateOptionalUrl, validateTextField } from "../lib/validation.ts"
 
@@ -39,6 +40,7 @@ type EducationForm = {
 }
 
 export default function OnboardingPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
@@ -104,7 +106,7 @@ export default function OnboardingPage() {
   useEffect(() => {
     void (async () => {
       if (!isSupabaseConfigured || !supabase) {
-        setError("Supabase არ არის კონფიგურირებული.")
+        setError(t("auth.supabaseNotConfigured"))
         setAuthReady(true)
         return
       }
@@ -164,7 +166,7 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (isError) {
-      setError(queryErrorMessage(queryError, "ონბორდინგის ჩატვირთვა ვერ მოხერხდა."))
+      setError(queryErrorMessage(queryError, t("onboarding.loadFailed")))
     }
   }, [isError, queryError])
 
@@ -273,7 +275,7 @@ export default function OnboardingPage() {
     if (!professionalTitle.trim()) return setError("პროფესიული სათაური სავალდებულოა.")
     if (bio.trim().length < 50) return setError("ბიო უნდა იყოს მინიმუმ 50 სიმბოლო.")
     if (!availability) return setError("აირჩიე ხელმისაწვდომობა.")
-    if (languages.length === 0) return setError("აირჩიე მინიმუმ ერთი ენა.")
+    if (languages.length === 0) return setError(t("onboarding.selectLanguage"))
     setError("")
     setStep(2)
   }
@@ -435,7 +437,7 @@ export default function OnboardingPage() {
 
       navigate(`/freelancer/${encodeURIComponent(slug)}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "შენახვა ვერ მოხერხდა.")
+      setError(err instanceof Error ? err.message : t("onboarding.saveFailed"))
     } finally {
       setSubmitting(false)
     }
@@ -479,7 +481,7 @@ export default function OnboardingPage() {
       if (hpError) throw hpError
       navigate("/dashboard")
     } catch (err) {
-      setError(err instanceof Error ? err.message : "შენახვა ვერ მოხერხდა.")
+      setError(err instanceof Error ? err.message : t("onboarding.saveFailed"))
     } finally {
       setSubmitting(false)
     }
@@ -499,7 +501,7 @@ export default function OnboardingPage() {
     <div className="min-h-screen bg-slate-50">
       <main className="mx-auto max-w-3xl px-6 py-10">
         <div className="mx-auto max-w-[640px] rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-          <h1 className="text-3xl font-bold text-[#0088FF]">ონბორდინგი</h1>
+          <h1 className="text-3xl font-bold text-[#0088FF]">{t("onboarding.heading")}</h1>
 
           {userType === "hirer" ? (
             <div className="mt-6 space-y-4">
@@ -511,14 +513,14 @@ export default function OnboardingPage() {
               </select>
               <input className="h-11 w-full rounded-lg border border-slate-300 px-3" placeholder="ვებსაიტი (არასავალდებულო)" value={companyWebsite} onChange={(e)=>setCompanyWebsite(e.target.value)} />
               {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
-              <button disabled={submitting} onClick={submitHirer} className="h-11 w-full rounded-lg bg-[#1B2B4B] text-white hover:bg-[#D4A843] hover:text-[#1B2B4B]">{submitting ? "იტვირთება..." : "პროფილის შენახვა"}</button>
+              <button disabled={submitting} onClick={submitHirer} className="h-11 w-full rounded-lg bg-[#1B2B4B] text-white hover:bg-[#D4A843] hover:text-[#1B2B4B]">{submitting ? t("common.loading") : t("onboarding.saveProfile")}</button>
             </div>
           ) : (
             <div className="mt-6 space-y-4">
               <div className="h-2 rounded-full bg-slate-200">
                 <div className="h-2 rounded-full bg-[#D4A843]" style={{ width: `${(step / 3) * 100}%` }} />
               </div>
-              <p className="text-xs text-slate-500">ნაბიჯი {step}/3</p>
+              <p className="text-xs text-slate-500">{t("common.stepOf", { step, total: 3 })}</p>
 
               {step === 1 && (
                 <div className="space-y-3">
@@ -540,7 +542,7 @@ export default function OnboardingPage() {
                     ))}
                   </div>
                   <div ref={languagePickerRef} className="relative">
-                    <p className="mb-1 text-xs font-medium text-slate-600">ენები (მინ. 1)</p>
+                    <p className="mb-1 text-xs font-medium text-slate-600">{t("onboarding.languagesMin")}</p>
                     {languages.length > 0 ? (
                       <div className="mb-2 flex flex-wrap gap-1.5">
                         {languages.map((lng) => (
@@ -569,7 +571,7 @@ export default function OnboardingPage() {
                         setLanguageMenuOpen(true)
                       }}
                       onFocus={() => setLanguageMenuOpen(true)}
-                      placeholder="ძიება"
+                      placeholder={t("common.search")}
                       className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF]/30 focus:border-[#0088FF] focus:ring-2"
                       autoComplete="off"
                     />
@@ -579,7 +581,7 @@ export default function OnboardingPage() {
                         className="absolute z-20 mt-1 max-h-52 w-full overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
                       >
                         {filteredLanguageOptions.length === 0 ? (
-                          <li className="px-3 py-2 text-sm text-slate-500">ვერ მოიძებნა — სხვა სიტყვით სცადე</li>
+                          <li className="px-3 py-2 text-sm text-slate-500">{t("onboarding.languageNotFound")}</li>
                         ) : (
                           filteredLanguageOptions.map((lng) => {
                             const selected = languages.includes(lng)
@@ -734,7 +736,7 @@ export default function OnboardingPage() {
                     ) : null}
                   </div>
                   <div className="space-y-2 rounded-lg border border-slate-200 p-3">
-                    <p className="text-sm font-semibold text-[#1B2B4B]">გამოცდილება (მაქს. 10)</p>
+                    <p className="text-sm font-semibold text-[#1B2B4B]">{t("onboarding.experienceMax")}</p>
                     {experiences.length === 0 ? (
                       <button
                         type="button"

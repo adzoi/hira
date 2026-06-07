@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { fetchSavedState, toggleSavedItem, type SavedResourceType } from "../lib/savedItems.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase.ts"
 import { getAuthenticatedSession } from "../lib/supabaseAuth.ts"
@@ -33,6 +34,7 @@ export default function SaveBookmarkButton({
   className,
   variant = "default",
 }: SaveBookmarkButtonProps) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
   const [userId, setUserId] = useState<string | null>(null)
@@ -101,7 +103,7 @@ export default function SaveBookmarkButton({
     )
   }
 
-  const label = saved ? "შენახულია — ამოღება" : "შენახვა"
+  const label = saved ? t("common.savedRemove") : t("common.save")
 
   if (variant === "icon") {
     return (
@@ -134,7 +136,7 @@ export default function SaveBookmarkButton({
       } ${className ?? "w-full"}`}
     >
       <BookmarkSvg filled={saved} />
-      {saved ? "შენახულია" : "შენახვა"}
+      {saved ? t("common.saved") : t("common.save")}
     </button>
   )
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
@@ -18,6 +18,8 @@ import {
 import { fetchPostJob } from "../lib/queries/fetchPostJob.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { getCurrentLocale, translate } from "../i18n/translate.ts"
 
 const MAX_JOB_IMAGES = 3
 const MAX_INPUT_IMAGE_BYTES = 10 * 1024 * 1024
@@ -30,7 +32,7 @@ async function fileToImageBitmap(file: File): Promise<ImageBitmap> {
 
 async function canvasToJpegBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality))
-  if (!blob) throw new Error("სურათის დამუშავება ვერ მოხერხდა.")
+  if (!blob) throw new Error(translate(getCurrentLocale(), "postJob.imageProcessFailed"))
   return blob
 }
 
@@ -44,7 +46,7 @@ async function compressImage(file: File): Promise<Blob> {
     canvas.width = width
     canvas.height = height
     const ctx = canvas.getContext("2d")
-    if (!ctx) throw new Error("სურათის დამუშავება ვერ მოხერხდა.")
+    if (!ctx) throw new Error(translate(getCurrentLocale(), "postJob.imageProcessFailed"))
     ctx.drawImage(bitmap, 0, 0, width, height)
     let quality = 0.86
     let best = await canvasToJpegBlob(canvas, quality)
@@ -58,17 +60,8 @@ async function compressImage(file: File): Promise<Blob> {
   }
 }
 
-const DURATION_TYPE_LABELS: Record<string, string> = {
-  one_time: "ერთჯერადი",
-  ongoing: "ხანგრძლივი",
-}
-
-const LOCATION_TYPE_LABELS: Record<string, string> = {
-  remote: "დისტანციური",
-  tbilisi: "თბილისი",
-  hybrid: "Hybrid",
-  anywhere: "ნებისმიერი ადგილი",
-}
+const DURATION_TYPE_KEYS = ["one_time", "ongoing"] as const
+const LOCATION_TYPE_KEYS = ["remote", "tbilisi", "hybrid", "anywhere"] as const
 
 type CategoryRow = {
   id: string
@@ -118,6 +111,7 @@ function scrollToFirstPublishError(errors: FieldErrors) {
 }
 
 export default function PostJobPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { jobId } = useParams<{ jobId: string }>()
   const isEdit = Boolean(jobId)
@@ -132,11 +126,26 @@ export default function PostJobPage() {
     queryFn: () => fetchPostJob(jobId),
     enabled: Boolean(postJobUserId) && isSupabaseConfigured,
   })
-  const loadPageError = isError ? queryErrorMessage(queryError, "გვერდის ჩატვირთვა ვერ მოხერხდა.") : ""
+  const loadPageError = isError ? queryErrorMessage(queryError, t("postJob.loadFailed")) : ""
   const [submitting, setSubmitting] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [pageError, setPageError] = useState("")
   const displayPageError = pageError || loadPageError
+
+  const durationLabel = useCallback(
+    (key: string) => (key === "one_time" ? t("postJob.oneTime") : key === "ongoing" ? t("postJob.ongoing") : key),
+    [t],
+  )
+  const locationLabel = useCallback(
+    (key: string) => {
+      if (key === "remote") return t("common.remote")
+      if (key === "tbilisi") return t("postJob.tbilisi")
+      if (key === "hybrid") return t("common.hybrid")
+      if (key === "anywhere") return t("common.anywhere")
+      return key
+    },
+    [t],
+  )
 
   const [hirerProfileId, setHirerProfileId] = useState("")
   const [categories, setCategories] = useState<CategoryRow[]>([])
@@ -144,10 +153,12 @@ export default function PostJobPage() {
   const [subcategories, setSubcategories] = useState<SubcategoryRow[]>([])
 
   const [title, setTitle] = useState("")
+  const [titleEn, setTitleEn] = useState("")
   const [categoryId, setCategoryId] = useState("")
   const [rootCategoryId, setRootCategoryId] = useState("")
   const [subcategoryId, setSubcategoryId] = useState("")
   const [description, setDescription] = useState("")
+  const [descriptionEn, setDescriptionEn] = useState("")
   const [isUrgent, setIsUrgent] = useState(false)
 
   const [budgetType, setBudgetType] = useState("fixed")
@@ -170,8 +181,8 @@ export default function PostJobPage() {
   const [skillFocusCategoryId, setSkillFocusCategoryId] = useState("")
 
   useEffect(() => {
-    document.title = isEdit ? "განცხადების რედაქტირება — გიგორი" : "სამუშაოები — გიგორი"
-  }, [isEdit])
+    document.title = isEdit ? t("postJob.editTitle") : t("postJob.postTitle")
+  }, [isEdit, t])
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return
@@ -199,8 +210,10 @@ export default function PostJobPage() {
       setCategoryId(edit.categoryId)
       setSubcategories(edit.subcategories)
       setTitle(edit.title)
+      setTitleEn(edit.titleEn)
       setSubcategoryId(edit.subcategoryId)
       setDescription(edit.description)
+      setDescriptionEn(edit.descriptionEn)
       setIsUrgent(edit.isUrgent)
       setBudgetType(edit.budgetType)
       setBudgetMin(edit.budgetMin)
@@ -231,15 +244,15 @@ export default function PostJobPage() {
 
   useEffect(() => {
     const loadSubs = async () => {
-      if (!supabase || !specializationParentCategoryId) {
-        setSubcategories([])
-        setSubcategoryId("")
+      const parentId = specializationParentCategoryId.trim()
+      if (!supabase || !parentId) {
+        if (!parentId) setSubcategories([])
         return
       }
       const { data, error } = await supabase
         .from("subcategories")
         .select("id,name_ka,category_id,is_active")
-        .eq("category_id", specializationParentCategoryId)
+        .eq("category_id", parentId)
         .eq("is_active", true)
         .order("name_ka", { ascending: true })
 
@@ -260,16 +273,16 @@ export default function PostJobPage() {
   }, [])
 
   const rootCategoryNameKa = useMemo(
-    () => categories.find((c) => c.id === rootCategoryId)?.name_ka ?? "არ არის არჩეული",
+    () => categories.find((c) => c.id === rootCategoryId)?.name_ka ?? t("postJob.notSelected"),
     [categories, rootCategoryId],
   )
   const midCategoryNameKa = useMemo(() => {
     if (categoryMidsList.length === 0) return "—"
-    return categories.find((c) => c.id === categoryId)?.name_ka ?? "არ არის არჩეული"
+    return categories.find((c) => c.id === categoryId)?.name_ka ?? t("postJob.notSelected")
   }, [categories, categoryId, categoryMidsList.length])
 
   const subcategoryNameKa = useMemo(
-    () => subcategories.find((s) => s.id === subcategoryId)?.name_ka ?? "არ არის არჩეული",
+    () => subcategories.find((s) => s.id === subcategoryId)?.name_ka ?? t("postJob.notSelected"),
     [subcategories, subcategoryId],
   )
 
@@ -311,14 +324,14 @@ export default function PostJobPage() {
     if (incoming.length === 0) return
     const remaining = MAX_JOB_IMAGES - existingImageUrls.length - newImageFiles.length
     if (remaining <= 0) {
-      setPageError(`მაქსიმუმ ${MAX_JOB_IMAGES} სურათი შეგიძლია დაამატო.`)
+      setPageError(t("postJob.maxImages", { max: MAX_JOB_IMAGES }))
       return
     }
     const valid: File[] = []
     for (const file of incoming) {
       if (!file.type.startsWith("image/")) continue
       if (file.size > MAX_INPUT_IMAGE_BYTES) {
-        setPageError("ერთი ან მეტი სურათი ძალიან დიდია. მაქსიმუმ 10MB თითო ფაილზე.")
+        setPageError(t("postJob.imageTooBig"))
         continue
       }
       valid.push(file)
@@ -346,38 +359,38 @@ export default function PostJobPage() {
     if (titleResult.ok === false) e.title = titleResult.message
 
     if (!rootCategoryId) {
-      e.categoryId = "category სავალდებულოა."
+      e.categoryId = t("postJob.categoryRequired")
     } else if (categoryMidsList.length > 0 && !categoryId) {
-      e.categoryId = "subcategory სავალდებულოა."
+      e.categoryId = t("postJob.subcategoryRequired")
     }
 
     const descriptionResult = validateJobDescription(description)
     if (descriptionResult.ok === false) e.description = descriptionResult.message
 
     if (!budgetType) {
-      e.budgetType = "აირჩიე ბიუჯეტის ტიპი."
+      e.budgetType = t("postJob.selectBudgetType")
     }
 
     const minN = Number(budgetMin)
     const maxN = Number(budgetMax)
 
     if (!budgetMin || Number.isNaN(minN) || minN < 0) {
-      e.budgetMin = "მიუთითე სწორი მინიმალური ბიუჯეტი."
+      e.budgetMin = t("postJob.invalidBudgetMin")
     }
     if (!budgetMax || Number.isNaN(maxN) || maxN < 0) {
-      e.budgetMax = "მიუთითე სწორი მაქსიმალური ბიუჯეტი."
+      e.budgetMax = t("postJob.invalidBudgetMax")
     } else if (!Number.isNaN(minN) && maxN < minN) {
-      e.budgetMax = "მაქსიმალური ბიუჯეტი უნდა იყოს მინიმალურზე მეტი ან ტოლი."
+      e.budgetMax = t("postJob.budgetMaxLessThanMin")
     }
 
     if (applicationDeadline && !isEdit && new Date(`${applicationDeadline}T00:00:00`) <= new Date(`${todayIso}T00:00:00`)) {
-      e.applicationDeadline = "ვადა უნდა იყოს მომავალში."
+      e.applicationDeadline = t("postJob.deadlineMustBeFuture")
     }
 
     const vacanciesResult = validatePositiveInt(vacancies, {
       min: 1,
       max: 100,
-      label: "ვაკანსიები",
+      label: t("postJob.vacancies"),
     })
     if (vacanciesResult.ok === false) {
       e.vacancies = vacanciesResult.message
@@ -386,7 +399,7 @@ export default function PostJobPage() {
     }
 
     if (!contactEmail && !contactPhone) {
-      e.contactMethods = "აირჩიე მინიმუმ ერთი კონტაქტის მეთოდი."
+      e.contactMethods = t("postJob.selectContactMethod")
     }
 
     return e
@@ -408,7 +421,27 @@ export default function PostJobPage() {
     setPageError("")
 
     const safeTitle = assertField(validateJobTitle(title))
+    const titleEnResult = titleEn.trim()
+      ? validateJobTitle(titleEn)
+      : ({ ok: true, value: "" } as const)
+    if (titleEnResult.ok === false) {
+      setFieldErrors({ title: titleEnResult.message })
+      setShowPreview(false)
+      setSubmitting(false)
+      return
+    }
+    const safeTitleEn = titleEnResult.value.trim() || null
     const safeDescription = assertField(validateJobDescription(description))
+    const descriptionEnResult = descriptionEn.trim()
+      ? validateJobDescription(descriptionEn)
+      : ({ ok: true, value: "" } as const)
+    if (descriptionEnResult.ok === false) {
+      setFieldErrors({ description: descriptionEnResult.message })
+      setShowPreview(false)
+      setSubmitting(false)
+      return
+    }
+    const safeDescriptionEn = descriptionEnResult.value.trim() || null
 
     try {
       let currentJobId = jobId ?? null
@@ -419,7 +452,9 @@ export default function PostJobPage() {
             category_id: categoryId,
             subcategory_id: subcategoryId || null,
             title: safeTitle,
+            title_en: safeTitleEn,
             description: safeDescription,
+            description_en: safeDescriptionEn,
             budget_type: budgetType,
             budget_min: Number(budgetMin),
             budget_max: Number(budgetMax),
@@ -456,7 +491,9 @@ export default function PostJobPage() {
             category_id: categoryId,
             subcategory_id: subcategoryId || null,
             title: safeTitle,
+            title_en: safeTitleEn,
             description: safeDescription,
+            description_en: safeDescriptionEn,
             budget_type: budgetType,
             budget_min: Number(budgetMin),
             budget_max: Number(budgetMax),
@@ -476,7 +513,7 @@ export default function PostJobPage() {
           .single()
 
         if (insJobErr) throw insJobErr
-        if (!inserted?.id) throw new Error("განცხადების გამოქვეყნება ვერ მოხერხდა.")
+        if (!inserted?.id) throw new Error(t("postJob.publishFailed"))
         currentJobId = inserted.id
 
         if (selectedSkillIds.length > 0) {
@@ -487,7 +524,7 @@ export default function PostJobPage() {
         }
       }
 
-      if (!currentJobId) throw new Error("განცხადების ID ვერ მოიძებნა.")
+      if (!currentJobId) throw new Error(t("postJob.jobIdNotFound"))
 
       let uploadedImagePaths: string[] = []
       if (newImageFiles.length > 0) {
@@ -521,15 +558,15 @@ export default function PostJobPage() {
 
       navigate("/dashboard", {
         replace: true,
-        state: { successMessage: isEdit ? "განცხადება განახლდა." : "განცხადება წარმატებით გამოქვეყნდა." },
+        state: { successMessage: isEdit ? t("postJob.updatedSuccess") : t("postJob.publishedSuccess") },
       })
     } catch (e) {
       setPageError(
         e instanceof Error
           ? e.message
           : isEdit
-            ? "განახლება ვერ მოხერხდა."
-            : "განცხადების გამოქვეყნება ვერ მოხერხდა.",
+            ? t("postJob.updateFailed")
+            : t("postJob.publishFailedShort"),
       )
     } finally {
       setSubmitting(false)
@@ -550,10 +587,10 @@ export default function PostJobPage() {
     <div className="page-enter min-h-screen bg-[#F8F9FC]">
       <main className="mx-auto max-w-[720px] px-4 py-8 md:px-6 md:py-10">
         <h1 className={`text-[28px] font-bold md:text-5xl ${isEdit ? "text-[#1B2B4B]" : "text-[#0088FF]"}`}>
-          {isEdit ? "განცხადების რედაქტირება" : "სამუშაოს განთავსება"}
+          {isEdit ? t("postJob.editHeading") : t("postJob.postHeading")}
         </h1>
         <p className="mt-2 text-sm text-slate-500">
-          {isEdit ? "განაახლე დეტალები და შეინახე ცვლილებები." : "შექმენი ახალი განცხადება და იპოვე საუკეთესო ფრილანსერი."}
+          {isEdit ? t("postJob.editSubtitle") : t("postJob.postSubtitle")}
         </p>
 
         {displayPageError ? (
@@ -562,37 +599,47 @@ export default function PostJobPage() {
 
         {showPreview ? (
           <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="border-l-4 border-[#0088FF] pl-3 text-xl font-bold text-[#1B2B4B]">განცხადების პრევიუ</h2>
+            <h2 className="border-l-4 border-[#0088FF] pl-3 text-xl font-bold text-[#1B2B4B]">{t("postJob.preview")}</h2>
 
             <div className="mt-5 min-w-0 space-y-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-4">
               <p className="break-words text-2xl font-bold text-[#1B2B4B] [overflow-wrap:anywhere]">{title.trim()}</p>
+              {titleEn.trim() ? (
+                <p className="break-words text-lg font-semibold text-slate-600 [overflow-wrap:anywhere]">{titleEn.trim()}</p>
+              ) : null}
               <p className="break-words whitespace-pre-wrap text-sm text-slate-600 [overflow-wrap:anywhere]">{description.trim()}</p>
+              {descriptionEn.trim() ? (
+                <p className="break-words whitespace-pre-wrap text-sm text-slate-500 [overflow-wrap:anywhere]">{descriptionEn.trim()}</p>
+              ) : null}
 
               <div className="flex flex-wrap gap-2 text-xs">
-                <span className="rounded-full bg-white px-3 py-1 text-slate-700">category: {rootCategoryNameKa}</span>
-                <span className="rounded-full bg-white px-3 py-1 text-slate-700">subcategory: {midCategoryNameKa}</span>
+                <span className="rounded-full bg-white px-3 py-1 text-slate-700">{t("common.category")}: {rootCategoryNameKa}</span>
+                <span className="rounded-full bg-white px-3 py-1 text-slate-700">{t("common.subcategory")}: {midCategoryNameKa}</span>
                 {subcategoryId ? (
-                  <span className="rounded-full bg-white px-3 py-1 text-slate-700">სპეციალიზაცია: {subcategoryNameKa}</span>
+                  <span className="rounded-full bg-white px-3 py-1 text-slate-700">{t("postJob.specialization")}: {subcategoryNameKa}</span>
                 ) : null}
                 <span className="rounded-full bg-white px-3 py-1 text-slate-700">
-                  ბიუჯეტი:{" "}
+                  {t("postJob.previewBudget")}{" "}
                   {formatJobBudget(
                     budgetMin ? Number(budgetMin) : null,
                     budgetMax ? Number(budgetMax) : null,
                     budgetType,
                   )}
                 </span>
-                <span className="rounded-full bg-white px-3 py-1 text-slate-700">ტიპი: {DURATION_TYPE_LABELS[durationType] ?? durationType}</span>
-                <span className="rounded-full bg-white px-3 py-1 text-slate-700">ლოკაცია: {LOCATION_TYPE_LABELS[locationType] ?? locationType}</span>
                 <span className="rounded-full bg-white px-3 py-1 text-slate-700">
-                  კონტაქტი: {JOB_CONTACT_LABELS[contactPreference] ?? contactPreference}
+                  {t("postJob.previewType")} {durationLabel(durationType)}
+                </span>
+                <span className="rounded-full bg-white px-3 py-1 text-slate-700">
+                  {t("postJob.previewLocation")} {locationLabel(locationType)}
+                </span>
+                <span className="rounded-full bg-white px-3 py-1 text-slate-700">
+                  {t("postJob.previewContact")} {JOB_CONTACT_LABELS[contactPreference] ?? contactPreference}
                 </span>
                 {applicationDeadline ? (
-                  <span className="rounded-full bg-white px-3 py-1 text-slate-700">ვადა: {applicationDeadline}</span>
+                  <span className="rounded-full bg-white px-3 py-1 text-slate-700">{t("postJob.previewDeadline")} {applicationDeadline}</span>
                 ) : null}
-                {isUrgent ? <span className="rounded-full bg-red-100 px-3 py-1 font-semibold text-red-700">სასწრაფო</span> : null}
+                {isUrgent ? <span className="rounded-full bg-red-100 px-3 py-1 font-semibold text-red-700">{t("common.urgent")}</span> : null}
                 <span className="rounded-full bg-white px-3 py-1 text-slate-700">
-                  ვაკანსიები / Vacancies: {vacancies}
+                  {t("postJob.previewVacancies", { count: vacancies })}
                 </span>
               </div>
 
@@ -604,7 +651,7 @@ export default function PostJobPage() {
                     </span>
                   ))
                 ) : (
-                  <span className="text-xs text-slate-500">უნარები არ არის არჩეული</span>
+                  <span className="text-xs text-slate-500">{t("postJob.noSkillsSelected")}</span>
                 )}
               </div>
             </div>
@@ -615,7 +662,7 @@ export default function PostJobPage() {
                 onClick={() => setShowPreview(false)}
                 className="h-11 rounded-lg border border-slate-300 text-sm font-semibold text-[#1B2B4B] hover:bg-slate-50"
               >
-                რედაქტირება
+                {t("common.edit")}
               </button>
               <button
                 type="button"
@@ -629,9 +676,9 @@ export default function PostJobPage() {
                     მიმდინარეობს...
                   </span>
                 ) : isEdit ? (
-                  "ცვლილებების შენახვა"
+                  t("postJob.saveChanges")
                 ) : (
-                  "განცხადების გამოქვეყნება"
+                  t("postJob.publish")
                 )}
               </button>
             </div>
@@ -639,12 +686,10 @@ export default function PostJobPage() {
         ) : (
           <div className="mt-6 space-y-6">
             <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="border-l-4 border-[#0088FF] pl-3 text-xl font-bold text-[#1B2B4B]">1. სამუშაოს დეტალები</h2>
+              <h2 className="border-l-4 border-[#0088FF] pl-3 text-xl font-bold text-[#1B2B4B]">{t("postJob.step1")}</h2>
               <div className="mt-4 space-y-4">
                 <label className="block">
-                  <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">
-                    სამუშაოს სათაური <span className="text-red-500">*</span>
-                  </span>
+                  <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("postJob.titleRequired")}</span>
                   <input
                     id="post-job-field-title"
                     type="text"
@@ -652,15 +697,27 @@ export default function PostJobPage() {
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#0088FF] ring-[#0088FF]/35 focus:ring-2"
-                    placeholder="მაგ: React დეველოპერი eCommerce პროექტისთვის"
+                    placeholder={t("postJob.jobTitlePlaceholder")}
                   />
                   {fieldErrors.title ? <p className="mt-1 text-sm text-red-600">{fieldErrors.title}</p> : null}
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("postJob.titleEnOptional")}</span>
+                  <input
+                    type="text"
+                    maxLength={100}
+                    value={titleEn}
+                    onChange={(e) => setTitleEn(e.target.value)}
+                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#0088FF] ring-[#0088FF]/35 focus:ring-2"
+                    placeholder={t("postJob.titleEnPlaceholder")}
+                  />
                 </label>
 
                 <div id="post-job-field-categoryId" className="space-y-4">
                   <label className="block">
                     <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">
-                      category <span className="text-red-500">*</span>
+                      {t("common.category")} <span className="text-red-500">*</span>
                     </span>
                     <select
                       value={rootCategoryId}
@@ -679,7 +736,7 @@ export default function PostJobPage() {
                       }}
                       className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#0088FF] ring-[#0088FF]/35 focus:ring-2"
                     >
-                      <option value="">აირჩიე category</option>
+                      <option value="">{t("postJob.selectCategory")}</option>
                       {categoryRootsList.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name_ka}
@@ -690,7 +747,7 @@ export default function PostJobPage() {
 
                   <label className="block">
                     <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">
-                      subcategory {categoryMidsList.length > 0 ? <span className="text-red-500">*</span> : null}
+                      {t("common.subcategory")} {categoryMidsList.length > 0 ? <span className="text-red-500">*</span> : null}
                     </span>
                     <select
                       value={categoryId}
@@ -703,10 +760,10 @@ export default function PostJobPage() {
                     >
                       <option value="">
                         {!rootCategoryId
-                          ? "ჯერ აირჩიე category"
+                          ? t("postJob.selectCategoryFirst")
                           : categoryMidsList.length === 0
-                            ? "ამ category-სთვის subcategory არ არის"
-                            : "აირჩიე subcategory"}
+                            ? t("postJob.noSubcategoryForCategory")
+                            : t("postJob.selectSubcategory")}
                       </option>
                       {categoryMidsList.map((c) => (
                         <option key={c.id} value={c.id}>
@@ -719,7 +776,7 @@ export default function PostJobPage() {
                 </div>
 
                 <label className="block">
-                  <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">სპეციალიზაცია</span>
+                  <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("postJob.specialization")}</span>
                   <select
                     value={subcategoryId}
                     onChange={(e) => setSubcategoryId(e.target.value)}
@@ -727,7 +784,7 @@ export default function PostJobPage() {
                     className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#0088FF] ring-[#0088FF]/35 focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100"
                   >
                     <option value="">
-                      {specializationParentCategoryId ? "აირჩიე სპეციალიზაცია" : "ჯერ აირჩიე subcategory ან category"}
+                      {specializationParentCategoryId ? t("postJob.selectSpecialization") : t("postJob.selectSubcategoryOrCategoryFirst")}
                     </option>
                     {subcategories.map((s) => (
                       <option key={s.id} value={s.id}>
@@ -738,34 +795,43 @@ export default function PostJobPage() {
                 </label>
 
                 <label className="block">
-                  <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">
-                    აღწერა <span className="text-red-500">*</span>
-                  </span>
+                  <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("postJob.descriptionKa")}</span>
                   <textarea
                     id="post-job-field-description"
                     rows={6}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0088FF] ring-[#0088FF]/35 focus:ring-2"
-                    placeholder="აღწერე პროექტის მოთხოვნები, მიზანი და მოლოდინები..."
+                    placeholder={t("postJob.descriptionPlaceholder")}
                   />
                   <div className="mt-1 flex items-center justify-between text-xs text-slate-500">
-                    <span>მინიმუმ 100 სიმბოლო</span>
-                    <span>{description.trim().length} სიმბოლო</span>
+                    <span>{t("postJob.minChars")}</span>
+                    <span>{t("postJob.charCount", { count: description.trim().length })}</span>
                   </div>
                   {fieldErrors.description ? <p className="mt-1 text-sm text-red-600">{fieldErrors.description}</p> : null}
                 </label>
 
+                <label className="block">
+                  <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("postJob.descriptionEnOptional")}</span>
+                  <textarea
+                    rows={6}
+                    value={descriptionEn}
+                    onChange={(e) => setDescriptionEn(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0088FF] ring-[#0088FF]/35 focus:ring-2"
+                    placeholder={t("postJob.descriptionEnPlaceholder")}
+                  />
+                </label>
+
                 <label className="inline-flex items-center gap-2 text-sm text-[#1B2B4B]">
                   <input type="checkbox" checked={isUrgent} onChange={(e) => setIsUrgent(e.target.checked)} />
-                  სასწრაფოა?
+                  {t("postJob.isUrgent")}
                 </label>
               </div>
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="border-l-4 border-[#0088FF] pl-3 text-xl font-bold text-[#1B2B4B]">2. ბიუჯეტი</h2>
-              <p className="mt-2 text-sm text-slate-500">მაგ: 500 - 1500 ₾</p>
+              <h2 className="border-l-4 border-[#0088FF] pl-3 text-xl font-bold text-[#1B2B4B]">{t("postJob.step2")}</h2>
+              <p className="mt-2 text-sm text-slate-500">{t("postJob.budgetExample")}</p>
               <div className="mt-4 space-y-4">
                 <div id="post-job-field-budgetType">
                   <p className="mb-2 text-sm font-semibold text-[#1B2B4B]">
@@ -816,26 +882,26 @@ export default function PostJobPage() {
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="border-l-4 border-[#0088FF] pl-3 text-xl font-bold text-[#1B2B4B]">3. სამუშაოს ტიპი და ლოკაცია</h2>
+              <h2 className="border-l-4 border-[#0088FF] pl-3 text-xl font-bold text-[#1B2B4B]">{t("postJob.step3")}</h2>
               <div className="mt-4 space-y-4">
                 <div>
-                  <p className="mb-2 text-sm font-semibold text-[#1B2B4B]">ხანგრძლივობა</p>
+                  <p className="mb-2 text-sm font-semibold text-[#1B2B4B]">{t("postJob.duration")}</p>
                   <div className="grid gap-2 sm:grid-cols-2">
-                    {Object.keys(DURATION_TYPE_LABELS).map((key) => (
+                    {DURATION_TYPE_KEYS.map((key) => (
                       <label key={key} className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm">
                         <input type="radio" name="duration_type" checked={durationType === key} onChange={() => setDurationType(key)} />
-                        {DURATION_TYPE_LABELS[key]}
+                        {durationLabel(key)}
                       </label>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <p className="mb-2 text-sm font-semibold text-[#1B2B4B]">ლოკაცია</p>
+                  <p className="mb-2 text-sm font-semibold text-[#1B2B4B]">{t("postJob.location")}</p>
                   <div className="grid gap-2 sm:grid-cols-2">
-                    {Object.keys(LOCATION_TYPE_LABELS).map((key) => (
+                    {LOCATION_TYPE_KEYS.map((key) => (
                       <label key={key} className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm">
                         <input type="radio" name="location_type" checked={locationType === key} onChange={() => setLocationType(key)} />
-                        {LOCATION_TYPE_LABELS[key]}
+                        {locationLabel(key)}
                       </label>
                     ))}
                   </div>
@@ -844,10 +910,8 @@ export default function PostJobPage() {
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="border-l-4 border-[#0088FF] pl-3 text-xl font-bold text-[#1B2B4B]">4. საჭირო უნარები</h2>
-              <p className="mt-2 text-sm text-slate-500">
-                ჯერ აირჩიე კატეგორია, შემდეგ დაამატე უნარები dropdown-იდან (სურვილისამებრ, რეკომენდებულია).
-              </p>
+              <h2 className="border-l-4 border-[#0088FF] pl-3 text-xl font-bold text-[#1B2B4B]">{t("postJob.step4")}</h2>
+              <p className="mt-2 text-sm text-slate-500">{t("postJob.skillsHint")}</p>
               <p className="mt-1 text-xs text-slate-500">
                 არჩეულია <span className="font-semibold tabular-nums text-slate-700">{selectedSkillIds.length}</span> უნარი
               </p>
@@ -933,7 +997,7 @@ export default function PostJobPage() {
                 </p>
               ) : (
                 <p className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-3 py-3 text-xs text-slate-500">
-                  კატეგორიის ასარჩევად გამოიყენე ზემოთ სია.
+                  კატეგორიის ასარჩევად გამოიყენე სია.
                 </p>
               )}
 
@@ -960,7 +1024,7 @@ export default function PostJobPage() {
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="border-l-4 border-[#0088FF] pl-3 text-xl font-bold text-[#1B2B4B]">5. კონტაქტი და ვადა</h2>
+              <h2 className="border-l-4 border-[#0088FF] pl-3 text-xl font-bold text-[#1B2B4B]">{t("postJob.step5")}</h2>
               <div className="mt-4 space-y-4">
                 <label className="block">
                   <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">
@@ -1032,7 +1096,7 @@ export default function PostJobPage() {
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="border-l-4 border-[#0088FF] pl-3 text-xl font-bold text-[#1B2B4B]">6. სურათები</h2>
+              <h2 className="border-l-4 border-[#0088FF] pl-3 text-xl font-bold text-[#1B2B4B]">{t("postJob.step6")}</h2>
               <p className="mt-2 text-sm text-slate-500">მაქსიმუმ 3 სურათი. ფაილები ავტომატურად მცირდება ზომაში ატვირთვამდე.</p>
               <div className="mt-4 rounded-lg border border-slate-300 bg-slate-50 p-3">
                 <input
@@ -1082,7 +1146,7 @@ export default function PostJobPage() {
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="border-l-4 border-[#0088FF] pl-3 text-xl font-bold text-[#1B2B4B]">7. პრევიუ გამოქვეყნებამდე</h2>
+              <h2 className="border-l-4 border-[#0088FF] pl-3 text-xl font-bold text-[#1B2B4B]">{t("postJob.step7")}</h2>
               <p className="mt-2 text-sm text-slate-500">გადაამოწმე ინფორმაცია და გააგრძელე განცხადების პრევიუზე.</p>
               <button
                 type="button"

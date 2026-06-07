@@ -42,7 +42,9 @@ export type SkillData = { id: string; name: string }
 export type ServiceData = {
   id: string
   title: string
+  titleEn: string | null
   description: string | null
+  descriptionEn: string | null
   price: number
   price_type: string
   views_count: number
@@ -221,7 +223,7 @@ export async function fetchFreelancerProfile(slug: string): Promise<FreelancerPr
       .maybeSingle(),
     client
       .from("services")
-      .select("id,title,description,price,price_type,views_count")
+      .select("id,title,title_en,description,description_en,price,price_type,views_count")
       .eq("freelancer_profile_id", freelancerData.id)
       .eq("is_active", true)
       .order("created_at", { ascending: false }),
@@ -311,7 +313,11 @@ export async function fetchFreelancerProfile(slug: string): Promise<FreelancerPr
 
   const services: ServiceData[] = (
     (servicesRes.data ?? []) as Array<
-      Omit<ServiceData, "tags" | "views_count" | "negotiable"> & { views_count?: number | null }
+      Omit<ServiceData, "tags" | "views_count" | "negotiable" | "titleEn" | "descriptionEn"> & {
+        title_en?: string | null
+        description_en?: string | null
+        views_count?: number | null
+      }
     >
   ).map((service) => {
     const rawDesc = String(service.description ?? "")
@@ -319,7 +325,9 @@ export async function fetchFreelancerProfile(slug: string): Promise<FreelancerPr
     return {
       id: service.id,
       title: service.title,
+      titleEn: service.title_en?.trim() || null,
       description: parsed.text.trim() ? parsed.text : null,
+      descriptionEn: service.description_en?.trim() || null,
       price: service.price,
       price_type: normalizeListingPriceType(service.price_type),
       views_count: Number(service.views_count ?? 0),

@@ -15,9 +15,11 @@ import {
   validateMoneyAmount,
   validateTags,
 } from "../lib/validation.ts"
+import { META_PREFIX, META_SUFFIX } from "../lib/listingDescription.ts"
 import { fetchListingForm } from "../lib/queries/fetchListingForm.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
 
 type ListingMeta = {
   categoryId: string | null
@@ -32,8 +34,6 @@ type TagOption = {
   categoryId: string | null
 }
 
-const META_PREFIX = "<!--gigori-meta:"
-const META_SUFFIX = "-->"
 const MAX_LISTING_IMAGES = 3
 const MAX_INPUT_IMAGE_BYTES = 10 * 1024 * 1024
 const MAX_IMAGE_EDGE = 1600
@@ -43,13 +43,13 @@ async function fileToImageBitmap(file: File): Promise<ImageBitmap> {
   return await createImageBitmap(file)
 }
 
-async function canvasToJpegBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
+async function canvasToJpegBlob(canvas: HTMLCanvasElement, quality: number, failMsg: string): Promise<Blob> {
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality))
-  if (!blob) throw new Error("სურათის დამუშავება ვერ მოხერხდა.")
+  if (!blob) throw new Error(failMsg)
   return blob
 }
 
-async function compressImage(file: File): Promise<Blob> {
+async function compressImage(file: File, failMsg: string): Promise<Blob> {
   const bitmap = await fileToImageBitmap(file)
   try {
     const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(bitmap.width, bitmap.height))
@@ -60,14 +60,14 @@ async function compressImage(file: File): Promise<Blob> {
     canvas.width = width
     canvas.height = height
     const ctx = canvas.getContext("2d")
-    if (!ctx) throw new Error("სურათის დამუშავება ვერ მოხერხდა.")
+    if (!ctx) throw new Error(failMsg)
     ctx.drawImage(bitmap, 0, 0, width, height)
 
     let quality = 0.86
-    let best = await canvasToJpegBlob(canvas, quality)
+    let best = await canvasToJpegBlob(canvas, quality, failMsg)
     while (best.size > TARGET_IMAGE_BYTES && quality > 0.45) {
       quality -= 0.08
-      best = await canvasToJpegBlob(canvas, quality)
+      best = await canvasToJpegBlob(canvas, quality, failMsg)
     }
     return best
   } finally {
@@ -85,6 +85,7 @@ function buildListingDescription(description: string, meta: ListingMeta) {
 }
 
 export default function ListingFormPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { id } = useParams()
   const isEdit = Boolean(id)
@@ -99,7 +100,7 @@ export default function ListingFormPage() {
     queryFn: () => fetchListingForm(id),
     enabled: Boolean(listingFormUserId) && isSupabaseConfigured,
   })
-  const loadError = isError ? queryErrorMessage(queryError, "ჩატვირთვა ვერ მოხერხდა.") : ""
+  const loadError = isError ? queryErrorMessage(queryError, t("listingForm.loadFailed")) : ""
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const displayError = error || loadError
@@ -109,7 +110,9 @@ export default function ListingFormPage() {
   const [availableTags, setAvailableTags] = useState<TagOption[]>([])
 
   const [title, setTitle] = useState("")
+  const [titleEn, setTitleEn] = useState("")
   const [description, setDescription] = useState("")
+  const [descriptionEn, setDescriptionEn] = useState("")
   const [price, setPrice] = useState("")
   const [priceType, setPriceType] = useState<ListingPriceType>("fixed")
   const [isActive, setIsActive] = useState(true)
@@ -124,8 +127,8 @@ export default function ListingFormPage() {
   const [vipOpen, setVipOpen] = useState(false)
 
   useEffect(() => {
-    document.title = isEdit ? "ლისტინგის რედაქტირება — გიგორი" : "ახალი ლისტინგი — გიგორი"
-  }, [isEdit])
+    document.title = isEdit ? t("listingForm.editTitle") : t("listingForm.newTitle")
+  }, [isEdit, t])
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return
@@ -150,7 +153,9 @@ export default function ListingFormPage() {
     if (listingFormData.edit) {
       const edit = listingFormData.edit
       setTitle(edit.title)
+      setTitleEn(edit.titleEn)
       setDescription(edit.description)
+      setDescriptionEn(edit.descriptionEn)
       setPrice(edit.price)
       setPriceType(edit.priceType)
       setIsActive(edit.isActive)
@@ -230,7 +235,7 @@ export default function ListingFormPage() {
     if (incoming.length === 0) return
     const remaining = MAX_LISTING_IMAGES - existingImageUrls.length - newImageFiles.length
     if (remaining <= 0) {
-      setError(`შესაძლებელია მაქსიმუმ ${MAX_LISTING_IMAGES} ფოტოს დამატება.`)
+      setError(t("listingForm.maxPhotos", { max: MAX_LISTING_IMAGES }))
       return
     }
 
@@ -238,7 +243,7 @@ export default function ListingFormPage() {
     for (const file of incoming) {
       if (!file.type.startsWith("image/")) continue
       if (file.size > MAX_INPUT_IMAGE_BYTES) {
-        setError("ერთი ან მეტი სურათი ძალიან დიდია. მაქსიმუმ 10MB თითო ფაილზე.")
+        setError(t("listingForm.imageTooBig"))
         continue
       }
       valid.push(file)
@@ -270,9 +275,23 @@ export default function ListingFormPage() {
       setError(titleResult.message)
       return
     }
+    const titleEnResult = titleEn.trim()
+      ? validateListingTitle(titleEn)
+      : ({ ok: true, value: "" } as const)
+    if (titleEnResult.ok === false) {
+      setError(titleEnResult.message)
+      return
+    }
     const descriptionResult = validateListingDescription(description)
     if (descriptionResult.ok === false) {
       setError(descriptionResult.message)
+      return
+    }
+    const descriptionEnResult = descriptionEn.trim()
+      ? validateListingDescription(descriptionEn)
+      : ({ ok: true, value: "" } as const)
+    if (descriptionEnResult.ok === false) {
+      setError(descriptionEnResult.message)
       return
     }
     const tagsResult = validateTags(tags)
@@ -280,18 +299,18 @@ export default function ListingFormPage() {
       setError(tagsResult.message)
       return
     }
-    const priceResult = validateMoneyAmount(price || "0", { min: 0, label: "ფასი" })
+    const priceResult = validateMoneyAmount(price || "0", { min: 0, label: t("common.price") })
     if (priceResult.ok === false) {
       setError(priceResult.message)
       return
     }
     if (priceResult.value == null) {
-      setError("ფასი სავალდებულოა.")
+      setError(t("listingForm.priceRequired"))
       return
     }
     const parsedPrice = priceResult.value
     if (subcategoryId.trim() && !subcategories.some((s) => s.id === subcategoryId.trim())) {
-      setError("აირჩიე სპეციალიზაცია სიიდან ან გასუფთავე.")
+      setError(t("listingForm.selectSpecializationOrClear"))
       return
     }
 
@@ -300,18 +319,24 @@ export default function ListingFormPage() {
       const payload: {
         freelancer_profile_id: string
         title: string
+        title_en: string | null
         description: string
+        description_en: string | null
         price: number
         price_type: ListingPriceType
         is_active: boolean
       } = {
         freelancer_profile_id: freelancerProfileId,
         title: titleResult.value,
+        title_en: titleEnResult.value.trim() || null,
         description: buildListingDescription(descriptionResult.value, {
           categoryId: persistedListingCategoryId || null,
           subcategoryId: subcategoryId.trim() || null,
           tags: tagsResult.value,
         }),
+        description_en: descriptionEnResult.ok && descriptionEnResult.value.trim()
+          ? descriptionEnResult.value.trim()
+          : null,
         price: parsedPrice,
         price_type: priceType,
         is_active: isActive,
@@ -330,19 +355,20 @@ export default function ListingFormPage() {
           .from("services")
           .select("id", { count: "exact", head: true })
           .eq("freelancer_profile_id", freelancerProfileId)
-        if ((count ?? 0) >= 3) throw new Error("შესაძლებელია მაქსიმუმ 3 განცხადების დამატება.")
+        if ((count ?? 0) >= 3) throw new Error(t("listingForm.maxListings"))
 
         const { data: inserted, error: insertError } = await supabase.from("services").insert(payload).select("id").single()
-        if (insertError || !inserted) throw insertError ?? new Error("განცხადება ვერ შეიქმნა.")
+        if (insertError || !inserted) throw insertError ?? new Error(t("listingForm.createFailed"))
         listingId = inserted.id
       }
 
-      if (!listingId) throw new Error("განცხადების ID ვერ მოიძებნა.")
+      if (!listingId) throw new Error(t("listingForm.listingIdNotFound"))
 
       let uploadedImagePaths: string[] = []
       if (newImageFiles.length > 0) {
         const bucket = "service-images"
-        const compressedFiles = await Promise.all(newImageFiles.map((file) => compressImage(file)))
+        const imageFailMsg = t("listingForm.imageProcessFailed")
+        const compressedFiles = await Promise.all(newImageFiles.map((file) => compressImage(file, imageFailMsg)))
         uploadedImagePaths = []
         for (let i = 0; i < compressedFiles.length; i += 1) {
           const blob = compressedFiles[i]
@@ -353,7 +379,7 @@ export default function ListingFormPage() {
             upsert: false,
           })
           if (uploadError) {
-            throw new Error(`სურათის ატვირთვა ვერ მოხერხდა: ${uploadError.message}`)
+            throw new Error(t("listingForm.imageUploadFailed", { message: uploadError.message }))
           }
           uploadedImagePaths.push(path)
         }
@@ -371,10 +397,10 @@ export default function ListingFormPage() {
 
       navigate("/dashboard", {
         replace: true,
-        state: { successMessage: isEdit ? "განცხადება განახლდა." : "განცხადება დაემატა." },
+        state: { successMessage: isEdit ? t("listingForm.updatedSuccess") : t("listingForm.addedSuccess") },
       })
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "შენახვა ვერ მოხერხდა.")
+      setError(saveError instanceof Error ? saveError.message : t("listingForm.saveFailed"))
     } finally {
       setSaving(false)
     }
@@ -383,7 +409,7 @@ export default function ListingFormPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50">
-        <main className="mx-auto max-w-4xl px-6 py-10">იტვირთება...</main>
+        <main className="mx-auto max-w-4xl px-6 py-10">{t("common.loading")}</main>
       </div>
     )
   }
@@ -394,26 +420,36 @@ export default function ListingFormPage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-6">
           <div className="mb-5 flex items-center justify-between">
             <h1 className={`text-2xl font-bold ${isEdit ? "text-[#1B2B4B]" : "text-[#0088FF]"}`}>
-              {isEdit ? "განცხადების რედაქტირება" : "ახალი განცხადების დამატება"}
+              {isEdit ? t("listingForm.editListing") : t("listingForm.addNew")}
             </h1>
             <Link to="/dashboard" className="text-sm font-semibold text-[#D4A843] hover:underline">
-              უკან მართვის პანელზე
+              {t("listingForm.backToDashboard")}
             </Link>
           </div>
 
           <div className="space-y-4">
             <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">სათაური *</span>
+              <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("listingForm.titleRequired")}</span>
               <input
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm"
-                placeholder="მაგ: ვებსაიტის დამზადება React-ით"
+                placeholder={t("listingForm.titlePlaceholder")}
               />
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">category</span>
+              <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("listingForm.titleEnOptional")}</span>
+              <input
+                value={titleEn}
+                onChange={(event) => setTitleEn(event.target.value)}
+                className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm"
+                placeholder={t("listingForm.titleEnPlaceholder")}
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("common.category")}</span>
               <select
                 value={rootCategoryId}
                 onChange={(event) => {
@@ -431,7 +467,7 @@ export default function ListingFormPage() {
                 }}
                 className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm"
               >
-                <option value="">აირჩიე კატეგორია</option>
+                <option value="">{t("listingForm.selectCategory")}</option>
                 {categoryRootsList.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name_ka}
@@ -441,7 +477,7 @@ export default function ListingFormPage() {
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">ქვეკატეგორია</span>
+              <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("listingForm.subcategory")}</span>
               <select
                 value={categoryId}
                 disabled={!rootCategoryId || categoryMidsList.length === 0}
@@ -453,10 +489,10 @@ export default function ListingFormPage() {
               >
                 <option value="">
                   {!rootCategoryId
-                    ? "ჯერ აირჩიე კატეგორია"
+                    ? t("listingForm.selectSubcategoryFirst")
                     : categoryMidsList.length === 0
-                      ? "ამ კატეგორიისთვის ქვეკატეგორია არ არის"
-                      : "აირჩიე subcategory"}
+                      ? t("listingForm.noSubcategoryForCategory")
+                      : t("listingForm.selectSubcategory")}
                 </option>
                 {categoryMidsList.map((category) => (
                   <option key={category.id} value={category.id}>
@@ -467,7 +503,7 @@ export default function ListingFormPage() {
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">სპეციალიზაცია</span>
+              <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("listingForm.subcategorySpecialization")}</span>
               <select
                 value={subcategoryId}
                 disabled={!specializationParentCategoryId}
@@ -475,7 +511,9 @@ export default function ListingFormPage() {
                 className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm disabled:cursor-not-allowed disabled:bg-slate-100"
               >
                 <option value="">
-                  {specializationParentCategoryId ? "აირჩიე (არასავალდებულო)" : "ჯერ აირჩიე ქვეკატეგორია ან კატეგორია"}
+                  {specializationParentCategoryId
+                    ? t("listingForm.selectSpecializationOptional")
+                    : t("listingForm.selectSubcategoryOrCategoryFirst")}
                 </option>
                 {subcategories.map((sub) => (
                   <option key={sub.id} value={sub.id}>
@@ -486,10 +524,10 @@ export default function ListingFormPage() {
             </label>
 
             <div>
-              <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">თეგები (არასავალდებულო)</p>
+              <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">{t("listingForm.tagsOptional")}</p>
               {!specializationParentCategoryId ? (
                 <p className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                  თეგების არჩევა შეგიძლია კატეგორიის მითითების შემდეგ — სავალდებულო არ არის.
+                  {t("listingForm.tagsHint")}
                 </p>
               ) : (
                 <>
@@ -510,26 +548,37 @@ export default function ListingFormPage() {
                     ))}
                   </div>
                   <p className="mt-2 text-xs text-slate-500">
-                    კატეგორიაზე მორგებული თეგები (არასავალდებულო). არჩეული: {tags.length}
+                    {t("listingForm.tagsAfterCategory", { count: tags.length })}
                   </p>
                 </>
               )}
             </div>
 
             <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">აღწერა</span>
+              <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("listingForm.descriptionKa")}</span>
               <textarea
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 rows={5}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                placeholder="აღწერე რას სთავაზობ დამსაქმებელს"
+                placeholder={t("listingForm.descriptionPlaceholder")}
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("listingForm.descriptionEnOptional")}</span>
+              <textarea
+                value={descriptionEn}
+                onChange={(event) => setDescriptionEn(event.target.value)}
+                rows={5}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                placeholder={t("listingForm.descriptionEnPlaceholder")}
               />
             </label>
 
             <div className="space-y-4">
               <div>
-                <p className="mb-2 text-sm font-semibold text-[#1B2B4B]">ფასის ტიპი</p>
+                <p className="mb-2 text-sm font-semibold text-[#1B2B4B]">{t("listingForm.priceType")}</p>
                 <div className="grid gap-2 sm:grid-cols-3">
                   {(Object.keys(PRICE_TYPE_LABELS) as ListingPriceType[]).map((key) => (
                     <label key={key} className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm">
@@ -545,7 +594,7 @@ export default function ListingFormPage() {
                 </div>
               </div>
               <label className="block">
-                <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">ფასი (₾)</span>
+                <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("listingForm.priceAmount")}</span>
                 <input
                   type="number"
                   min="0"
@@ -557,7 +606,7 @@ export default function ListingFormPage() {
             </div>
 
             <div>
-              <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">სურათები (მაქს. 3)</p>
+              <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">{t("listingForm.imagesMax")}</p>
               <div className="rounded-lg border border-slate-300 bg-slate-50 p-3">
                 <input
                   type="file"
@@ -571,7 +620,7 @@ export default function ListingFormPage() {
                   className="block w-full text-xs text-slate-700 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-[#0088FF] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white file:transition-colors file:duration-150 file:hover:bg-[#006ACC]"
                 />
                 <p className="mt-2 text-xs text-slate-500">
-                  PNG/JPG/WEBP. თითო ფაილი მაქს 10MB.
+                  {t("listingForm.imagesHint")}
                 </p>
 
                 {existingImageUrls.length + newImageFiles.length > 0 ? (
@@ -588,7 +637,7 @@ export default function ListingFormPage() {
                           onClick={() => removeExistingImage(url)}
                           className="w-full border-t border-slate-200 py-1 text-[11px] font-semibold text-red-600"
                         >
-                          წაშლა
+                          {t("common.delete")}
                         </button>
                       </div>
                     ))}
@@ -600,7 +649,7 @@ export default function ListingFormPage() {
                           onClick={() => removeNewImage(index)}
                           className="w-full border-t border-slate-200 py-1 text-[11px] font-semibold text-red-600"
                         >
-                          წაშლა
+                          {t("common.delete")}
                         </button>
                       </div>
                     ))}
@@ -611,7 +660,7 @@ export default function ListingFormPage() {
 
             <label className="inline-flex items-center gap-2 text-sm text-slate-700">
               <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} />
-              აქტიური ლისტინგი
+              {t("listingForm.activeListing")}
             </label>
           </div>
 
@@ -624,13 +673,13 @@ export default function ListingFormPage() {
               disabled={!canSubmit}
               className="h-11 rounded-lg bg-[#0088FF] px-5 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC] disabled:pointer-events-none disabled:opacity-60"
             >
-              {saving ? "ინახება..." : "შენახვა"}
+              {saving ? t("common.inProgress") : t("common.save")}
             </button>
             <Link
               to="/dashboard"
               className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-300 px-5 text-sm font-semibold text-slate-700"
             >
-              გაუქმება
+              {t("common.cancel")}
             </Link>
             {freelancerProfileId ? (
               <button
@@ -638,9 +687,9 @@ export default function ListingFormPage() {
                 onClick={() => setVipOpen(true)}
                 className="h-11 rounded-lg border border-[#D4A843] bg-amber-50 px-5 text-sm font-semibold text-[#1B2B4B]"
                 disabled={!id}
-                title={!id ? "ჯერ შეინახე ლისტინგი, შემდეგ ჩართე VIP." : undefined}
+                title={!id ? t("listingForm.saveFirstForVip") : undefined}
               >
-                VIP განახლება
+                {t("listingForm.upgradeVip")}
               </button>
             ) : null}
           </div>
@@ -650,7 +699,7 @@ export default function ListingFormPage() {
         <VIPUpgrade
           open={vipOpen}
           jobId={id}
-          jobTitle={title.trim() || "ფრილანსერის სერვისი"}
+          jobTitle={title.trim() || t("listingForm.defaultServiceTitle")}
           listingType="freelancer"
           onClose={() => setVipOpen(false)}
           onSuccess={() => {

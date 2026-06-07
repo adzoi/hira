@@ -5,7 +5,9 @@ export type ListingDetail = {
   id: string
   freelancerProfileId: string
   title: string
+  titleEn: string | null
   descriptionRaw: string | null
+  descriptionEn: string | null
   price: number
   priceType: string
   createdAt: string
@@ -31,7 +33,9 @@ export async function fetchListingDetail(id: string): Promise<ListingDetail> {
             id,
             freelancer_profile_id,
             title,
+            title_en,
             description,
+            description_en,
             price,
             price_type,
             views_count,
@@ -69,7 +73,9 @@ export async function fetchListingDetail(id: string): Promise<ListingDetail> {
     id: data.id,
     freelancerProfileId: String(data.freelancer_profile_id ?? ""),
     title: data.title ?? "სერვისი",
+    titleEn: (data as { title_en?: string | null }).title_en ?? null,
     descriptionRaw: data.description,
+    descriptionEn: (data as { description_en?: string | null }).description_en ?? null,
     price: Number(data.price ?? 0),
     priceType: normalizeListingPriceType((data as { price_type?: string | null }).price_type),
     createdAt: data.created_at ?? new Date().toISOString(),

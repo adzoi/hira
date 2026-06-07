@@ -1,25 +1,6 @@
 import { Link } from "react-router-dom"
-
-const navColumns = [
-  {
-    heading: "პლატფორმა",
-    links: [
-      { label: "ფრილანსერები", to: "/browse" },
-      { label: "ლისტინგები", to: "/listings" },
-      { label: "სამუშაოები", to: "/jobs" },
-      { label: "დამქირავებლები", to: "/hirers" },
-    ],
-  },
-  {
-    heading: "ანგარიში",
-    links: [
-      { label: "შესვლა", to: "/login" },
-      { label: "რეგისტრაცია", to: "/register" },
-      { label: "მართვის პანელი", to: "/dashboard" },
-      { label: "პარამეტრები", to: "/settings" },
-    ],
-  },
-]
+import I18nText from "../i18n/I18nText.tsx"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
 
 const socialLinks = [
   {
@@ -41,15 +22,6 @@ const socialLinks = [
     ),
   },
   {
-    label: "Gmail",
-    href: "",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5" aria-hidden>
-        <path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.272H1.636A1.636 1.636 0 010 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L5.455 4.64 12 9.548l6.545-4.908 1.528-1.147C21.69 2.28 24 3.434 24 5.457z" />
-      </svg>
-    ),
-  },
-  {
     label: "X (Twitter)",
     href: "",
     icon: (
@@ -67,21 +39,87 @@ const socialLinks = [
       </svg>
     ),
   },
+  {
+    label: "Telegram",
+    href: "",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5" aria-hidden>
+        <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.831-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
+      </svg>
+    ),
+  },
 ]
 
-export default function Footer() {
-  const year = new Date().getFullYear()
+type FooterColumn = {
+  headingKey: string
+  links: { labelKey: string; to: string }[]
+}
+
+function FooterLinkColumn({ headingKey, links }: FooterColumn) {
+  const { t } = useTranslation()
+
   return (
-    <footer className="border-t border-blue-700/40 bg-[#0088FF] text-white">
+    <div>
+      <I18nText
+        i18nKey={headingKey}
+        as="p"
+        className="text-xs font-bold uppercase tracking-wider text-white/90"
+      />
+      <ul className="mt-4 space-y-2.5">
+        {links.map((item) => (
+          <li key={item.labelKey}>
+            <Link to={item.to} className="text-sm text-white/90 transition hover:text-white">
+              <span data-i18n={item.labelKey}>{t(item.labelKey)}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+export default function Footer() {
+  const year = 2026
+
+  const navColumns: FooterColumn[] = [
+    {
+      headingKey: "footer.platform",
+      links: [
+        { labelKey: "footer.services", to: "/listings" },
+        { labelKey: "footer.categories", to: "/listings" },
+        { labelKey: "footer.freelancers", to: "/browse" },
+      ],
+    },
+    {
+      headingKey: "footer.resources",
+      links: [
+        { labelKey: "footer.guide", to: "/guide" },
+        { labelKey: "footer.faq", to: "/faq" },
+      ],
+    },
+    {
+      headingKey: "footer.aboutUs",
+      links: [
+        { labelKey: "footer.whatIsHira", to: "/about" },
+        { labelKey: "footer.terms", to: "/terms" },
+        { labelKey: "footer.privacy", to: "/privacy" },
+        { labelKey: "footer.cookies", to: "/cookies" },
+      ],
+    },
+  ]
+
+  return (
+    <footer className="border-t border-brand/40 bg-brand text-white">
       <div className="mx-auto w-full max-w-[1200px] px-4 py-12 md:px-6 md:py-16">
-        <div className="grid grid-cols-1 gap-10 md:grid-cols-4">
-          {/* Brand */}
-          <div className="md:col-span-2">
-            <p className="text-xl font-extrabold text-white">გიგორი</p>
-            <p className="mt-3 max-w-sm text-sm leading-relaxed text-white/90">
-              ქართული ფრილანს და მარკეტპლეისი — იპოვე სერვისები, დაიქირავე პროფესიონალები და მოიძიო სამუშაოები ერთ საიტზე.
-            </p>
-            <div className="mt-5 flex items-center gap-3">
+        <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="sm:col-span-2">
+            <I18nText i18nKey="brand.name" as="p" className="text-xl font-extrabold text-white" />
+            <I18nText
+              i18nKey="footer.tagline"
+              as="p"
+              className="mt-3 max-w-md text-sm leading-relaxed text-white/90"
+            />
+            <div className="mt-5 flex flex-wrap items-center gap-3">
               {socialLinks.map((s) => (
                 <a
                   key={s.label}
@@ -95,29 +133,14 @@ export default function Footer() {
             </div>
           </div>
 
-          {/* Nav columns */}
           {navColumns.map((col) => (
-            <div key={col.heading}>
-              <p className="text-xs font-bold uppercase tracking-wider text-white/90">{col.heading}</p>
-              <ul className="mt-4 space-y-2.5">
-                {col.links.map((item) => (
-                  <li key={item.to}>
-                    <Link
-                      to={item.to}
-                      className="text-sm text-white/90 transition hover:text-white"
-                    >
-                      {item.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <FooterLinkColumn key={col.headingKey} headingKey={col.headingKey} links={col.links} />
           ))}
         </div>
 
         <div className="mt-12 flex flex-col gap-2 border-t border-white/20 pt-6 text-xs text-white/85 sm:flex-row sm:items-center sm:justify-between">
-          <span>© {year} გიგორი. ყველა უფლება დაცულია.</span>
-          <span>Made in Georgia 🇬🇪</span>
+          <I18nText i18nKey="footer.copyright" params={{ year }} />
+          <I18nText i18nKey="footer.madeIn" />
         </div>
       </div>
     </footer>

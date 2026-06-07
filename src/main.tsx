@@ -5,22 +5,27 @@ import { BrowserRouter } from "react-router-dom"
 import "./index.css"
 import App from "./App.tsx"
 import { ToastProvider } from "./components/ui/ToastProvider.tsx"
+import { LocaleProvider } from "./i18n/LocaleContext.tsx"
 import { queryClient } from "./lib/queryClient.ts"
 import { isSupabaseConfigured, supabase } from "./lib/supabase.ts"
 import { initSupabaseAuth } from "./lib/supabaseAuth.ts"
+import { initRealtimeAuth } from "./lib/realtimeAuth.ts"
 
 async function bootstrap() {
   if (isSupabaseConfigured && supabase) {
     await initSupabaseAuth(supabase)
+    initRealtimeAuth(supabase)
   }
 
   createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
-      <ToastProvider>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </ToastProvider>
+      <LocaleProvider>
+        <ToastProvider>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </ToastProvider>
+      </LocaleProvider>
       {import.meta.env.DEV ? <ReactQueryDevtools initialIsOpen={false} /> : null}
     </QueryClientProvider>,
   )

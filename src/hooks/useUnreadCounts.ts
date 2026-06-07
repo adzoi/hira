@@ -1,15 +1,41 @@
-import { useEffect } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { fetchUnreadConversationCount } from "../lib/chat.ts"
+import type { ChatBroadcastPayload } from "../lib/chatBroadcast.ts"
+import { oncePerChatMessage } from "../lib/chatMessageDedup.ts"
+import { subscribeInboxBroadcastHub } from "../lib/inboxBroadcastHub.ts"
+import { unreadCountsQueryKey } from "../lib/unreadCountsCache.ts"
 import { supabase } from "../lib/supabase.ts"
+import { subscribeRealtimeChannel } from "../lib/realtimeAuth.ts"
 
 export function useUnreadCounts(userId: string | null) {
   const queryClient = useQueryClient()
+  const syncTimerRef = useRef<number | null>(null)
+
+  const scheduleSync = useCallback(() => {
+    if (!userId) return
+    if (syncTimerRef.current != null) window.clearTimeout(syncTimerRef.current)
+    syncTimerRef.current = window.setTimeout(() => {
+      void queryClient.invalidateQueries({ queryKey: unreadCountsQueryKey(userId) })
+    }, 400)
+  }, [queryClient, userId])
+
+  const onIncomingMessage = useCallback(
+    (messageId: string, senderId: string) => {
+      if (!userId || senderId === userId) return
+      oncePerChatMessage(messageId, scheduleSync)
+    },
+    [userId, scheduleSync],
+  )
 
   useEffect(() => {
     if (!userId || !supabase) return
     const client = supabase
 
-    // Avoid reusing an existing subscribed channel (React 18 strict-mode effects can mount twice).
+    const unsubscribeInbox = subscribeInboxBroadcastHub(client, userId, (payload: ChatBroadcastPayload) => {
+      onIncomingMessage(payload.messageId, payload.senderId)
+    })
+
     const suffix =
       typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
         ? crypto.randomUUID()
@@ -18,26 +44,12 @@ export function useUnreadCounts(userId: string | null) {
 
     channel.on(
       "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "notifications",
-        filter: `user_id=eq.${userId}`,
-      },
-      () => {
-        queryClient.invalidateQueries({ queryKey: ["unread-counts", userId] })
-      },
-    )
-
-    channel.on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "messages",
-      },
-      () => {
-        queryClient.invalidateQueries({ queryKey: ["unread-counts", userId] })
+      { event: "INSERT", schema: "public", table: "messages" },
+      (payload) => {
+        const row = payload.new as Record<string, unknown>
+        const messageId = row?.id != null ? String(row.id) : ""
+        const senderId = row?.sender_id != null ? String(row.sender_id) : ""
+        onIncomingMessage(messageId, senderId)
       },
     )
 
@@ -49,33 +61,66 @@ export function useUnreadCounts(userId: string | null) {
         table: "conversation_reads",
         filter: `user_id=eq.${userId}`,
       },
-      () => {
-        queryClient.invalidateQueries({ queryKey: ["unread-counts", userId] })
+      () => scheduleSync(),
+    )
+
+    channel.on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "notifications",
+        filter: `user_id=eq.${userId}`,
+      },
+      (payload) => {
+        const row = payload.new as Record<string, unknown>
+        if (String(row.type ?? "") === "chat_message") return
+        scheduleSync()
       },
     )
 
-    channel.subscribe()
+    channel.on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "notifications",
+        filter: `user_id=eq.${userId}`,
+      },
+      () => scheduleSync(),
+    )
+
+    subscribeRealtimeChannel(client, channel)
 
     return () => {
+      unsubscribeInbox()
       channel.unsubscribe()
       client.removeChannel(channel)
+      if (syncTimerRef.current != null) window.clearTimeout(syncTimerRef.current)
     }
-  }, [userId, queryClient])
+  }, [userId, onIncomingMessage, scheduleSync])
 
   const { data } = useQuery({
-    queryKey: ["unread-counts", userId],
+    queryKey: unreadCountsQueryKey(userId!),
     queryFn: async () => {
-      const { data, error } = await supabase!
-        .from("profiles")
-        .select("unread_notifications_count, unread_messages_count")
-        .eq("id", userId!)
-        .single()
-      if (error) throw error
-      return data
+      const [chatUnread, profileRes] = await Promise.all([
+        fetchUnreadConversationCount(supabase!),
+        supabase!
+          .from("profiles")
+          .select("unread_notifications_count")
+          .eq("id", userId!)
+          .single(),
+      ])
+      if (profileRes.error) throw profileRes.error
+      return {
+        unread_messages_count: chatUnread,
+        unread_notifications_count: profileRes.data?.unread_notifications_count ?? 0,
+      }
     },
     enabled: Boolean(userId) && Boolean(supabase),
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    staleTime: 5_000,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   })
 
   return {

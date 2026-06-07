@@ -15,6 +15,8 @@ import { jobVacancyStats } from "../lib/jobVacancies.ts"
 import { formatJobBudget, jobApplicationRateLabel } from "../lib/listingPrice.ts"
 import { formatHirerContactForApplicant, hirerContactCopyText } from "../lib/jobContactPreference.ts"
 import { validateCoverLetter, validateMoneyAmount } from "../lib/validation.ts"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { pickListingDescription, pickListingTitle } from "../lib/listingLocale.ts"
 
 function formatDate(dateString: string) {
   if (!dateString.trim()) return "—"
@@ -45,6 +47,7 @@ function getInitials(value: string) {
 }
 
 export default function JobDetailPage() {
+  const { t, locale } = useTranslation()
   const { pushToast } = useToast()
   const queryClient = useQueryClient()
   const { id } = useParams()
@@ -93,11 +96,11 @@ export default function JobDetailPage() {
   }, [data])
 
   useEffect(() => {
-    document.title = "სამუშაოები — გიგორი"
+    document.title = t("jobDetail.title")
     return () => {
-      document.title = "გიგორი"
+      document.title = t("brand.name")
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     if (!supabase || !job?.id) return
@@ -124,9 +127,9 @@ export default function JobDetailPage() {
   }, [job])
 
   const rateLabel = useMemo(() => {
-    if (!job) return "შემოთავაზებული ფასი (₾)"
+    if (!job) return t("common.proposedRateDefault")
     return jobApplicationRateLabel(job.budget_type)
-  }, [job])
+  }, [job, t])
 
   const isJobOwner =
     Boolean(job) && authedUserType === "hirer" && Boolean(viewerUserId) && viewerUserId === job!.hirer_user_id
@@ -134,6 +137,23 @@ export default function JobDetailPage() {
   const canViewHirerContact = Boolean(hirerContact) && (alreadyApplied || isJobOwner)
 
   const vacancySnap = job ? jobVacancyStats(job.vacancies, job.accepted_count) : null
+
+  const displayTitle = useMemo(
+    () =>
+      job ? pickListingTitle({ title: job.title, titleEn: job.titleEn }, locale, job.title) : "",
+    [job, locale],
+  )
+
+  const displayDescription = useMemo(
+    () =>
+      job
+        ? pickListingDescription(
+            { description: job.description, descriptionEn: job.descriptionEn },
+            locale,
+          )
+        : "",
+    [job, locale],
+  )
 
   const handleApply = async () => {
     if (!supabase || !job || !freelancerProfileId) return
@@ -231,7 +251,7 @@ export default function JobDetailPage() {
   }
 
   if (!job) {
-    const headline = error.trim().length > 0 ? error : "სამუშაო ვერ მოიძებნა"
+    const headline = error.trim().length > 0 ? error : t("jobDetail.notFound")
     return (
       <div className="min-h-screen bg-slate-50">
         <main className="mx-auto max-w-[1000px] px-6 py-10">
@@ -245,12 +265,12 @@ export default function JobDetailPage() {
               onClick={() => void refetch()}
               className="mt-6 h-11 rounded-lg border border-[#1B2B4B] bg-white px-5 text-sm font-semibold text-[#1B2B4B] transition hover:bg-[#1B2B4B] hover:text-white"
             >
-              თავიდან ცდა
+              {t("common.tryAgain")}
             </button>
           </div>
           <div className="mt-6 text-center">
             <Link to="/jobs" className="text-sm font-semibold text-[#D4A843] hover:underline">
-              სამუშაოებზე დაბრუნება
+              {t("common.backToJobs")}
             </Link>
           </div>
         </main>
@@ -265,7 +285,7 @@ export default function JobDetailPage() {
           <section className="space-y-6">
             <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <h1 className="min-w-0 flex-1 text-3xl font-bold text-[#1B2B4B]">{job.title}</h1>
+                <h1 className="min-w-0 flex-1 text-3xl font-bold text-[#1B2B4B]">{displayTitle}</h1>
                 <div className="flex shrink-0 flex-wrap items-center gap-2">
                   {!isJobOwner ? (
                     <SaveBookmarkButton variant="icon" resourceType="job" resourceId={job.id} />
@@ -277,7 +297,7 @@ export default function JobDetailPage() {
                   ) : null}
                   {job.is_urgent ? (
                     <span className="rounded-full bg-red-500 px-3 py-1 text-xs font-semibold text-white">
-                      გადაუდებელი
+                      {t("common.urgent")}
                     </span>
                   ) : null}
                 </div>
@@ -289,18 +309,18 @@ export default function JobDetailPage() {
                     onClick={() => setVipModalOpen(true)}
                     className="inline-flex h-10 items-center rounded-lg border border-[#D4A843] bg-amber-50 px-4 text-sm font-semibold text-[#1B2B4B] transition hover:bg-[#D4A843]/50"
                   >
-                    VIP / Featured გაუმჯობესება
+                    {t("jobDetail.vipUpgrade")}
                   </button>
                 </div>
               ) : null}
               <p className="mt-2 text-sm text-slate-500">
-                {formatRelativeTime(job.created_at)} • {job.views_count} ნახვა
+                {formatRelativeTime(job.created_at)} • {t("common.views", { count: job.views_count })}
               </p>
-              <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-slate-700">{job.description}</p>
+              <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-slate-700">{displayDescription}</p>
             </article>
 
             <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="border-l-4 border-[#D4A843] pl-3 text-xl font-bold text-[#1B2B4B]">საჭირო უნარები</h2>
+              <h2 className="border-l-4 border-[#D4A843] pl-3 text-xl font-bold text-[#1B2B4B]">{t("jobDetail.requiredSkills")}</h2>
               <div className="mt-4 flex flex-wrap gap-2">
                 {(job.skills ?? []).map((skill) => (
                   <span key={skill.id} className="rounded-full border border-[#D4A843] px-3 py-1 text-xs font-medium text-[#1B2B4B]">
@@ -311,24 +331,33 @@ export default function JobDetailPage() {
             </article>
 
             <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="border-l-4 border-[#D4A843] pl-3 text-xl font-bold text-[#1B2B4B]">ბიუჯეტი</h2>
+              <h2 className="border-l-4 border-[#D4A843] pl-3 text-xl font-bold text-[#1B2B4B]">{t("common.budget")}</h2>
               <p className="mt-4 text-lg font-bold text-[#1B2B4B]">
-                ბიუჯეტი: {budgetText}
+                {t("common.budgetLabel", { value: budgetText })}
               </p>
             </article>
 
             <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="border-l-4 border-[#D4A843] pl-3 text-xl font-bold text-[#1B2B4B]">დეტალები</h2>
+              <h2 className="border-l-4 border-[#D4A843] pl-3 text-xl font-bold text-[#1B2B4B]">{t("common.details")}</h2>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg bg-slate-50 p-3 text-sm">ხანგრძლივობა: {job.duration_type === "one_time" ? "ერთჯერადი" : "მიმდინარე"}</div>
-                <div className="rounded-lg bg-slate-50 p-3 text-sm">ლოკაცია: {job.location_type}</div>
-                <div className="rounded-lg bg-slate-50 p-3 text-sm">კატეგორია: {job.category_name}</div>
                 <div className="rounded-lg bg-slate-50 p-3 text-sm">
-                  ვადა: {job.application_deadline ? formatDate(job.application_deadline) : "არ არის მითითებული"}
+                  {t("common.durationLabel", {
+                    value: job.duration_type === "one_time" ? t("jobDetail.oneTime") : t("jobDetail.ongoing"),
+                  })}
+                </div>
+                <div className="rounded-lg bg-slate-50 p-3 text-sm">{t("common.locationLabel", { value: job.location_type })}</div>
+                <div className="rounded-lg bg-slate-50 p-3 text-sm">{t("common.categoryLabel", { value: job.category_name })}</div>
+                <div className="rounded-lg bg-slate-50 p-3 text-sm">
+                  {t("common.deadlineLabel", {
+                    date: job.application_deadline ? formatDate(job.application_deadline) : t("common.notSpecified"),
+                  })}
                 </div>
                 <div className="rounded-lg bg-slate-50 p-3 text-sm sm:col-span-2">
                   <span className="font-semibold text-[#1B2B4B]">
-                    {vacancySnap?.acceptedCount ?? 0}/{vacancySnap?.vacancies ?? 1} ვაკანსია შევსებულია
+                    {t("common.vacanciesFilled", {
+                      filled: vacancySnap?.acceptedCount ?? 0,
+                      total: vacancySnap?.vacancies ?? 1,
+                    })}
                   </span>
                   {" "}
                   <span className="text-slate-600">
@@ -336,7 +365,9 @@ export default function JobDetailPage() {
                   </span>
                   {" · "}
                   <span className="text-slate-700">
-                    {vacancySnap?.isFull ? "დაკომლექტებულია · ახალი განცხადება აღარ იღებს" : `${vacancySnap?.remaining ?? 0} თავისუფალი ადგილი`}
+                    {vacancySnap?.isFull
+                      ? t("jobs.vacancyFull")
+                      : t("jobs.spotsFree", { count: vacancySnap?.remaining ?? 0 })}
                   </span>
                 </div>
               </div>
@@ -345,17 +376,17 @@ export default function JobDetailPage() {
             <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               {!supabase || authedUserType === "guest" ? (
                 <div>
-                  <p className="text-sm text-slate-700">განცხადებაზე გამოსახმობლად გაიარე რეგისტრაცია</p>
+                  <p className="text-sm text-slate-700">{t("jobDetail.signupToApply")}</p>
                   <Link to="/register" className="mt-3 inline-flex h-10 items-center rounded-lg bg-[#1B2B4B] px-4 text-sm font-semibold text-white hover:bg-[#D4A843] hover:text-[#1B2B4B]">
-                    რეგისტრაცია
+                    {t("nav.register")}
                   </Link>
                 </div>
               ) : authedUserType === "hirer" ? (
-                <p className="text-sm font-semibold text-slate-700">თქვენ ხართ დამქირავებელი</p>
+                <p className="text-sm font-semibold text-slate-700">{t("jobDetail.youAreHirer")}</p>
               ) : alreadyApplied ? (
                 <div className="space-y-3">
                   <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-700">
-                    განცხადება გაგზავნილია ✓
+                    {t("common.applicationSent")}
                   </div>
                   {job.hirer_user_id ? (
                     <StartConversationButton
@@ -368,17 +399,17 @@ export default function JobDetailPage() {
                 </div>
               ) : job.status !== "open" || (vacancySnap?.isFull ?? false) ? (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                  ამ განცხადებაზე ახალი შეთავაზების გაგზავნა შეუძლებელია - ყველა ადგილი შევსებულია ან განცხადება დაიხურა.
+                  {t("jobDetail.applicationClosed")}
                 </div>
               ) : (
                 <div className="space-y-3">
                   <label className="block">
-                    <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">კომენტარი</span>
+                    <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("nav.comment")}</span>
                     <textarea
                       value={coverLetter}
                       onChange={(event) => setCoverLetter(event.target.value)}
                       rows={5}
-                      placeholder="შენი გამოცდილება და მიდგომა..."
+                      placeholder={t("common.coverLetterPlaceholder")}
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-[#D4A843] focus:ring-2"
                     />
                   </label>
@@ -403,7 +434,7 @@ export default function JobDetailPage() {
                     onClick={handleApply}
                     className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-[#1B2B4B] px-5 text-sm font-semibold text-white hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:opacity-60"
                   >
-                    {submitting ? "მიმდინარეობს..." : "განცხადების გაგზავნა"}
+                    {submitting ? t("common.inProgress") : t("common.sendApplication")}
                   </button>
                   {job.hirer_user_id ? (
                     <StartConversationButton
@@ -423,7 +454,7 @@ export default function JobDetailPage() {
                   {job.hirer_avatar_url ? (
                     <img
                       src={avatarImageUrl(supabase, job.hirer_avatar_url) ?? job.hirer_avatar_url}
-                      alt={`${job.hirer_company_name} ავატარი`}
+                      alt={t("common.avatarAlt", { name: job.hirer_company_name })}
                       loading="lazy"
                       className="h-14 w-14 shrink-0 rounded-full object-cover"
                     />
@@ -434,14 +465,14 @@ export default function JobDetailPage() {
                   )}
                   <div className="min-w-0">
                     <p className="font-bold text-[#1B2B4B]">{job.hirer_company_name}</p>
-                    <p className="text-xs text-slate-500">წევრი: {formatDate(job.hirer_member_since)}</p>
+                    <p className="text-xs text-slate-500">{t("common.memberSince", { date: formatDate(job.hirer_member_since) })}</p>
                   </div>
                 </div>
               </div>
-              <p className="mt-3 text-sm text-slate-600">განთავსებული განცხადებები: {job.hirer_jobs_posted_count}</p>
+              <p className="mt-3 text-sm text-slate-600">{t("jobDetail.postedListingsCount", { count: job.hirer_jobs_posted_count })}</p>
               {canViewHirerContact ? (
                 <button type="button" onClick={copyContact} className="mt-3 inline-flex h-10 items-center rounded-lg border border-slate-300 px-3 text-sm font-semibold text-[#1B2B4B]">
-                  საკონტაქტო ინფორმაციის კოპირება
+                  {t("common.copyContactInfo")}
                 </button>
               ) : null}
               <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -457,16 +488,16 @@ export default function JobDetailPage() {
                   to={`/hirer/${job.hirer_profile_id}`}
                   className="inline-flex min-h-[44px] min-w-0 flex-1 items-center justify-center rounded-lg border border-transparent px-3 py-2 text-center text-sm font-semibold text-[#D4A843] underline hover:bg-amber-50/60 sm:flex-none sm:justify-start"
                 >
-                  პროფილის ნახვა
+                  {t("nav.viewProfile")}
                 </Link>
               </div>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-lg font-bold text-[#1B2B4B]">სხვა განცხადებები</h3>
+              <h3 className="text-lg font-bold text-[#1B2B4B]">{t("jobDetail.otherListings")}</h3>
               <div className="mt-3 space-y-2">
                 {otherJobs.length === 0 ? (
-                  <p className="text-sm text-slate-500">სხვა განცხადებები არ არის.</p>
+                  <p className="text-sm text-slate-500">{t("jobDetail.noOtherJobs")}</p>
                 ) : (
                   otherJobs.map((other) => (
                     <Link key={other.id} to={`/job/${other.id}`} className="block rounded-lg border border-slate-200 p-3 hover:border-[#D4A843]">

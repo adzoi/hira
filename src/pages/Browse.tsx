@@ -5,7 +5,7 @@ import EmptyState from "../components/ui/EmptyState.tsx"
 import ErrorState from "../components/ui/ErrorState.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
 import { mergeFreelancerCompletedWorkCounts } from "../lib/freelancerCompletedWorkCounts.ts"
-import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
+import { META_SUFFIX, resolveListingMetaPrefix, stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
@@ -24,6 +24,8 @@ import FreelancerAvailabilityIndicator from "../components/FreelancerAvailabilit
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
 import { LIMITS, normalizeSearchInput, sanitizeDisplayText } from "../lib/validation.ts"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { pickCategoryName } from "../lib/categoryLocale.ts"
 
 type SortOption = "rating" | "price_asc" | "price_desc" | "newest" | "completed"
 type Availability = "full_time" | "part_time" | "weekends"
@@ -47,7 +49,7 @@ type FreelancerCardItem = {
   services: Array<{ price: number; description: string | null }>
 }
 
-type CategoryItem = { id: string; name_ka: string; parent_id: string | null }
+type CategoryItem = { id: string; name_ka: string; name_en?: string | null; parent_id: string | null }
 type SkillItem = { id: string; name: string; category_id: string | null }
 
 const EMPTY_SUBCATEGORY_PARENT_MAP = new Map<string, string>()
@@ -172,12 +174,11 @@ function getLowestPricedService(services: Array<{ price: number; description: st
 
 function stripListingMeta(raw: string | null) {
   if (!raw) return null
-  const prefix = "<!--gigori-meta:"
-  const suffix = "-->"
-  if (!raw.startsWith(prefix)) return sanitizeText(stripLegacyPricePrefix(raw))
-  const endIndex = raw.indexOf(suffix)
+  const metaPrefix = raw ? resolveListingMetaPrefix(raw) : null
+  if (!metaPrefix) return sanitizeText(stripLegacyPricePrefix(raw))
+  const endIndex = raw.indexOf(META_SUFFIX)
   if (endIndex < 0) return sanitizeText(stripLegacyPricePrefix(raw))
-  return sanitizeText(stripLegacyPricePrefix(raw.slice(endIndex + suffix.length)))
+  return sanitizeText(stripLegacyPricePrefix(raw.slice(endIndex + META_SUFFIX.length)))
 }
 
 const FREELANCER_PAGE_SIZE = 20
@@ -201,7 +202,7 @@ async function loadBrowseCatalog(): Promise<BrowseCatalogData> {
     fetchAllRowsByRange((from, to) =>
       sb
         .from("categories")
-        .select("id,name_ka,parent_id")
+        .select("id,name_ka,name_en,parent_id")
         .eq("is_active", true)
         .order("sort_order")
         .range(from, to),
@@ -211,11 +212,14 @@ async function loadBrowseCatalog(): Promise<BrowseCatalogData> {
     ),
   ])
   return {
-    categories: (categoryRows as { id?: string; name_ka?: string; parent_id?: string | null }[]).map((row) => ({
-      id: String(row.id ?? ""),
-      name_ka: String(row.name_ka ?? ""),
-      parent_id: row.parent_id ?? null,
-    })),
+    categories: (categoryRows as { id?: string; name_ka?: string; name_en?: string | null; parent_id?: string | null }[]).map(
+      (row) => ({
+        id: String(row.id ?? ""),
+        name_ka: String(row.name_ka ?? ""),
+        name_en: row.name_en ?? null,
+        parent_id: row.parent_id ?? null,
+      }),
+    ),
     skills: skillRows as SkillItem[],
   }
 }
@@ -304,6 +308,7 @@ function FreelancerCardInitials({ fullName }: { fullName: string }) {
 }
 
 export default function BrowsePage() {
+  const { t, locale } = useTranslation()
   const [searchParams] = useSearchParams()
   const [advancedDropdownOpen, setAdvancedDropdownOpen] = useState(false)
   const advancedDropdownRef = useRef<HTMLDivElement>(null)
@@ -336,7 +341,7 @@ export default function BrowsePage() {
     },
   })
 
-  const error = isError ? queryErrorMessage(freelancersError, "მონაცემები ვერ ჩაიტვირთა.") : ""
+  const error = isError ? queryErrorMessage(freelancersError, t("common.dataLoadFailed")) : ""
 
   const freelancers = useMemo(() => {
     const merged: FreelancerCardItem[] = []
@@ -376,11 +381,11 @@ export default function BrowsePage() {
   )
 
   useEffect(() => {
-    document.title = "ფრილანსერები — გიგორი"
+    document.title = t("browse.title")
     return () => {
-      document.title = "გიგორი"
+      document.title = t("brand.name")
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     const query = searchParams.get("q")
@@ -574,11 +579,14 @@ export default function BrowsePage() {
     return filteredFreelancers.toSorted((a, b) => b.completedJobsCount - a.completedJobsCount)
   }, [filteredFreelancers, sortBy])
 
-  const availabilityLabel: Record<Availability, string> = {
-    full_time: "სრული განაკვეთი",
-    part_time: "ნახევარი განაკვეთი",
-    weekends: "შაბათ-კვირა",
-  }
+  const availabilityLabel: Record<Availability, string> = useMemo(
+    () => ({
+      full_time: t("common.availabilityFullTime"),
+      part_time: t("common.availabilityPartTime"),
+      weekends: t("common.availabilityWeekends"),
+    }),
+    [t],
+  )
 
   const toggleDraftAvailability = (value: Availability) => {
     setDraftAvailability((prev) =>
@@ -619,7 +627,7 @@ export default function BrowsePage() {
                     }
                   }}
                   className="h-10 w-full rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#0088FF]"
-                  placeholder="ძიება"
+                  placeholder={t("common.search")}
                 />
                 {searchText.length >= 80 ? (
                   <p className="mt-0.5 text-xs text-slate-400">
@@ -629,7 +637,7 @@ export default function BrowsePage() {
               </div>
 
               <label className="relative inline-flex h-10 min-w-[9rem] max-w-[11rem] shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500">
-                <span className="pointer-events-none min-w-0 flex-1 truncate">კატეგორია</span>
+                <span className="pointer-events-none min-w-0 flex-1 truncate">{t("common.category")}</span>
                 <span className="shrink-0 text-slate-400">▾</span>
                 <select
                   value={filterRootCategoryId}
@@ -638,37 +646,37 @@ export default function BrowsePage() {
                     setFilterMidCategoryId("")
                   }}
                   className="absolute inset-0 z-10 h-full w-full min-h-[2.5rem] min-w-0 cursor-pointer opacity-0"
-                  aria-label="კატეგორია"
+                  aria-label={t("common.category")}
                 >
-                  <option value="">ყველა</option>
+                  <option value="">{t("common.all")}</option>
                   {categoryRootsList.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name_ka}
+                      {pickCategoryName(c, locale)}
                     </option>
                   ))}
                 </select>
               </label>
 
               <label className="relative inline-flex h-10 min-w-[9rem] max-w-[11rem] shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500">
-                <span className="pointer-events-none min-w-0 flex-1 truncate">ქვეკატეგორია</span>
+                <span className="pointer-events-none min-w-0 flex-1 truncate">{t("common.subcategory")}</span>
                 <span className="shrink-0 text-slate-400">▾</span>
                 <select
                   value={filterMidCategoryId}
                   disabled={!filterRootCategoryId || categoryMidsList.length === 0}
                   onChange={(event) => setFilterMidCategoryId(event.target.value)}
                   className="absolute inset-0 z-10 h-full w-full min-h-[2.5rem] min-w-0 cursor-pointer opacity-0 disabled:cursor-not-allowed"
-                  aria-label="ქვეკატეგორია"
+                  aria-label={t("common.subcategory")}
                 >
                   <option value="">
                     {!filterRootCategoryId
-                      ? "ჯერ კატეგორია"
+                      ? t("common.categoryFirst")
                       : categoryMidsList.length === 0
-                        ? "არ არის"
-                        : "ყველა"}
+                        ? t("common.none")
+                        : t("common.all")}
                   </option>
                   {categoryMidsList.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name_ka}
+                      {pickCategoryName(c, locale)}
                     </option>
                   ))}
                 </select>
@@ -683,7 +691,7 @@ export default function BrowsePage() {
                   className="inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500 transition hover:border-slate-400"
                 >
                   <span aria-hidden></span>
-                  <span>დეტალური ძებნა</span>
+                  <span>{t("listings.detailedSearch")}</span>
                   <span className="text-slate-400">▾</span>
                   {advancedFilterCount > 0 ? (
                     <span className="ml-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#0088FF] px-1 text-xs font-bold text-white">
@@ -698,14 +706,14 @@ export default function BrowsePage() {
                     <div
                       role="dialog"
                       aria-modal="true"
-                      aria-label="დეტალური ფილტრები"
+                      aria-label={t("common.detailedFilters")}
                       className="absolute right-0 z-50 mt-2 flex max-h-[min(72vh,560px)] w-[min(100vw-2rem,24rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
                     >
                       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-4">
-                        <h2 className="border-l-4 border-[#0088FF] pl-3 text-base font-bold text-[#1B2B4B]">დეტალური ფილტრები</h2>
+                        <h2 className="border-l-4 border-[#0088FF] pl-3 text-base font-bold text-[#1B2B4B]">{t("common.detailedFilters")}</h2>
                         <div className="mt-4 space-y-4">
                           <div>
-                            <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">უნარები</p>
+                            <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">{t("common.skills")}</p>
                             <div className="max-h-40 space-y-2 overflow-auto rounded-lg border border-slate-200 p-2">
                               {topSkills.map((skill) => (
                                 <label key={skill.id} className="flex items-center gap-2 text-sm text-slate-700">
@@ -717,7 +725,7 @@ export default function BrowsePage() {
                           </div>
 
                           <div>
-                            <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">დატვირთვა</p>
+                            <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">{t("browse.availability")}</p>
                             <div className="space-y-2">
                               {(Object.keys(availabilityLabel) as Availability[]).map((value) => (
                                 <label key={value} className="flex items-center gap-2 text-sm text-slate-700">
@@ -729,7 +737,7 @@ export default function BrowsePage() {
                           </div>
 
                           <label className="block">
-                            <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">მინ. რეიტინგი</span>
+                            <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("browse.minRating")}</span>
                             <select
                               value={draftMinRating}
                               onChange={(event) => {
@@ -740,7 +748,7 @@ export default function BrowsePage() {
                               }}
                               className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
                             >
-                              <option value={0}>ნებისმიერი</option>
+                              <option value={0}>{t("common.anyLocation")}</option>
                               <option value={3}>3+</option>
                               <option value={4}>4+</option>
                               <option value={5}>5</option>
@@ -748,7 +756,7 @@ export default function BrowsePage() {
                           </label>
 
                           <div>
-                            <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">ფასის დიაპაზონი (₾)</p>
+                            <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">{t("browse.priceRange")}</p>
                             <div className="grid grid-cols-2 gap-2">
                               <input
                                 type="number"
@@ -761,7 +769,7 @@ export default function BrowsePage() {
                                     setDraftMinPrice(value)
                                   }
                                 }}
-                                placeholder="მინ"
+                                placeholder={t("common.min")}
                                 className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
                               />
                               <input
@@ -775,14 +783,14 @@ export default function BrowsePage() {
                                     setDraftMaxPrice(value)
                                   }
                                 }}
-                                placeholder="მაქს"
+                                placeholder={t("common.max")}
                                 className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
                               />
                             </div>
                           </div>
 
                           <label className="block pb-1">
-                            <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">ლოკაცია</span>
+                            <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("common.location")}</span>
                             <LocationFilterSelect
                               value={draftLocationFilter}
                               onChange={setDraftLocationFilter}
@@ -798,7 +806,7 @@ export default function BrowsePage() {
                           onClick={clearDraftAdvanced}
                           className="h-11 w-full rounded-lg border border-[#0088FF] text-sm font-semibold text-[#1B2B4B] hover:bg-[#E8F4FF]"
                         >
-                          ფილტრების გასუფთავება
+                          {t("common.clearFilters")}
                         </button>
                         <div className="flex gap-2">
                           <button
@@ -806,14 +814,14 @@ export default function BrowsePage() {
                             onClick={() => setAdvancedDropdownOpen(false)}
                             className="h-11 flex-1 rounded-lg border border-slate-300 text-sm font-semibold text-[#1B2B4B] hover:bg-slate-50"
                           >
-                            გაუქმება
+                            {t("common.cancel")}
                           </button>
                           <button
                             type="button"
                             onClick={saveAdvancedFilters}
                             className="h-11 flex-1 rounded-lg bg-[#0088FF] text-sm font-semibold text-white hover:bg-[#006ACC]"
                           >
-                            შენახვა
+                            {t("common.save")}
                           </button>
                         </div>
                       </div>
@@ -824,19 +832,19 @@ export default function BrowsePage() {
 
               <label className="relative inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500">
                 <span aria-hidden></span>
-                <span className="truncate">სორტირება</span>
+                <span className="truncate">{t("common.sort")}</span>
                 <span className="ml-auto text-slate-400">▾</span>
                 <select
                   value={sortBy}
                   onChange={(event) => setSortBy(event.target.value as SortOption)}
                   className="absolute inset-0 cursor-pointer opacity-0"
-                  aria-label="სორტირება"
+                  aria-label={t("common.sort")}
                 >
-                  <option value="rating">რეიტინგი</option>
-                  <option value="price_asc">ფასი: იაფიდან</option>
-                  <option value="price_desc">ფასი: ძვირიდან</option>
-                  <option value="newest">ახალი</option>
-                  <option value="completed">შესრულებული სამუშაო</option>
+                  <option value="rating">{t("common.rating")}</option>
+                  <option value="price_asc">{t("common.priceAsc")}</option>
+                  <option value="price_desc">{t("common.priceDesc")}</option>
+                  <option value="newest">{t("browse.sortNewest")}</option>
+                  <option value="completed">{t("common.completedJobsSort")}</option>
                 </select>
               </label>
 
@@ -846,7 +854,7 @@ export default function BrowsePage() {
                 onClick={() => setAdvancedDropdownOpen(false)}
                 className="ml-auto inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-[#0088FF] px-8 text-base font-bold text-white transition hover:bg-[#006ACC] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                ძიება
+                {t("common.search")}
               </button>
             </div>
           </div>
@@ -864,13 +872,13 @@ export default function BrowsePage() {
           ) : (
             <>
               <div className="mb-4 flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-slate-600">მოიძებნა {sortedFreelancers.length} ფრილანსერი</p>
+                <p className="text-sm font-medium text-slate-600">{t("browse.found", { count: sortedFreelancers.length })}</p>
               </div>
 
               {sortedFreelancers.length === 0 ? (
                 <EmptyState
-                  message="ფრილანსერები ჯერ არ არიან. მალე დაემატება!"
-                  actionLabel="ფილტრების გასუფთავება"
+                  message={t("browse.empty")}
+                  actionLabel={t("common.clearFilters")}
                   onAction={clearFilters}
                 />
               ) : (
@@ -891,14 +899,14 @@ export default function BrowsePage() {
                         <div className="flex items-start gap-3">
                           <FreelancerAvailabilityIndicator
                             available={freelancer.isAcceptingNewWork}
-                            labelWhenAvailable="ახალი სამუშაოებისთვის ხელმისაწვდომია."
-                            labelWhenUnavailable="ახალი სამუშაოებისთვის დროებით ხელმიუწვდომელია."
+                            labelWhenAvailable={t("common.availableNewWork")}
+                            labelWhenUnavailable={t("common.unavailableNewWork")}
                           >
                             {freelancer.avatarUrl ? (
                               <div className="relative h-16 w-16">
                                 <img
                                   src={avatarImageUrl(supabase, freelancer.avatarUrl) ?? freelancer.avatarUrl}
-                                  alt={`${freelancer.fullName} ავატარი`}
+                                  alt={t("common.avatarAlt", { name: freelancer.fullName })}
                                   loading="lazy"
                                   onError={(e) => {
                                     e.currentTarget.style.display = "none"
@@ -925,13 +933,16 @@ export default function BrowsePage() {
                         {freelancer.totalReviewsCount > 0 ? (
                           <div
                             className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-0.5"
-                            aria-label={`საშუალო რეიტინგი ${freelancer.averageRating.toFixed(1)}, ${freelancer.totalReviewsCount} შეფასება`}
+                            aria-label={t("common.avgRatingAria", {
+                              rating: freelancer.averageRating.toFixed(1),
+                              count: freelancer.totalReviewsCount,
+                            })}
                           >
                             <span className="text-sm font-semibold tabular-nums text-[#1B2B4B]">
                               {freelancer.averageRating.toFixed(1)}
                             </span>
                             <span className="text-xs text-slate-500">
-                              · {freelancer.totalReviewsCount} შეფასება
+                              · {t("common.reviewsCount", { count: freelancer.totalReviewsCount })}
                             </span>
                           </div>
                         ) : null}
@@ -939,12 +950,12 @@ export default function BrowsePage() {
                         <p className="mt-3 text-sm font-semibold text-[#1B2B4B]">
                           {lowestPricedService
                             ? negotiable
-                              ? "შეთანხმებით"
-                              : `₾${lowestPricedService.price} დან`
-                            : "ფასი შეთანხმებით"}
+                              ? t("common.negotiable")
+                              : t("common.fromPrice", { price: lowestPricedService.price })
+                            : t("common.priceOnRequest")}
                         </p>
 
-                        <p className="mt-2 text-xs text-slate-500">💼 {freelancer.completedJobsCount} შესრულებული</p>
+                        <p className="mt-2 text-xs text-slate-500">💼 {t("common.completed", { count: freelancer.completedJobsCount })}</p>
                         </Link>
 
                         <div className="mt-auto flex shrink-0 gap-2 pt-3">
@@ -957,7 +968,7 @@ export default function BrowsePage() {
                             to={`/freelancer/${freelancer.slug}`}
                             className="inline-flex h-11 min-w-0 flex-1 items-center justify-center rounded-full bg-[#0088FF] px-4 text-sm font-semibold text-white transition hover:bg-[#006ACC]"
                           >
-                            პროფილის ნახვა
+                            {t("nav.viewProfile")}
                           </Link>
                         </div>
                       </div>
@@ -973,7 +984,7 @@ export default function BrowsePage() {
                     onClick={() => void fetchNextPage()}
                     className="h-11 rounded-lg border border-[#1B2B4B] px-4 text-sm font-semibold text-[#1B2B4B]"
                   >
-                    მეტის ჩატვირთვა
+                    {t("common.loadMore")}
                   </button>
                 </div>
               ) : null}

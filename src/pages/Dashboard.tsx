@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import FollowListsModal, { FollowStatPills, type FollowModalTab } from "../components/FollowListsModal.tsx"
 import VIPUpgrade from "../components/VIPUpgrade"
-import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
+import { META_SUFFIX, resolveListingMetaPrefix, stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { formatListingPrice, normalizeListingPriceType } from "../lib/listingPrice.ts"
 import { subscribeToDashboardMessaging } from "../lib/dashboardMessagingRealtime.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
@@ -14,6 +14,9 @@ import { validateReviewComment } from "../lib/validation.ts"
 import { fetchDashboard } from "../lib/queries/fetchDashboard.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
+
+type TranslateFn = (key: string, params?: Record<string, string | number>) => string
 
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"]
 type FreelancerProfileRow = Database["public"]["Tables"]["freelancer_profiles"]["Row"]
@@ -195,24 +198,24 @@ function listingStatusAfterHirerMarksDone(_currentStatus: string): "completed" {
   return "completed"
 }
 
-function listingInquiryStatusLabel(status: string) {
+function listingInquiryStatusLabel(status: string, t: TranslateFn) {
   switch (status) {
     case "pending":
-      return "მოლოდინში"
+      return t("status.pending")
     case "accepted":
-      return "მიღებული"
+      return t("status.accepted")
     case "declined":
-      return "უარყოფილი"
+      return t("status.declined")
     case "in_progress":
-      return "მიმდინარე"
+      return t("status.inProgress")
     case "completed":
-      return "დასრულებული"
+      return t("status.completed")
     case "freelancer_done":
-      return "ფრილანსერმა დაასრულა — ელოდება დადასტურებას"
+      return t("status.freelancerDonePending")
     case "hirer_done":
-      return "დამქირავებელმა დაასრულა"
+      return t("status.hirerDone")
     case "cancelled":
-      return "გაუქმებული"
+      return t("status.cancelled")
     default:
       return status
   }
@@ -236,47 +239,47 @@ function formatDate(dateString: string) {
   return new Date(dateString).toLocaleDateString("ka-GE")
 }
 
-function formatBudget(min: number | null, max: number | null) {
-  if (min === null && max === null) return "ბიუჯეტი შეთანხმებით"
+function formatBudget(min: number | null, max: number | null, t: TranslateFn) {
+  if (min === null && max === null) return t("common.negotiable")
   if (min !== null && max !== null) return `${min}₾ - ${max}₾`
   if (min !== null) return `${min}₾+`
-  return `მაქს. ${max}₾`
+  return t("dashboard.maxBudget", { max: max ?? 0 })
 }
 
-function statusLabel(status: string) {
+function statusLabel(status: string, t: TranslateFn) {
   switch (status) {
     case "open":
-      return "ღია"
+      return t("status.open")
     case "in_progress":
-      return "მიმდინარე"
+      return t("status.inProgress")
     case "closed":
-      return "დახურული"
+      return t("status.closed")
     case "completed":
-      return "დასრულებული"
+      return t("status.completed")
     case "cancelled":
-      return "გაუქმებული"
+      return t("status.cancelled")
     case "pending":
-      return "მოლოდინში"
+      return t("status.pending")
     case "accepted":
-      return "მიღებული"
+      return t("status.accepted")
     case "rejected":
-      return "უარყოფილი"
+      return t("status.rejected")
     default:
       return status
   }
 }
 
-function freelancerJobOfferStatusLabel(status: string) {
+function freelancerJobOfferStatusLabel(status: string, t: TranslateFn) {
   switch (status) {
     case "pending":
-      return "მოლოდინში"
+      return t("status.pending")
     case "accepted":
     case "completed":
-      return "დადასტურებული"
+      return t("status.confirmed")
     case "rejected":
-      return "უარყოფილი"
+      return t("status.rejected")
     default:
-      return statusLabel(status)
+      return statusLabel(status, t)
   }
 }
 
@@ -334,12 +337,11 @@ function hirerAcceptedApplicantShowsJobActions(jobStatus: string) {
 }
 
 function stripListingMeta(raw: string) {
-  const prefix = "<!--gigori-meta:"
-  const suffix = "-->"
-  if (!raw.startsWith(prefix)) return stripLegacyPricePrefix(raw)
-  const endIndex = raw.indexOf(suffix)
+  const metaPrefix = resolveListingMetaPrefix(raw)
+  if (!metaPrefix) return stripLegacyPricePrefix(raw)
+  const endIndex = raw.indexOf(META_SUFFIX)
   if (endIndex < 0) return stripLegacyPricePrefix(raw)
-  return stripLegacyPricePrefix(raw.slice(endIndex + suffix.length))
+  return stripLegacyPricePrefix(raw.slice(endIndex + META_SUFFIX.length))
 }
 
 async function fetchHirerDashboardSection(
@@ -489,6 +491,7 @@ function mapFreelancerCompletedPlatformJobRows(rows: unknown[] | null | undefine
 }
 
 export default function DashboardPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
   const [dashboardUserId, setDashboardUserId] = useState("")
@@ -596,8 +599,8 @@ export default function DashboardPage() {
   void freelancerCompletedPlatformJobs
 
   useEffect(() => {
-    document.title = "მართვის პანელი — გიგორი"
-  }, [])
+    document.title = t("dashboard.title")
+  }, [t])
 
   useEffect(() => {
     const state = location.state as { successMessage?: string } | null
@@ -893,7 +896,7 @@ export default function DashboardPage() {
     enabled: Boolean(dashboardUserId) && isSupabaseConfigured,
   })
   const dashboardLoadError = dashboardQueryIsError
-    ? queryErrorMessage(dashboardQueryError, "მონაცემები ვერ ჩაიტვირთა.")
+    ? queryErrorMessage(dashboardQueryError, t("dashboard.loadFailed"))
     : ""
   const displayError = error || dashboardLoadError
 
@@ -1834,7 +1837,7 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-slate-50">
       <main className="mx-auto max-w-7xl px-6 py-10">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-[#1B2B4B]">მართვის პანელი</h1>
+          <h1 className="text-3xl font-bold text-[#1B2B4B]">{t("dashboard.heading")}</h1>
         </div>
 
         {!loading && !displayError && successMessage ? (
@@ -1853,7 +1856,7 @@ export default function DashboardPage() {
           <section className="space-y-6">
             <div className="rounded-xl border border-slate-200 bg-white p-6">
               <h2 className="text-2xl font-bold text-[#1B2B4B]">
-                გამარჯობა, {profile.full_name || "ფრილანსერო"}!
+                {t("dashboard.hello", { name: profile.full_name || t("auth.freelancer") })}
               </h2>
               <FollowStatPills
                 followerCount={dashFollowersCount}
@@ -1872,7 +1875,7 @@ export default function DashboardPage() {
 
             {!freelancerProfile?.is_profile_complete ? (
               <div className="rounded-xl border border-[#D4A843]/50 bg-amber-50 p-5">
-                <p className="text-lg font-semibold text-[#1B2B4B]">შეავსე პროფილი</p>
+                <p className="text-lg font-semibold text-[#1B2B4B]">{t("dashboard.completeProfile")}</p>
                 <p className="mt-1 text-sm text-slate-700">
                   მეტი შეკვეთის მისაღებად დაასრულე პროფილის შევსება.
                 </p>
@@ -2068,7 +2071,7 @@ export default function DashboardPage() {
                           <p className="font-semibold text-[#1B2B4B]">{q.listingTitle}</p>
                           <p className="mt-1 text-xs text-slate-500">
                             {q.hirerLabel} · {formatDate(q.createdAt)} ·{" "}
-                            <span className="font-semibold text-[#1B2B4B]">{listingInquiryStatusLabel(q.status)}</span>
+                            <span className="font-semibold text-[#1B2B4B]">{listingInquiryStatusLabel(q.status, t)}</span>
                           </p>
                           {q.proposedBudget != null ? (
                             <p className="mt-1 text-sm text-slate-700">შემოთავაზებული: {q.proposedBudget.toLocaleString("ka-GE")} ₾</p>
@@ -2231,7 +2234,7 @@ export default function DashboardPage() {
                                   : "bg-emerald-50 text-emerald-700"
                             }`}
                           >
-                            {freelancerJobOfferStatusLabel(offer.status)}
+                            {freelancerJobOfferStatusLabel(offer.status, t)}
                           </span>
                           {offer.status === "pending" || offer.status === "rejected" ? (
                             <button
@@ -2293,7 +2296,7 @@ export default function DashboardPage() {
                                   <p className="font-semibold text-[#1B2B4B]">{q.listingTitle}</p>
                                   <p className="mt-1 text-xs text-slate-500">
                                     {q.hirerLabel} · {formatDate(q.createdAt)} ·{" "}
-                                    <span className="font-semibold text-[#1B2B4B]">{listingInquiryStatusLabel(q.status)}</span>
+                                    <span className="font-semibold text-[#1B2B4B]">{listingInquiryStatusLabel(q.status, t)}</span>
                                   </p>
                                   {q.hirerProfileId ? (
                                     <Link
@@ -2801,7 +2804,7 @@ export default function DashboardPage() {
                             <p className="font-semibold text-[#1B2B4B]">{q.listingTitle}</p>
                             <p className="mt-1 text-xs text-slate-500">
                               {q.freelancerName} · {formatDate(q.createdAt)} ·{" "}
-                              <span className="font-semibold text-[#1B2B4B]">{listingInquiryStatusLabel(q.status)}</span>
+                              <span className="font-semibold text-[#1B2B4B]">{listingInquiryStatusLabel(q.status, t)}</span>
                             </p>
                             {q.freelancerSlug ? (
                               <Link
@@ -2889,7 +2892,7 @@ export default function DashboardPage() {
                         <div className="min-w-0 flex-1">
                           <p className="font-semibold text-[#1B2B4B]">{job.title}</p>
                           <p className="mt-1 text-sm text-slate-600">
-                            {formatBudget(job.budget_min, job.budget_max)} • {jobApplicationsByJobId[job.id] ?? 0}{" "}
+                            {formatBudget(job.budget_min, job.budget_max, t)} • {jobApplicationsByJobId[job.id] ?? 0}{" "}
                             განმცხადებელი •{" "}
                             {(() => {
                               const vs = jobVacancyStats(job.vacancies, job.accepted_count)
@@ -2900,7 +2903,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="flex shrink-0 flex-wrap items-center gap-2">
                           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                            {statusLabel(job.status)}
+                            {statusLabel(job.status, t)}
                           </span>
                           <Link
                             to={`/post-job/${job.id}`}
@@ -2942,7 +2945,7 @@ export default function DashboardPage() {
                                 <div className="min-w-0 flex-1">
                                   <p className="font-semibold text-[#1B2B4B]">{item.freelancerName}</p>
                                   <p className="mt-1 text-sm text-slate-600">
-                                    {item.jobTitle} • {formatDate(item.createdAt)} • {statusLabel(item.status)}
+                                    {item.jobTitle} • {formatDate(item.createdAt)} • {statusLabel(item.status, t)}
                                   </p>
                                 </div>
                                 <div className="flex shrink-0 flex-wrap gap-2">
@@ -3003,7 +3006,7 @@ export default function DashboardPage() {
                                 <div className="min-w-0 flex-1">
                                   <p className="font-semibold text-[#1B2B4B]">{q.listingTitle}</p>
                                   <p className="mt-1 text-sm text-slate-600">
-                                    {q.freelancerName} • {formatDate(q.createdAt)} • {listingInquiryStatusLabel(q.status)}
+                                    {q.freelancerName} • {formatDate(q.createdAt)} • {listingInquiryStatusLabel(q.status, t)}
                                   </p>
                                 </div>
                                 <div className="flex shrink-0 flex-wrap gap-2">
@@ -3175,7 +3178,7 @@ export default function DashboardPage() {
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold text-[#1B2B4B]">{item.freelancerName}</p>
                         <p className="mt-1 text-sm text-slate-600">
-                          {item.jobTitle} • {formatDate(item.createdAt)} • {statusLabel(item.status)}
+                          {item.jobTitle} • {formatDate(item.createdAt)} • {statusLabel(item.status, t)}
                         </p>
                         {item.freelancerSlug ? (
                           <Link

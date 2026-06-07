@@ -1,6 +1,6 @@
 import type { FreelancerEducationDegreeLevel } from "../freelancerEducation.ts"
 import { socialFormFromDbRow } from "../freelancerSocialFields.ts"
-import { stripLegacyPricePrefix } from "../listingDescription.ts"
+import { META_SUFFIX, resolveListingMetaPrefix, stripLegacyPricePrefix } from "../listingDescription.ts"
 import { normalizeListingPriceType } from "../listingPrice.ts"
 import { isSupabaseConfigured, supabase } from "../supabase.ts"
 
@@ -80,12 +80,11 @@ export type ProfileQueryData = {
 
 function stripListingMeta(raw: string | null) {
   if (!raw) return ""
-  const prefix = "<!--gigori-meta:"
-  const suffix = "-->"
-  if (!raw.startsWith(prefix)) return stripLegacyPricePrefix(raw)
-  const endIndex = raw.indexOf(suffix)
+  const metaPrefix = resolveListingMetaPrefix(raw)
+  if (!metaPrefix) return stripLegacyPricePrefix(raw)
+  const endIndex = raw.indexOf(META_SUFFIX)
   if (endIndex < 0) return stripLegacyPricePrefix(raw)
-  return stripLegacyPricePrefix(raw.slice(endIndex + suffix.length))
+  return stripLegacyPricePrefix(raw.slice(endIndex + META_SUFFIX.length))
 }
 
 export async function fetchProfile(): Promise<ProfileQueryData> {

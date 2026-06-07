@@ -4,26 +4,31 @@ import { Link, useLocation, useNavigate } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
 import type { Json } from "../lib/database.types"
 import { useUnreadCounts } from "../hooks/useUnreadCounts.ts"
+import { useLiveNotifications } from "../hooks/useLiveNotifications.ts"
 import ChatIcon from "./ui/ChatIcon.tsx"
 import {
   fetchNotifications,
   markAllAsRead,
   markAsRead,
-  subscribeToNotifications,
   type AppNotification,
 } from "../lib/notifications.ts"
+import { notificationsQueryKey, patchNotification, removeNotification } from "../lib/notificationQuery.ts"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { supabase } from "../lib/supabase"
 import { getAuthenticatedSession } from "../lib/supabaseAuth.ts"
 import { sanitizeInternalPath } from "../lib/validation.ts"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
+import LanguageToggle from "./LanguageToggle.tsx"
 
-const navLinks = [
-  { label: "მთავარი", to: "/" },
-  { label: "ფრილანსერები", to: "/browse" },
-  { label: "განცხადებები", to: "/listings" },
-  { label: "სამუშაოები", to: "/jobs" },
-  { label: "დამქირავებლები", to: "/hirers" },
-]
+function buildNavLinks(t: (key: string) => string) {
+  return [
+    { label: t("nav.home"), to: "/" },
+    { label: t("nav.freelancers"), to: "/browse" },
+    { label: t("nav.listings"), to: "/listings" },
+    { label: t("nav.jobs"), to: "/jobs" },
+    { label: t("nav.hirers"), to: "/hirers" },
+  ]
+}
 
 function navLinkUnderlineActive(pathname: string, to: string) {
   if (to === "/hirers") return pathname === "/hirers" || pathname.startsWith("/hirer/")
@@ -78,17 +83,21 @@ function splitCoverNoteAndRate(coverNote: string | null | undefined): { comment:
   return { comment: raw, rateLine: null }
 }
 
-function formatNotificationRelativeTime(iso: string): string {
+function formatNotificationRelativeTime(
+  iso: string,
+  t: (key: string, params?: Record<string, string | number>) => string,
+  locale: string,
+): string {
   const now = Date.now()
   const diffMs = now - new Date(iso).getTime()
   const minute = 60 * 1000
   const hour = 60 * minute
   const day = 24 * hour
-  if (diffMs < minute) return "ახლახან"
-  if (diffMs < hour) return `${Math.max(1, Math.floor(diffMs / minute))} წუთის წინ`
-  if (diffMs < day) return `${Math.max(1, Math.floor(diffMs / hour))} საათის წინ`
-  if (diffMs < 7 * day) return `${Math.max(1, Math.floor(diffMs / day))} დღის წინ`
-  return new Date(iso).toLocaleDateString("ka-GE")
+  if (diffMs < minute) return t("nav.justNow")
+  if (diffMs < hour) return t("nav.minutesAgo", { count: Math.max(1, Math.floor(diffMs / minute)) })
+  if (diffMs < day) return t("nav.hoursAgo", { count: Math.max(1, Math.floor(diffMs / hour)) })
+  if (diffMs < 7 * day) return t("nav.daysAgo", { count: Math.max(1, Math.floor(diffMs / day)) })
+  return new Date(iso).toLocaleDateString(locale === "en" ? "en-US" : "ka-GE")
 }
 
 function truncateNotificationBody(text: string | null, max = 60): string | null {
@@ -102,6 +111,8 @@ export default function Navbar() {
   const navigate = useNavigate()
   const location = useLocation()
   const queryClient = useQueryClient()
+  const { t, locale, setLocale } = useTranslation()
+  const navLinks = useMemo(() => buildNavLinks(t), [t])
   const [authStatus, setAuthStatus] = useState<"loading" | "authed" | "anon">("loading")
   const isAuthed = authStatus === "authed"
   const [menuOpen, setMenuOpen] = useState(false) // avatar dropdown
@@ -112,12 +123,12 @@ export default function Navbar() {
   const [userId, setUserId] = useState<string | null>(null)
   const [publicProfileHref, setPublicProfileHref] = useState<string | null>(null)
   const [userType, setUserType] = useState<"freelancer" | "hirer" | null>(null)
-  const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [detailNotification, setDetailNotification] = useState<AppNotification | null>(null)
   const notificationsRef = useRef<HTMLDivElement>(null)
 
   const { unreadNotifications, unreadMessages } = useUnreadCounts(userId)
+  const { notifications, mergeFreshWithLive, refreshNotifications } = useLiveNotifications(userId, isAuthed)
 
   const postListingOrJob = useMemo(() => {
     if (userType === "freelancer") {
@@ -126,23 +137,23 @@ export default function Navbar() {
         (location.pathname.startsWith("/listing/") && !location.pathname.startsWith("/listings"))
       return {
         to: "/listing/new",
-        ariaLabel: "ლისტინგის განთავსება",
+        ariaLabel: t("nav.postListing"),
         active: listingComposer,
       } as const
     }
     if (userType === "hirer") {
       return {
         to: "/post-job",
-        ariaLabel: "სამუშაოს განთავსება",
+        ariaLabel: t("nav.postJob"),
         active: location.pathname.startsWith("/post-job"),
       } as const
     }
     return {
       to: "/onboarding",
-      ariaLabel: "პროფილის შევსება",
+      ariaLabel: t("nav.completeProfile"),
       active: location.pathname.startsWith("/onboarding"),
     } as const
-  }, [userType, location.pathname])
+  }, [userType, location.pathname, t])
 
   const navbarAvatarSrc = useMemo(() => {
     if (!avatarUrl) return null
@@ -163,8 +174,8 @@ export default function Navbar() {
         setFullName("")
         setPublicProfileHref(null)
         setUserType(null)
-        setNotifications([])
         setNotificationsOpen(false)
+        queryClient.removeQueries({ queryKey: notificationsQueryKey(uid ?? "") })
         return
       }
       const [{ data }, list] = await Promise.all([
@@ -187,7 +198,7 @@ export default function Navbar() {
       } else {
         setPublicProfileHref(null)
       }
-      setNotifications(list)
+      queryClient.setQueryData(notificationsQueryKey(uid), list)
     }
 
     refresh()
@@ -195,37 +206,13 @@ export default function Navbar() {
       refresh()
     })
     return () => listener.subscription.unsubscribe()
-  }, [])
+  }, [queryClient])
 
   useEffect(() => {
     const client = supabase
     if (!client || !userId || !isAuthed) return
-    void fetchNotifications(client).then(setNotifications)
-  }, [location.pathname, userId, isAuthed])
-
-  useEffect(() => {
-    const client = supabase
-    if (!client || !userId || !isAuthed) return
-    const channel = subscribeToNotifications(client, userId, {
-      onInsert: (n) => {
-        setNotifications((prev) => {
-          const next = [n, ...prev.filter((x) => x.id !== n.id)]
-          return next.slice(0, 30)
-        })
-      },
-      onUpdate: (n) => {
-        setNotifications((prev) => prev.map((x) => (x.id === n.id ? n : x)))
-      },
-      onDelete: (id) => {
-        setNotifications((prev) => prev.filter((x) => x.id !== id))
-        setDetailNotification((prev) => (prev?.id === id ? null : prev))
-      },
-    })
-    return () => {
-      channel.unsubscribe()
-      client.removeChannel(channel)
-    }
-  }, [userId, isAuthed])
+    void fetchNotifications(client).then(mergeFreshWithLive)
+  }, [location.pathname, userId, isAuthed, mergeFreshWithLive])
 
   const clearNotificationsUnreadCount = () => {
     if (!supabase || !userId) return
@@ -242,9 +229,7 @@ export default function Navbar() {
     setNotificationsOpen((v) => {
       const opening = !v
       if (opening) {
-        if (supabase) {
-          void fetchNotifications(supabase).then(setNotifications)
-        }
+        refreshNotifications()
         clearNotificationsUnreadCount()
       }
       return opening
@@ -286,7 +271,7 @@ export default function Navbar() {
     if (!supabase || !userId || row.is_read) return
     try {
       await markAsRead(supabase, row.id)
-      setNotifications((prev) => prev.map((n) => (n.id === row.id ? { ...n, is_read: true } : n)))
+      patchNotification(queryClient, userId, row.id, { is_read: true })
     } catch {
       /* ignore */
     }
@@ -296,7 +281,10 @@ export default function Navbar() {
     if (!supabase || !userId) return
     try {
       await markAllAsRead(supabase)
-      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })))
+      queryClient.setQueryData<AppNotification[]>(notificationsQueryKey(userId), (prev) =>
+        (prev ?? []).map((n) => ({ ...n, is_read: true })),
+      )
+      void queryClient.invalidateQueries({ queryKey: ["unread-counts", userId] })
     } catch {
       /* ignore */
     }
@@ -335,7 +323,7 @@ export default function Navbar() {
     if (!supabase || !userId) return
     const { error } = await supabase.from("notifications").delete().eq("id", id).eq("user_id", userId)
     if (error) return
-    setNotifications((prev) => prev.filter((n) => n.id !== id))
+    removeNotification(queryClient, userId, id)
     setDetailNotification((prev) => (prev?.id === id ? null : prev))
   }
 
@@ -371,10 +359,10 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", onScroll)
   }, [])
 
-  const userDisplayName = fullName.trim() || "მომხმარებელი"
+  const userDisplayName = fullName.trim() || t("nav.user")
 
   const confirmAndLogout = () => {
-    if (!window.confirm("დარწმუნებული ხარ, რომ გსურს სისტემიდან გასვლა?")) return
+    if (!window.confirm(t("nav.logoutConfirm"))) return
     setMenuOpen(false)
     setMobileMenuOpen(false)
     void (async () => {
@@ -387,29 +375,29 @@ export default function Navbar() {
   return (
     <>
     <header className={`sticky top-0 z-40 border-b border-slate-200 bg-white font-sans ${isScrolled ? "shadow-sm" : ""}`}>
-      <div className="mx-auto flex w-full max-w-none items-center justify-between px-4 py-3 md:pl-20 md:pr-8">
-        <Link to="/" className="inline-flex items-center" aria-label="მთავარი">
-          <img src="/images/logo.png" alt="გიგორი" className="h-[52px] w-auto object-contain" />
+      <div className="mx-auto grid w-full max-w-none grid-cols-[auto_1fr_auto] items-center gap-2 px-4 py-3 md:gap-3 md:pl-12 md:pr-6 lg:pl-16 lg:pr-8">
+        <Link to="/" className="inline-flex shrink-0 items-center" aria-label={t("nav.home")}>
+          <img src="/images/logo.png" alt={t("brand.name")} className="h-[52px] w-auto object-contain" />
         </Link>
 
-        <nav className="hidden flex-wrap items-center justify-center gap-x-3 gap-y-2 text-sm font-medium md:flex lg:gap-x-4">
+        <nav className="hidden min-w-0 items-center justify-center gap-1.5 text-sm font-medium md:flex lg:gap-2">
           {navLinks.map((link) => (
-            <div key={link.label} className="whitespace-nowrap">
-              <Link
-                to={link.to}
-                className={`inline-flex h-10 items-center rounded-full border px-4 transition ${
-                  navLinkUnderlineActive(location.pathname, link.to)
-                    ? "border-transparent bg-[#0088FF] text-white"
-                    : "border-slate-300 bg-white text-slate-500 hover:border-slate-400 hover:text-slate-700"
-                }`}
-              >
-                {link.label}
-              </Link>
-            </div>
+            <Link
+              key={link.label}
+              to={link.to}
+              className={`inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-full border px-3 transition lg:h-10 lg:px-4 ${
+                navLinkUnderlineActive(location.pathname, link.to)
+                  ? "border-transparent bg-[#0088FF] text-white"
+                  : "border-slate-300 bg-white text-slate-500 hover:border-slate-400 hover:text-slate-700"
+              }`}
+            >
+              {link.label}
+            </Link>
           ))}
         </nav>
 
-        <div className="hidden shrink-0 items-center gap-3 md:flex">
+        <div className="flex shrink-0 items-center justify-end gap-2 lg:gap-3">
+          <div className="hidden items-center gap-2 md:flex lg:gap-3">
           {isAuthed ? (
             <>
               <Link
@@ -420,7 +408,7 @@ export default function Navbar() {
                     : "border-[#B3DEFF] bg-[#E8F4FF] text-[#0088FF] hover:border-[#80C8FF] hover:bg-[#D4EEFF]"
                 }`}
               >
-                მართვის პანელი
+                {t("nav.dashboard")}
               </Link>
               <Link
                 to={postListingOrJob.to}
@@ -443,8 +431,8 @@ export default function Navbar() {
             <>
             <Link
               to="/messages"
-              aria-label="ჩათი"
-              title="ჩათი"
+              aria-label={t("nav.chat")}
+              title={t("nav.chat")}
               className={`relative inline-flex h-10 w-10 items-center justify-center rounded-xl border transition ${
                 location.pathname.startsWith("/messages")
                   ? "border-[#0088FF] bg-[#E8F4FF] text-[#0088FF]"
@@ -483,9 +471,11 @@ export default function Navbar() {
                 >
                   <div className="flex items-start justify-between gap-2 border-b border-slate-100 px-4 py-3">
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-[#1B2B4B]">შეტყობინებები</p>
+                      <p className="text-sm font-bold text-[#1B2B4B]">{t("nav.notifications")}</p>
                       <p className="text-xs text-slate-500">
-                        {notifications.length === 0 ? "ცარიელია" : `${Math.min(10, notifications.length)} ბოლო შეტყობინება`}
+                        {notifications.length === 0
+                          ? t("nav.empty")
+                          : t("nav.recentNotifications", { count: Math.min(10, notifications.length) })}
                       </p>
                     </div>
                     {notifications.some((n) => !n.is_read) ? (
@@ -494,13 +484,13 @@ export default function Navbar() {
                         onClick={() => void handleMarkAllNotificationsRead()}
                         className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-[#1B2B4B] underline-offset-2 hover:bg-slate-50 hover:underline"
                       >
-                        ყველა წაკითხულია
+                        {t("nav.markAllRead")}
                       </button>
                     ) : null}
                   </div>
                   <div className="max-h-[min(52vh,340px)] overflow-y-auto overscroll-contain">
                     {notifications.length === 0 ? (
-                      <p className="px-4 py-8 text-center text-sm text-slate-600">ახალი შეტყობინებები არ გაქვთ.</p>
+                      <p className="px-4 py-8 text-center text-sm text-slate-600">{t("nav.noNewNotifications")}</p>
                     ) : (
                       <ul className="divide-y divide-slate-100">
                         {notifications.slice(0, 10).map((n) => (
@@ -517,11 +507,13 @@ export default function Navbar() {
                               {n.body ? (
                                 <span className="text-xs text-slate-600">{truncateNotificationBody(n.body)}</span>
                               ) : null}
-                              <span className="text-[11px] text-slate-400">{formatNotificationRelativeTime(n.created_at)}</span>
+                              <span className="text-[11px] text-slate-400">
+                                {formatNotificationRelativeTime(n.created_at, t, locale)}
+                              </span>
                             </button>
                             <button
                               type="button"
-                              aria-label="შეტყობინების წაშლა"
+                              aria-label={t("nav.deleteNotification")}
                               onClick={(event) => void deleteNotification(n.id, event)}
                               className="shrink-0 border-l border-slate-100 px-3 py-3 text-sm text-slate-400 transition hover:bg-red-50 hover:text-red-600"
                             >
@@ -549,7 +541,7 @@ export default function Navbar() {
                   {avatarUrl ? (
                     <img
                       src={navbarAvatarSrc ?? avatarUrl}
-                      alt="მომხმარებლის ავატარი"
+                      alt={t("nav.userAvatar")}
                       loading="lazy"
                       className="h-full w-full object-cover"
                     />
@@ -560,22 +552,23 @@ export default function Navbar() {
                 <span className="max-w-24 truncate text-sm font-medium text-slate-600">{userDisplayName}</span>
               </button>
               <div
-                className={`absolute right-0 top-12 w-48 origin-top-right rounded-lg border border-slate-200 bg-white p-2 shadow-lg transition ${
+                className={`absolute right-0 top-12 w-52 origin-top-right rounded-lg border border-slate-200 bg-white p-2 shadow-lg transition ${
                   menuOpen ? "scale-100 opacity-100" : "pointer-events-none scale-95 opacity-0"
                 }`}
               >
+                <LanguageToggle locale={locale} onChange={setLocale} />
                 <Link to="/settings" onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
-                  პარამეტრები
+                  {t("nav.settings")}
                 </Link>
                 <Link to="/saved" onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
-                  შენახული
+                  {t("nav.saved")}
                 </Link>
                 <Link to="/messages" onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
-                  ჩათი
+                  {t("nav.chat")}
                 </Link>
                 {publicProfileHref ? (
                   <Link to={publicProfileHref} onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
-                    პროფილი
+                    {t("nav.profile")}
                   </Link>
                 ) : null}
                 <button
@@ -583,7 +576,7 @@ export default function Navbar() {
                   onClick={confirmAndLogout}
                   className="mt-1 block w-full rounded border-t border-slate-100 px-3 py-2 pt-3 text-left text-sm text-red-600 hover:bg-red-50"
                 >
-                  გასვლა
+                  {t("nav.logout")}
                 </button>
               </div>
             </div>
@@ -593,13 +586,13 @@ export default function Navbar() {
                 to="/login"
                 className="inline-flex h-11 items-center text-sm font-semibold text-[#1B2B4B] transition hover:text-[#D4A843]"
               >
-                შესვლა
+                {t("nav.login")}
               </Link>
               <Link
                 to="/register"
-                className="inline-flex h-11 items-center rounded-md border border-slate-300 px-4 text-sm font-semibold text-[#1B2B4B] transition hover:border-[#D4A843] hover:text-[#D4A843]"
+                className="inline-flex h-10 items-center rounded-md border border-slate-300 px-3 text-sm font-semibold text-[#1B2B4B] transition hover:border-[#D4A843] hover:text-[#D4A843] lg:h-11 lg:px-4"
               >
-                რეგისტრაცია
+                {t("nav.register")}
               </Link>
               <Link
                 to="#"
@@ -607,9 +600,9 @@ export default function Navbar() {
                   event.preventDefault()
                   handlePostJob()
                 }}
-                className="inline-flex h-11 items-center rounded-md bg-[#0088FF] px-4 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC]"
+                className="inline-flex h-10 items-center rounded-md bg-[#0088FF] px-3 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC] lg:h-11 lg:px-4"
               >
-                სამუშაოს განთავსება
+                {t("nav.postJob")}
               </Link>
             </>
           ) : (
@@ -618,15 +611,18 @@ export default function Navbar() {
               <div className="h-4 w-24 animate-pulse rounded bg-slate-100" />
             </div>
           )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen((v) => !v)}
+            className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-slate-300 bg-white md:hidden"
+          >
+            <span className="text-lg">{mobileMenuOpen ? "✕" : "☰"}</span>
+          </button>
+          {authStatus === "anon" ? (
+            <LanguageToggle locale={locale} onChange={setLocale} variant="flags" />
+          ) : null}
         </div>
-
-        <button
-          type="button"
-          onClick={() => setMobileMenuOpen((v) => !v)}
-          className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-slate-300 bg-white md:hidden"
-        >
-          <span className="text-lg">{mobileMenuOpen ? "✕" : "☰"}</span>
-        </button>
       </div>
 
       <div
@@ -656,7 +652,7 @@ export default function Navbar() {
                   location.pathname.startsWith("/messages") ? "bg-amber-50 text-[#1B2B4B]" : "text-[#1B2B4B]"
                 }`}
               >
-                <span>ჩათი</span>
+                <span>{t("nav.chat")}</span>
                 {unreadMessages > 0 ? (
                   <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">
                     {unreadMessages > 99 ? "99+" : unreadMessages}
@@ -671,13 +667,13 @@ export default function Navbar() {
                 }}
                 className="flex items-center justify-between rounded-md px-3 py-3 text-sm font-semibold text-[#1B2B4B]"
               >
-                <span>შეტყობინებები</span>
+                <span>{t("nav.notifications")}</span>
                 {unreadNotifications > 0 ? (
                   <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span>
                 ) : null}
               </button>
               <Link to="/dashboard" onClick={() => setMobileMenuOpen(false)} className="rounded-md px-3 py-3 text-sm font-semibold text-[#1B2B4B]">
-                მართვის პანელი
+                {t("nav.dashboard")}
               </Link>
               <Link
                 to={postListingOrJob.to}
@@ -692,12 +688,13 @@ export default function Navbar() {
                   <path stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" d="M12 5v14M5 12h14" />
                 </svg>
               </Link>
+              <LanguageToggle locale={locale} onChange={setLocale} />
               <Link to="/settings" onClick={() => setMobileMenuOpen(false)} className="rounded-md px-3 py-3 text-sm font-semibold text-[#1B2B4B]">
-                პარამეტრები
+                {t("nav.settings")}
               </Link>
               {publicProfileHref ? (
                 <Link to={publicProfileHref} onClick={() => setMobileMenuOpen(false)} className="rounded-md px-3 py-3 text-sm font-semibold text-[#1B2B4B]">
-                  პროფილი
+                  {t("nav.profile")}
                 </Link>
               ) : null}
               <button
@@ -705,16 +702,16 @@ export default function Navbar() {
                 onClick={confirmAndLogout}
                 className="rounded-md px-3 py-3 text-left text-sm font-semibold text-red-600"
               >
-                გასვლა
+                {t("nav.logout")}
               </button>
             </>
           ) : authStatus === "anon" ? (
             <div className="grid gap-2 pt-2">
               <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="inline-flex h-11 items-center justify-center rounded-md border border-slate-300 text-sm font-semibold text-[#1B2B4B]">
-                შესვლა
+                {t("nav.login")}
               </Link>
               <Link to="/register" onClick={() => setMobileMenuOpen(false)} className="inline-flex h-11 items-center justify-center rounded-md bg-[#1B2B4B] text-sm font-semibold text-white">
-                რეგისტრაცია
+                {t("nav.register")}
               </Link>
               <button
                 type="button"
@@ -724,7 +721,7 @@ export default function Navbar() {
                 }}
                 className="inline-flex h-11 items-center justify-center rounded-md bg-[#0088FF] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC]"
               >
-                სამუშაოს განთავსება
+                {t("nav.postJob")}
               </button>
             </div>
           ) : (
@@ -755,7 +752,7 @@ export default function Navbar() {
             </h2>
             {detailPayload.job_title || detailPayload.freelancer_name ? (
               <p className="mt-1 text-xs text-slate-500">
-                {[detailPayload.job_title ? `სამუშაო: „${detailPayload.job_title}“` : null, detailPayload.freelancer_name ?? null]
+                {[detailPayload.job_title ? t("nav.jobTitle", { title: detailPayload.job_title }) : null, detailPayload.freelancer_name ?? null]
                   .filter(Boolean)
                   .join(" • ")}
               </p>
@@ -765,7 +762,7 @@ export default function Navbar() {
           <div className="min-w-0 space-y-4 px-5 py-4">
             <div className="flex flex-wrap gap-3 rounded-xl bg-slate-50 px-4 py-3 text-sm">
               <div>
-                <p className="text-xs text-slate-500">რეიტინგი</p>
+                <p className="text-xs text-slate-500">{t("nav.rating")}</p>
                 <p className="font-semibold text-[#1B2B4B]">
                   {(detailPayload.average_rating ?? 0).toFixed(1)}
                 </p>
@@ -774,7 +771,7 @@ export default function Navbar() {
 
             {detailNoteParts.rateLine ? (
               <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">შემოთავაზებული ტარიფი</p>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{t("nav.proposedRate")}</p>
                 <p className="min-w-0 max-w-full break-words rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-[#1B2B4B]">
                   {detailNoteParts.rateLine}
                 </p>
@@ -782,7 +779,7 @@ export default function Navbar() {
             ) : null}
 
             <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">კომენტარი</p>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{t("nav.comment")}</p>
               <p className="min-h-[3rem] min-w-0 max-w-full whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-sm text-slate-800 [overflow-wrap:anywhere]">
                 {detailNoteParts.comment.trim() ? detailNoteParts.comment : "—"}
               </p>
@@ -795,7 +792,7 @@ export default function Navbar() {
                   onClick={() => setDetailNotification(null)}
                   className="inline-flex flex-1 items-center justify-center rounded-lg bg-[#1B2B4B] px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B]"
                 >
-                  პროფილის ნახვა
+                  {t("nav.viewProfile")}
                 </Link>
               ) : null}
               {detailPayload.job_id ? (
@@ -807,7 +804,7 @@ export default function Navbar() {
                   }}
                   className="inline-flex flex-1 items-center justify-center rounded-lg border border-[#1B2B4B] px-4 py-2.5 text-sm font-semibold text-[#1B2B4B] transition hover:bg-slate-50"
                 >
-                  განცხადების გვერდი
+                  {t("nav.jobPage")}
                 </button>
               ) : null}
               <button
@@ -815,7 +812,7 @@ export default function Navbar() {
                 onClick={() => void deleteNotification(detailNotification.id)}
                 className="inline-flex flex-1 items-center justify-center rounded-lg border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-50"
               >
-                წაშლა
+                {t("common.delete")}
               </button>
             </div>
 
@@ -824,7 +821,7 @@ export default function Navbar() {
               onClick={() => setDetailNotification(null)}
               className="w-full rounded-lg border border-slate-200 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
             >
-              დახურვა
+              {t("common.close")}
             </button>
           </div>
         </div>

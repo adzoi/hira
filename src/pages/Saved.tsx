@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import Navbar from "../components/Navbar.tsx"
@@ -7,17 +7,21 @@ import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase.ts"
 import type { SavedResourceType } from "../lib/savedItems.ts"
-
-const typeLabel: Record<SavedResourceType, string> = {
-  freelancer: "ფრილანსერი",
-  hirer: "დამქირავებელი",
-  job: "სამუშაო",
-  service: "სერვისი",
-}
+import { useTranslation } from "../i18n/LocaleContext.tsx"
 
 export default function SavedPage() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [removingId, setRemovingId] = useState<string | null>(null)
+  const typeLabel = useMemo<Record<SavedResourceType, string>>(
+    () => ({
+      freelancer: t("saved.typeFreelancer"),
+      hirer: t("saved.typeHirer"),
+      job: t("saved.typeJob"),
+      service: t("saved.typeService"),
+    }),
+    [t],
+  )
   const {
     data: items = [],
     isLoading: loading,
@@ -28,14 +32,14 @@ export default function SavedPage() {
     queryFn: fetchSavedItems,
     enabled: isSupabaseConfigured,
   })
-  const error = isError ? queryErrorMessage(queryError, "ჩატვირთვა ვერ მოხერხდა.") : ""
+  const error = isError ? queryErrorMessage(queryError, t("saved.loadFailed")) : ""
 
   useEffect(() => {
-    document.title = "შენახული — გიგორი"
+    document.title = t("saved.title")
     return () => {
-      document.title = "გიგორი"
+      document.title = t("brand.name")
     }
-  }, [])
+  }, [t])
 
   const remove = async (bookmarkId: string) => {
     if (!supabase || removingId) return
@@ -57,28 +61,28 @@ export default function SavedPage() {
     <div className="min-h-screen bg-[#F8F9FC]">
       <Navbar />
       <main className="mx-auto max-w-3xl px-4 py-8 md:px-6 md:py-10">
-        <h1 className="text-2xl font-extrabold text-[#1B2B4B]">შენახული</h1>
-        <p className="mt-1 text-sm text-slate-600">ფრილანსერები, დამქირავებლები, სამუშაოები და სერვისები, რომლებიც შენ გინდა მოგვიანებით გადახედო.</p>
+        <h1 className="text-2xl font-extrabold text-[#1B2B4B]">{t("saved.heading")}</h1>
+        <p className="mt-1 text-sm text-slate-600">{t("saved.description")}</p>
 
         {loading ? (
-          <p className="mt-8 text-sm text-slate-500">იტვირთება…</p>
+          <p className="mt-8 text-sm text-slate-500">{t("common.loading")}</p>
         ) : error ? (
           <p className="mt-8 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
         ) : items.length === 0 ? (
           <p className="mt-8 rounded-xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center text-sm text-slate-600">
-            ჯერ არაფერი გაქვს შენახული. გადახედე{" "}
+            {t("saved.emptyLead")}{" "}
             <Link to="/browse" className="font-semibold text-[#0088FF] underline">
-              ფრილანსერებს
+              {t("nav.freelancers")}
             </Link>
             ,{" "}
             <Link to="/listings" className="font-semibold text-[#0088FF] underline">
-              ლისტინგებს
+              {t("nav.listings")}
             </Link>{" "}
-            ან{" "}
+            {t("common.or")}{" "}
             <Link to="/jobs" className="font-semibold text-[#0088FF] underline">
-              სამუშაოებს
+              {t("nav.jobs")}
             </Link>{" "}
-            და დააჭირე „შენახვა“ პროფილის ფოტოს ქვეშ.
+            {t("saved.emptyTrail")}
           </p>
         ) : (
           <ul className="mt-6 space-y-3">
@@ -108,7 +112,7 @@ export default function SavedPage() {
                       to={entry.href}
                       className="rounded-lg border border-[#1B2B4B] px-3 py-1.5 text-xs font-semibold text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
                     >
-                      გახსნა
+                      {t("saved.open")}
                     </Link>
                   ) : null}
                   <button
@@ -117,7 +121,7 @@ export default function SavedPage() {
                     onClick={() => void remove(entry.bookmarkId)}
                     className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
                   >
-                    {removingId === entry.bookmarkId ? "…" : "წაშლა"}
+                    {removingId === entry.bookmarkId ? "…" : t("common.delete")}
                   </button>
                 </div>
               </li>

@@ -1,4 +1,4 @@
-import { stripLegacyPricePrefix } from "../listingDescription.ts"
+import { META_SUFFIX, resolveListingMetaPrefix, stripLegacyPricePrefix } from "../listingDescription.ts"
 import { normalizeListingPriceType } from "../listingPrice.ts"
 import {
   categoryIdsWithChildren,
@@ -8,8 +8,6 @@ import {
 import { formatSupabaseClientError, isSupabaseConfigured, supabase } from "../supabase.ts"
 
 const MAX_LISTING_IMAGES = 3
-const META_PREFIX = "<!--gigori-meta:"
-const META_SUFFIX = "-->"
 
 type ListingMeta = {
   categoryId: string | null
@@ -20,10 +18,11 @@ type ListingMeta = {
 function parseListingDescription(raw: string | null): { description: string; meta: ListingMeta } {
   const fallback: ListingMeta = { categoryId: null, subcategoryId: null, tags: [] }
   if (!raw) return { description: "", meta: fallback }
-  if (!raw.startsWith(META_PREFIX)) return { description: stripLegacyPricePrefix(raw), meta: fallback }
+  const metaPrefix = resolveListingMetaPrefix(raw)
+  if (!metaPrefix) return { description: stripLegacyPricePrefix(raw), meta: fallback }
   const endIndex = raw.indexOf(META_SUFFIX)
   if (endIndex < 0) return { description: stripLegacyPricePrefix(raw), meta: fallback }
-  const metaChunk = raw.slice(META_PREFIX.length, endIndex).trim()
+  const metaChunk = raw.slice(metaPrefix.length, endIndex).trim()
   const body = stripLegacyPricePrefix(raw.slice(endIndex + META_SUFFIX.length))
   try {
     const parsed = JSON.parse(metaChunk) as Partial<ListingMeta>
@@ -49,7 +48,9 @@ export type TagOption = {
 
 export type ListingFormEditData = {
   title: string
+  titleEn: string
   description: string
+  descriptionEn: string
   price: string
   priceType: ReturnType<typeof normalizeListingPriceType>
   isActive: boolean
@@ -169,7 +170,9 @@ export async function fetchListingForm(listingId?: string): Promise<ListingFormQ
     ...base,
     edit: {
       title: listing.title ?? "",
+      titleEn: (listing as { title_en?: string | null }).title_en ?? "",
       description: parsed.description,
+      descriptionEn: (listing as { description_en?: string | null }).description_en ?? "",
       price: String(listing.price ?? 0),
       priceType: normalizeListingPriceType((listing as { price_type?: string | null }).price_type),
       isActive: listing.is_active ?? true,

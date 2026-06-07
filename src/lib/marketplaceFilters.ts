@@ -1,14 +1,39 @@
 /** Stored filter values; cities use Georgian spelling for matching. */
+import { getCurrentLocale, translate } from "../i18n/translate.ts"
+
 export const LOCATION_REMOTE = "__remote__"
 export const LOCATION_HYBRID = "__hybrid__"
 
+/** Stored hirer industry values (Georgian) → i18n key. */
+const HIRER_INDUSTRY_I18N_KEYS: Record<string, string> = {
+  ტექნოლოგია: "industries.technology",
+  მარკეტინგი: "industries.marketing",
+  განათლება: "industries.education",
+  ფინანსები: "industries.finance",
+  ჯანდაცვა: "industries.healthcare",
+  "უძრავი ქონება": "industries.realEstate",
+  სხვა: "industries.other",
+}
+
 /** UI label for `profiles.city` when it holds a sentinel or a Georgian city name. */
-export function formatCityForDisplay(city: string | null | undefined): string | null {
+export function formatCityForDisplay(city: string | null | undefined, locale?: "ka" | "en"): string | null {
   if (city == null || !String(city).trim()) return null
   const c = String(city).trim()
-  if (c === LOCATION_REMOTE) return "დისტანციური"
-  if (c === LOCATION_HYBRID) return "შერეული (Hybrid)"
+  const loc = locale ?? getCurrentLocale()
+  if (c === LOCATION_REMOTE) return translate(loc, "common.remote")
+  if (c === LOCATION_HYBRID) return translate(loc, "common.hybrid")
+  if (loc === "en") return CITY_EN_LABELS[c] ?? c
   return c
+}
+
+/** UI label for hirer `industry` (stored as Georgian preset value). */
+export function formatIndustryForDisplay(industry: string | null | undefined, locale?: "ka" | "en"): string | null {
+  if (industry == null || !String(industry).trim()) return null
+  const value = String(industry).trim()
+  const loc = locale ?? getCurrentLocale()
+  const key = HIRER_INDUSTRY_I18N_KEYS[value]
+  if (key && loc === "en") return translate(loc, key)
+  return value
 }
 
 /** Major cities and large towns commonly used for matching. */
@@ -77,6 +102,15 @@ export const CITY_LATIN_ALIASES: Record<string, string[]> = {
   წალენჯიხა: ["tsalenjikha"],
   ხელვაჩაური: ["khelvachauri"],
 }
+
+/** English display labels for preset Georgian city values (stored value stays Georgian). */
+export const CITY_EN_LABELS: Record<string, string> = Object.fromEntries(
+  Object.entries(CITY_LATIN_ALIASES).map(([ka, aliases]) => {
+    const primary = aliases[0] ?? ka
+    const label = primary.charAt(0).toUpperCase() + primary.slice(1)
+    return [ka, label]
+  }),
+)
 
 export type LocationMatchEntity = {
   city: string | null

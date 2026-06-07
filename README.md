@@ -71,7 +71,7 @@ export default defineConfig([
   },
 ])
 ```
-# Gigori
+# Hira
 
 ## Environment variables
 

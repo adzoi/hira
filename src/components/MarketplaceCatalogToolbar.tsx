@@ -1,6 +1,8 @@
 import type { ReactNode, RefObject } from "react"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { pickCategoryName } from "../lib/categoryLocale.ts"
 
-export type MarketplaceCategory = { id: string; name_ka: string }
+export type MarketplaceCategory = { id: string; name_ka: string; name_en?: string | null }
 
 type SortOption = { value: string; label: string }
 
@@ -39,7 +41,7 @@ type MarketplaceCatalogToolbarProps = {
 export default function MarketplaceCatalogToolbar({
   eyebrow,
   title,
-  searchLabel = "ძიება",
+  searchLabel,
   searchValue,
   onSearchChange,
   searchPlaceholder,
@@ -47,11 +49,11 @@ export default function MarketplaceCatalogToolbar({
   categoryId = "",
   onCategoryChange = () => {},
   categorySlot,
-  categoryLabel = "კატეგორია",
+  categoryLabel,
   sortValue,
   onSortChange,
   sortOptions,
-  sortLabel = "სორტირება",
+  sortLabel,
   advancedDropdownOpen,
   advancedFilterCount,
   onToggleAdvanced,
@@ -63,6 +65,12 @@ export default function MarketplaceCatalogToolbar({
   locationDisplay,
   showPageHeader = true,
 }: MarketplaceCatalogToolbarProps) {
+  const { t, locale } = useTranslation()
+  const resolvedSearchLabel = searchLabel ?? t("common.search")
+  const resolvedCategoryLabel = categoryLabel ?? t("common.category")
+  const resolvedSortLabel = sortLabel ?? t("common.sort")
+  const isIndustryCategory = resolvedCategoryLabel === t("hirers.industry")
+
   return (
     <div className="w-full">
       {showPageHeader ? (
@@ -89,17 +97,19 @@ export default function MarketplaceCatalogToolbar({
           <div className="shrink-0">{categorySlot}</div>
         ) : (
           <label className="relative inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-600">
-            <span className="truncate">{categoryLabel}</span>
+            <span className="truncate">{resolvedCategoryLabel}</span>
             <select
               value={categoryId}
               onChange={(event) => onCategoryChange(event.target.value)}
               className="absolute inset-0 cursor-pointer opacity-0"
-              aria-label={categoryLabel}
+              aria-label={resolvedCategoryLabel}
             >
-              <option value="">{categoryLabel === "ინდუსტრია" ? "ყველა ინდუსტრია" : "ყველა კატეგორია"}</option>
+              <option value="">
+                {isIndustryCategory ? t("common.allIndustries") : t("common.allCategories")}
+              </option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>
-                  {category.name_ka}
+                  {pickCategoryName(category, locale)}
                 </option>
               ))}
             </select>
@@ -111,7 +121,7 @@ export default function MarketplaceCatalogToolbar({
             type="button"
             className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-600"
           >
-            <span className="truncate">{locationDisplay.trim() || "ლოკაცია"}</span>
+            <span className="truncate">{locationDisplay.trim() || t("common.location")}</span>
           </button>
         ) : null}
 
@@ -125,7 +135,7 @@ export default function MarketplaceCatalogToolbar({
               advancedDropdownOpen ? "border-slate-400 ring-2 ring-[#0088FF]/30" : ""
             }`}
           >
-            გაფართოებული ძიება
+            {t("common.advancedSearch")}
             <span className="ml-1 opacity-70" aria-hidden>
               ▾
             </span>
@@ -146,12 +156,12 @@ export default function MarketplaceCatalogToolbar({
               <div
                 role="dialog"
                 aria-modal="true"
-                aria-label="დეტალური ფილტრები"
+                aria-label={t("common.detailedFilters")}
                 className="absolute left-0 right-0 z-50 mt-2 flex max-h-[min(72vh,560px)] w-full min-w-[min(100%,18rem)] max-w-none flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl md:right-0 md:left-auto md:w-[min(100vw-4rem,24rem)]"
               >
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-4">
                   <h2 className="border-l-4 border-[#D4A843] pl-3 text-base font-bold text-[#1B2B4B]">
-                    დეტალური ფილტრები
+                    {t("common.detailedFilters")}
                   </h2>
                   <div className="mt-4 space-y-4">{childrenAdvancedBody}</div>
                 </div>
@@ -162,7 +172,7 @@ export default function MarketplaceCatalogToolbar({
                     onClick={onClearDraftAdvanced}
                     className="h-11 w-full rounded-lg border border-[#D4A843] text-sm font-semibold text-[#1B2B4B] hover:bg-amber-50"
                   >
-                    ფილტრების გასუფთავება
+                    {t("common.clearFilters")}
                   </button>
                   <div className="flex gap-2">
                     <button
@@ -170,14 +180,14 @@ export default function MarketplaceCatalogToolbar({
                       onClick={onDismissAdvanced}
                       className="h-11 flex-1 rounded-lg border border-slate-300 text-sm font-semibold text-[#1B2B4B] hover:bg-slate-50"
                     >
-                      გაუქმება
+                      {t("common.cancel")}
                     </button>
                     <button
                       type="button"
                       onClick={onSaveAdvanced}
                       className="h-11 flex-1 rounded-lg bg-[#1B2B4B] text-sm font-semibold text-white hover:bg-[#D4A843] hover:text-[#1B2B4B]"
                     >
-                      შენახვა
+                      {t("common.save")}
                     </button>
                   </div>
                 </div>
@@ -187,12 +197,12 @@ export default function MarketplaceCatalogToolbar({
         </div>
 
         <label className="relative inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-600">
-          <span className="whitespace-nowrap">{sortLabel}</span>
+          <span className="whitespace-nowrap">{resolvedSortLabel}</span>
           <select
             value={sortValue}
             onChange={(event) => onSortChange(event.target.value)}
             className="absolute inset-0 cursor-pointer opacity-0"
-            aria-label={sortLabel}
+            aria-label={resolvedSortLabel}
           >
             {sortOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -206,9 +216,9 @@ export default function MarketplaceCatalogToolbar({
           type="button"
           className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-[#0088FF] px-5 text-base font-bold text-white transition hover:bg-[#006ACC] sm:ml-auto"
           onClick={() => onSearchChange(searchValue)}
-          aria-label={searchLabel}
+          aria-label={resolvedSearchLabel}
         >
-          {searchLabel}
+          {resolvedSearchLabel}
         </button>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
 import type { FollowListProfile } from "../lib/follows.ts"
 import { getFollowers, getFollowing, resolveProfilePublicHrefByIds } from "../lib/follows.ts"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
@@ -11,12 +12,6 @@ function userTypeBadgeClasses(userType: string) {
   if (userType === "freelancer") return "rounded-md bg-emerald-100 px-1.5 py-0.5 text-emerald-900"
   if (userType === "hirer") return "rounded-md bg-violet-100 px-1.5 py-0.5 text-violet-900"
   return "rounded-md bg-slate-100 px-1.5 py-0.5 text-slate-800"
-}
-
-function userTypeBadgeLabel(userType: string) {
-  if (userType === "freelancer") return "ფრილანსერი"
-  if (userType === "hirer") return "დამქირავებელი"
-  return userType
 }
 
 function initials(fullName: string) {
@@ -49,6 +44,9 @@ export function FollowStatPills({
   /** Extra classes on the wrapping row */
   className?: string
 }) {
+  const { t, locale } = useTranslation()
+  const countLocale = locale === "en" ? "en-US" : "ka-GE"
+
   return (
     <div className={`flex flex-wrap items-center gap-1 text-sm text-slate-600 ${className}`}>
       <button
@@ -56,8 +54,8 @@ export function FollowStatPills({
         onClick={onOpenFollowers}
         className="border-0 bg-transparent p-0 text-left hover:opacity-80 focus:outline-none focus-visible:underline"
       >
-        <span className="font-bold tabular-nums text-[#1B2B4B]">{followerCount.toLocaleString("ka-GE")}</span>
-        <span> გამომწერი</span>
+        <span className="font-bold tabular-nums text-[#1B2B4B]">{followerCount.toLocaleString(countLocale)}</span>
+        <span> {t("common.followers")}</span>
       </button>
       <span className="mx-0.5 text-slate-400" aria-hidden>
         ·
@@ -67,20 +65,27 @@ export function FollowStatPills({
         onClick={onOpenFollowing}
         className="border-0 bg-transparent p-0 text-left hover:opacity-80 focus:outline-none focus-visible:underline"
       >
-        <span className="font-bold tabular-nums text-[#1B2B4B]">{followingCount.toLocaleString("ka-GE")}</span>
-        <span> გამოწერილი</span>
+        <span className="font-bold tabular-nums text-[#1B2B4B]">{followingCount.toLocaleString(countLocale)}</span>
+        <span> {t("common.following")}</span>
       </button>
     </div>
   )
 }
 
 export default function FollowListsModal({ open, onClose, profileId, initialTab }: Props) {
+  const { t } = useTranslation()
   const [tab, setTab] = useState<FollowModalTab>(initialTab)
   const [loading, setLoading] = useState(false)
   const [loadErr, setLoadErr] = useState("")
   const [followersList, setFollowersList] = useState<FollowListProfile[]>([])
   const [followingList, setFollowingList] = useState<FollowListProfile[]>([])
   const [hrefById, setHrefById] = useState<Record<string, string>>({})
+
+  function userTypeBadgeLabel(userType: string) {
+    if (userType === "freelancer") return t("auth.freelancer")
+    if (userType === "hirer") return t("auth.hirer")
+    return userType
+  }
 
   useEffect(() => {
     if (!open) return
@@ -96,7 +101,7 @@ export default function FollowListsModal({ open, onClose, profileId, initialTab 
     ;(async () => {
       if (!isSupabaseConfigured || !supabase) {
         if (!cancelled) {
-          setLoadErr("Supabase არ არის კონფიგურირებული.")
+          setLoadErr(t("validation.supabaseMissing"))
           setFollowersList([])
           setFollowingList([])
           setHrefById({})
@@ -116,7 +121,7 @@ export default function FollowListsModal({ open, onClose, profileId, initialTab 
         if (!cancelled) setHrefById(hrefMap)
       } catch (e) {
         if (!cancelled) {
-          setLoadErr(e instanceof Error ? e.message : "მონაცემები ვერ ჩაიტვირთა.")
+          setLoadErr(e instanceof Error ? e.message : t("common.somethingWrong"))
           setFollowersList([])
           setFollowingList([])
           setHrefById({})
@@ -146,13 +151,13 @@ export default function FollowListsModal({ open, onClose, profileId, initialTab 
     >
       <div className="relative flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
         <h2 id="follow-lists-modal-title" className="sr-only">
-          გამომწერები და გამოწერილი სიები
+          {t("follow.modalTitle")}
         </h2>
         <button
           type="button"
           onClick={onClose}
           className="absolute right-3 top-3 z-10 rounded-md border border-slate-300 px-2.5 py-1 text-lg leading-none text-slate-600 hover:bg-slate-50"
-          aria-label="დახურვა"
+          aria-label={t("common.close")}
         >
           ×
         </button>
@@ -164,7 +169,7 @@ export default function FollowListsModal({ open, onClose, profileId, initialTab 
               tab === "followers" ? "border-[#D4A843] text-[#1B2B4B]" : "border-transparent text-slate-500 hover:text-[#1B2B4B]"
             }`}
           >
-            გამომწერი
+            {t("common.followers")}
           </button>
           <button
             type="button"
@@ -173,7 +178,7 @@ export default function FollowListsModal({ open, onClose, profileId, initialTab 
               tab === "following" ? "border-[#D4A843] text-[#1B2B4B]" : "border-transparent text-slate-500 hover:text-[#1B2B4B]"
             }`}
           >
-            გამოწერილი
+            {t("common.following")}
           </button>
         </div>
 
@@ -194,13 +199,13 @@ export default function FollowListsModal({ open, onClose, profileId, initialTab 
             </ul>
           ) : rows.length === 0 ? (
             <p className="px-3 py-10 text-center text-sm text-slate-600">
-              {tab === "followers" ? "ჯერ გამომწერები არ ჩანს." : "ჯერ არავის არ იწერება."}
+              {tab === "followers" ? t("follow.noFollowers") : t("follow.notFollowing")}
             </p>
           ) : (
             <ul className="divide-y divide-slate-100">
               {rows.map((person) => {
                 const href = hrefById[person.id]
-                const name = person.full_name.trim() || "მომხმარებელი"
+                const name = person.full_name.trim() || t("nav.user")
                 return (
                   <li key={person.id} className="flex items-center gap-3 px-3 py-2.5">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-xs font-bold text-[#1B2B4B]">
@@ -229,7 +234,7 @@ export default function FollowListsModal({ open, onClose, profileId, initialTab 
                         onClick={onClose}
                         className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#1B2B4B] transition hover:border-[#D4A843]"
                       >
-                        პროფილი
+                        {t("nav.profile")}
                       </Link>
                     ) : (
                       <span className="text-xs text-slate-400">—</span>

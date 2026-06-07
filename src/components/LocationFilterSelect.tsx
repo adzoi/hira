@@ -1,4 +1,10 @@
-import { GEORGIA_CITY_LABELS, LOCATION_HYBRID, LOCATION_REMOTE } from "../lib/marketplaceFilters.ts"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
+import {
+  formatCityForDisplay,
+  GEORGIA_CITY_LABELS,
+  LOCATION_HYBRID,
+  LOCATION_REMOTE,
+} from "../lib/marketplaceFilters.ts"
 
 const PRESET_LOCATION_VALUES = new Set<string>([LOCATION_REMOTE, LOCATION_HYBRID, ...GEORGIA_CITY_LABELS])
 
@@ -21,6 +27,7 @@ export default function LocationFilterSelect({
   className,
   variant = "filter",
 }: LocationFilterSelectProps) {
+  const { t, locale } = useTranslation()
   const showLegacy =
     variant === "form" && value.trim() !== "" && !PRESET_LOCATION_VALUES.has(value)
 
@@ -35,19 +42,19 @@ export default function LocationFilterSelect({
       }
     >
       {variant === "filter" ? (
-        <option value="">ნებისმიერი</option>
+        <option value="">{t("common.anyLocation")}</option>
       ) : (
-        <option value="">აირჩიეთ ქალაქი / ლოკაცია</option>
+        <option value="">{t("common.selectCity")}</option>
       )}
       {showLegacy ? (
         <option value={value}>{value} (არსებული მნიშვნელობა)</option>
       ) : null}
-      <option value={LOCATION_REMOTE}>დისტანციური (Remote)</option>
-      <option value={LOCATION_HYBRID}>შერეული (Hybrid)</option>
-      <optgroup label="საქართველოს ქალაქები">
+      <option value={LOCATION_REMOTE}>{t("common.remote")}</option>
+      <option value={LOCATION_HYBRID}>{t("common.hybrid")}</option>
+      <optgroup label={t("common.georgiaCities")}>
         {GEORGIA_CITY_LABELS.map((name) => (
           <option key={name} value={name}>
-            {name}
+            {formatCityForDisplay(name, locale) ?? name}
           </option>
         ))}
       </optgroup>

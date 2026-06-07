@@ -15,6 +15,15 @@ body {
   overflow-x: hidden;
 }
 
+/* Landing hero only — even Georgian letter height, no mixed font fallback. */
+.home-hero-title {
+  font-family: "Noto Sans Georgian", sans-serif;
+  font-synthesis-weight: none;
+  font-synthesis-style: none;
+  line-height: 1.12;
+  text-wrap: balance;
+}
+
 #root {
   min-height: 100vh;
 }
@@ -48,5 +57,16 @@ body {
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

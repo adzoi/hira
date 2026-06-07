@@ -1,7 +1,7 @@
 import type { NavigateFunction } from "react-router-dom"
 import type { Dispatch, SetStateAction } from "react"
 import { countFollowers, countFollowing } from "../follows.ts"
-import { stripLegacyPricePrefix } from "../listingDescription.ts"
+import { META_SUFFIX, resolveListingMetaPrefix, stripLegacyPricePrefix } from "../listingDescription.ts"
 import { normalizeListingPriceType } from "../listingPrice.ts"
 import { countFreelancerProfileVisits } from "../profileVisits.ts"
 import { isSupabaseConfigured, supabase } from "../supabase.ts"
@@ -154,12 +154,11 @@ function mapServiceInquiryRowsForHirer(rows: unknown[] | null | undefined): Dash
 }
 
 function stripListingMeta(raw: string) {
-  const prefix = "<!--gigori-meta:"
-  const suffix = "-->"
-  if (!raw.startsWith(prefix)) return stripLegacyPricePrefix(raw)
-  const endIndex = raw.indexOf(suffix)
+  const metaPrefix = resolveListingMetaPrefix(raw)
+  if (!metaPrefix) return stripLegacyPricePrefix(raw)
+  const endIndex = raw.indexOf(META_SUFFIX)
   if (endIndex < 0) return stripLegacyPricePrefix(raw)
-  return stripLegacyPricePrefix(raw.slice(endIndex + suffix.length))
+  return stripLegacyPricePrefix(raw.slice(endIndex + META_SUFFIX.length))
 }
 
 function snapshotServices(services: ServiceDraft[]) {

@@ -35,6 +35,8 @@ import {
 } from "../lib/queries/fetchFreelancerProfile.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { pickListingDescription, pickListingTitle } from "../lib/listingLocale.ts"
 
 function getInitials(fullName: string) {
   const parts = fullName.trim().split(" ").filter(Boolean)
@@ -87,6 +89,7 @@ const metaPillClass =
   "inline-flex w-fit max-w-full min-w-0 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-[#D1D5DB] bg-white px-2.5 py-0.5 text-xs font-medium text-[#374151]"
 
 export default function FreelancerProfilePage() {
+  const { t, locale } = useTranslation()
   const { pushToast } = useToast()
   const navigate = useNavigate()
   const { slug } = useParams()
@@ -144,11 +147,11 @@ export default function FreelancerProfilePage() {
   )
 
   useEffect(() => {
-    document.title = "ფრილანსერები — გიგორი"
+    document.title = t("freelancerProfile.title")
     return () => {
-      document.title = "გიგორი"
+      document.title = t("brand.name")
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return
@@ -590,12 +593,12 @@ export default function FreelancerProfilePage() {
                     type="button"
                     onClick={() => setAvatarLightboxOpen(true)}
                     className="group relative box-border h-[88px] w-[88px] shrink-0 overflow-hidden rounded-full border-2 border-[#E5E7EB] bg-white p-0 transition hover:border-[#0088FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0088FF] focus-visible:ring-offset-2"
-                    aria-label="ავატარის გადიდება"
+                    aria-label={t("common.enlargeAvatar")}
                   >
                     {profile.avatar_url ? (
                       <img
                         src={profileAvatarDisplayUrl ?? profile.avatar_url}
-                        alt={`${profile.full_name} ავატარი`}
+                        alt={t("common.avatarAlt", { name: profile.full_name })}
                         loading="lazy"
                         className="h-full w-full rounded-full object-cover"
                       />
@@ -611,7 +614,7 @@ export default function FreelancerProfilePage() {
                   <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
                     <div className="min-w-0">
                       <h1 className="text-xl font-semibold text-gray-900">{profile.full_name}</h1>
-                      <p className="mt-0.5 text-sm text-gray-500">{freelancer.professional_title ?? "ფრილანსერი"}</p>
+                      <p className="mt-0.5 text-sm text-gray-500">{freelancer.professional_title ?? t("common.freelancerFallback")}</p>
                     </div>
                     <div className="ml-auto flex flex-shrink-0 flex-wrap items-center justify-end gap-2">
                       {!viewerIsOwner ? (
@@ -629,12 +632,12 @@ export default function FreelancerProfilePage() {
                           }
                         >
                           {followBusy
-                            ? "მიმდინარეობს..."
+                            ? t("common.inProgress")
                             : followButtonMode === "loading"
-                              ? "იტვირთება…"
+                              ? t("common.loading")
                               : followButtonMode === "unfollow"
-                                ? "გამოწერილი"
-                                : "გამოწერა"}
+                                ? t("common.following")
+                                : t("common.follow")}
                         </button>
                       ) : null}
                       {viewerUserId && !viewerIsOwner ? (
@@ -649,14 +652,14 @@ export default function FreelancerProfilePage() {
                         disabled={contactLoading}
                         className={`${primaryBtnClass} min-w-[8rem]`}
                       >
-                        {contactLoading ? "იტვირთება…" : "კონტაქტი"}
+                        {contactLoading ? t("common.loading") : t("common.contact")}
                       </button>
                     </div>
                   </div>
 
                   {freelancer.is_accepting_new_work === false ? (
                     <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                      ეს ფრილანსერი ამჟამად ახალი სამუშაოებისთვის ხელმიუწვდომელია — შეთავაზება ლისტინგებიდან მაინც შეგიძლიათ.
+                      {t("common.unavailableBanner")}
                     </p>
                   ) : null}
 
@@ -674,12 +677,12 @@ export default function FreelancerProfilePage() {
                     <span className="inline-flex flex-wrap items-center gap-1.5">
                       <span className="font-semibold text-gray-900">{freelancer.average_rating.toFixed(1)}</span>
                       <span>
-                        • {freelancer.total_reviews_count} შეფასება
+                        • {t("common.reviewsCount", { count: freelancer.total_reviews_count })}
                       </span>
                     </span>
                     <span className="inline-flex items-center gap-1.5">
                       <BriefcaseOutlineIcon className="h-4 w-4 shrink-0 text-gray-400" />
-                      {completedWorkCount} შესრულებული სამუშაო
+                      {t("common.completedWorkCount", { count: completedWorkCount })}
                     </span>
                   </div>
 
@@ -692,7 +695,7 @@ export default function FreelancerProfilePage() {
                       }}
                       className="w-full rounded-[10px] bg-[#F9FAFB] px-4 py-3 text-center transition hover:bg-gray-100"
                     >
-                      <p className="mb-1 text-xs text-gray-500">გამომწერი</p>
+                      <p className="mb-1 text-xs text-gray-500">{t("freelancerProfile.subscriberStat")}</p>
                       <p className="text-lg font-semibold tabular-nums text-gray-900">{followerCount}</p>
                     </button>
                     <button
@@ -703,30 +706,30 @@ export default function FreelancerProfilePage() {
                       }}
                       className="w-full rounded-[10px] bg-[#F9FAFB] px-4 py-3 text-center transition hover:bg-gray-100"
                     >
-                      <p className="mb-1 text-xs text-gray-500">გამოწერილი</p>
+                      <p className="mb-1 text-xs text-gray-500">{t("freelancerProfile.subscribedStat")}</p>
                       <p className="text-lg font-semibold tabular-nums text-gray-900">{followingCount}</p>
                     </button>
                     <div className="rounded-[10px] bg-[#F9FAFB] px-4 py-3 text-center">
-                      <p className="mb-1 text-xs text-gray-500">შეფასება</p>
+                      <p className="mb-1 text-xs text-gray-500">{t("freelancerProfile.ratingStat")}</p>
                       <p className="text-lg font-semibold tabular-nums text-gray-900">{freelancer.total_reviews_count}</p>
                     </div>
                     <div className="rounded-[10px] bg-[#F9FAFB] px-4 py-3 text-center">
-                      <p className="mb-1 text-xs text-gray-500">დასრულებული</p>
+                      <p className="mb-1 text-xs text-gray-500">{t("freelancerProfile.completedStat")}</p>
                       <p className="text-lg font-semibold tabular-nums text-gray-900">{completedWorkCount}</p>
                     </div>
                   </div>
 
                   {ownerVisitCount !== null ? (
                     <p className="mt-3 text-xs text-gray-500">
-                      საჯარო ნახვები:{" "}
-                      <span className="font-semibold tabular-nums text-gray-900" title="ხელმისაწვდომია მხოლოდ ამ პროფილის მფლობელისთვის">
+                      {t("freelancerProfile.publicViewsCount")}{" "}
+                      <span className="font-semibold tabular-nums text-gray-900" title={t("common.publicViewsOwnerOnly")}>
                         {ownerVisitCount}
                       </span>
                     </p>
                   ) : null}
 
                   <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-4">
-                    <span className="text-sm text-gray-500">ენები:</span>
+                    <span className="text-sm text-gray-500">{t("freelancerProfile.languages")}:</span>
                     <div className="flex flex-wrap items-center gap-1.5">
                       {freelancer.languages.map((language) => (
                         <span key={language} className={tagChipClass}>
@@ -738,7 +741,7 @@ export default function FreelancerProfilePage() {
                   </div>
 
                   <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-gray-100 pt-4">
-                    <span className="text-sm text-gray-500">რეზიუმე (CV):</span>
+                    <span className="text-sm text-gray-500">{t("freelancerProfile.resume")}:</span>
                     {viewerIsOwner ? (
                       <>
                         <input
@@ -758,10 +761,10 @@ export default function FreelancerProfilePage() {
                           onClick={() => ownerCvInputRef.current?.click()}
                           className={outlineBtnClass}
                         >
-                          {cvUploading ? "იტვირთება..." : "CV დამატება"}
+                          {cvUploading ? t("common.loading") : t("common.addCv")}
                         </button>
                         <Link to="/cv-generator" className={outlineBtnClass}>
-                          CV გენერაცია
+                          {t("common.cvGeneration")}
                         </Link>
                       </>
                     ) : null}
@@ -772,16 +775,16 @@ export default function FreelancerProfilePage() {
                         rel="noopener noreferrer"
                         className={primaryBtnClass}
                       >
-                        CV-ის გახსნა
+                        {t("common.openCv")}
                       </a>
                     ) : publicCvSlug ? (
                       <Link to={`/cv/${encodeURIComponent(publicCvSlug)}`} className={primaryBtnClass}>
-                        CV-ის გახსნა
+                        {t("common.openCv")}
                       </Link>
                     ) : null}
                     {profile.cv_url || publicCvSlug ? (
                       <button type="button" onClick={() => void copyCvLink()} className={outlineBtnClass}>
-                        ბმულის კოპირება
+                        {t("common.copyLink")}
                       </button>
                     ) : null}
                   </div>
@@ -809,7 +812,7 @@ export default function FreelancerProfilePage() {
                     : "border border-[#E5E7EB] bg-white text-[#6B7280]"
                 }`}
               >
-                სერვისები
+                {t("common.services")}
               </button>
               <button
                 type="button"
@@ -820,7 +823,7 @@ export default function FreelancerProfilePage() {
                     : "border border-[#E5E7EB] bg-white text-[#6B7280]"
                 }`}
               >
-                ჩემს შესახებ
+                {t("common.aboutMe")}
               </button>
               <button
                 type="button"
@@ -831,29 +834,38 @@ export default function FreelancerProfilePage() {
                     : "border border-[#E5E7EB] bg-white text-[#6B7280]"
                 }`}
               >
-                შეფასებები
+                {t("common.reviews")}
               </button>
             </div>
 
             {profileTab === "services" ? (
               <div className="mt-5 grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-[14px]">
                 {services.length === 0 ? (
-                  <p className="col-span-full text-sm text-gray-500">აქტიური სერვისები არ მოიძებნა.</p>
+                  <p className="col-span-full text-sm text-gray-500">{t("freelancerProfile.noActiveServices")}</p>
                 ) : (
                   services.map((service) => {
                     const negotiable = service.negotiable
+                    const displayTitle = pickListingTitle(
+                      { title: service.title, titleEn: service.titleEn },
+                      locale,
+                      t("listingDetail.defaultTitle"),
+                    )
+                    const displayDescription = pickListingDescription(
+                      { description: service.description, descriptionEn: service.descriptionEn },
+                      locale,
+                    )
                     return (
                       <article
                         key={service.id}
                         className="flex min-h-[280px] flex-col rounded-[14px] border border-[#E5E7EB] border-l-[3px] border-l-transparent bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#0088FF] hover:shadow-[-4px_0_12px_rgba(0,136,255,0.2)]"
                       >
-                        <p className="mb-1 text-xs text-gray-400">ფრილანსერი · სერვისი</p>
+                        <p className="mb-1 text-xs text-gray-400">{t("freelancerProfile.freelancerService")}</p>
                         <div className="flex items-center gap-2 text-sm font-semibold">
                           <span className="text-gray-900">{freelancer.average_rating.toFixed(1)}</span>
                         </div>
-                        <h2 className="mt-2 mb-2 line-clamp-2 text-base font-semibold text-gray-900">{service.title}</h2>
+                        <h2 className="mt-2 mb-2 line-clamp-2 text-base font-semibold text-gray-900">{displayTitle}</h2>
                         <p className="mb-3 line-clamp-2 text-sm leading-relaxed text-gray-500">
-                          {service.description?.trim() ? service.description : "აღწერა არ არის."}
+                          {displayDescription.trim() ? displayDescription : t("common.noDescription")}
                         </p>
                         {service.tags.length > 0 ? (
                           <div className="mb-3 flex flex-wrap gap-1.5">
@@ -878,14 +890,14 @@ export default function FreelancerProfilePage() {
                             to={`/listing/${encodeURIComponent(service.id)}`}
                             className={`${primaryBtnClass} min-h-9 flex-1 text-center`}
                           >
-                            დეტალების ნახვა
+                            {t("common.viewDetails")}
                           </Link>
                           <Link
                             to={`/freelancer/${encodeURIComponent(freelancer.slug)}`}
                             className={`${outlineBtnClass} min-h-9 flex-1 text-center`}
                             onClick={() => window.scrollTo(0, 0)}
                           >
-                            პროფილი
+                            {t("nav.profile")}
                           </Link>
                         </div>
                       </article>
@@ -898,24 +910,24 @@ export default function FreelancerProfilePage() {
             {profileTab === "bio" ? (
               <div className="mt-5 space-y-5">
                 <section className="rounded-[14px] border border-[#E5E7EB] bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-                  <h2 className="text-lg font-semibold text-gray-900">ბიო</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">{t("common.bio")}</h2>
                   <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-[#374151]">
-                    {freelancer.bio ?? "ინფორმაცია არ არის დამატებული."}
+                    {freelancer.bio ?? t("common.noBioAdded")}
                   </p>
                 </section>
 
                 <section className="rounded-[14px] border border-[#E5E7EB] bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-                  <h2 className="text-lg font-semibold text-gray-900">გამოცდილება</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">{t("freelancerProfile.experience")}</h2>
                   <div className="mt-4 space-y-3">
                     {experience.length === 0 ? (
-                      <p className="text-sm text-gray-500">გამოცდილება არ არის დამატებული.</p>
+                      <p className="text-sm text-gray-500">{t("common.noExperienceAdded")}</p>
                     ) : (
                       experience.map((item) => (
                         <div key={item.id} className="rounded-[10px] border border-[#E5E7EB] bg-[#F9FAFB] p-4">
                           <p className="font-semibold text-gray-900">{item.title}</p>
                           <p className="text-sm text-gray-600">{item.organization}</p>
                           <p className="mt-1 text-xs text-gray-500">
-                            {formatDate(item.start_date)} - {item.end_date ? formatDate(item.end_date) : "დღემდე"}
+                            {formatDate(item.start_date)} - {item.end_date ? formatDate(item.end_date) : t("common.experienceUntilPresent")}
                           </p>
                           {item.description ? <p className="mt-2 text-sm text-[#374151]">{item.description}</p> : null}
                         </div>
@@ -925,10 +937,10 @@ export default function FreelancerProfilePage() {
                 </section>
 
                 <section className="rounded-[14px] border border-[#E5E7EB] bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-                  <h2 className="text-lg font-semibold text-gray-900">განათლება</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">{t("freelancerProfile.education")}</h2>
                   <div className="mt-4 space-y-3">
                     {education.length === 0 ? (
-                      <p className="text-sm text-gray-500">განათლება არ არის დამატებული.</p>
+                      <p className="text-sm text-gray-500">{t("common.noEducationAdded")}</p>
                     ) : (
                       education.map((item) => (
                         <div key={item.id} className="rounded-[10px] border border-[#E5E7EB] bg-[#F9FAFB] p-4">
@@ -938,7 +950,7 @@ export default function FreelancerProfilePage() {
                           </p>
                           <p className="text-sm text-gray-600">{item.institution}</p>
                           {item.end_date ? (
-                            <p className="mt-1 text-xs text-gray-500">დასრულება: {formatDate(item.end_date)}</p>
+                            <p className="mt-1 text-xs text-gray-500">{t("common.graduationDate", { date: formatDate(item.end_date) })}</p>
                           ) : null}
                         </div>
                       ))
@@ -947,7 +959,7 @@ export default function FreelancerProfilePage() {
                 </section>
 
                 <section className="rounded-[14px] border border-[#E5E7EB] bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-                  <h2 className="text-lg font-semibold text-gray-900">უნარები</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">{t("common.skills")}</h2>
                   <div className="mt-4 flex flex-wrap gap-1.5">
                     {skills.map((skill) => (
                       <span key={skill.id} className={tagChipClass}>
@@ -963,7 +975,7 @@ export default function FreelancerProfilePage() {
               <section className="mt-5 rounded-[14px] border border-[#E5E7EB] bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
                 <div className="space-y-3">
                   {reviews.length === 0 ? (
-                    <p className="text-sm text-gray-500">შეფასებები ჯერ არ არის</p>
+                    <p className="text-sm text-gray-500">{t("freelancerProfile.noReviews")}</p>
                   ) : (
                     reviews.map((review) => (
                       <div key={review.id} className="rounded-[10px] border border-[#E5E7EB] p-4">
@@ -987,7 +999,7 @@ export default function FreelancerProfilePage() {
 
             {portfolioItems.length > 0 ? (
               <section className="mt-5 rounded-[14px] border border-[#E5E7EB] bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-                <h2 className="text-lg font-semibold text-gray-900">პორტფოლიო</h2>
+                <h2 className="text-lg font-semibold text-gray-900">{t("freelancerProfile.portfolio")}</h2>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {portfolioItems.map((item) => (
                     <button
@@ -998,7 +1010,7 @@ export default function FreelancerProfilePage() {
                     >
                       <img
                         src={jobOrServiceImageDisplayUrl(supabase, item.image_url, "thumbnail") ?? item.image_url}
-                        alt={`${item.title} პორტფოლიო სურათი`}
+                        alt={t("common.portfolioImageAlt", { title: item.title })}
                         loading="lazy"
                         className="h-36 w-full object-cover"
                       />
@@ -1030,7 +1042,7 @@ export default function FreelancerProfilePage() {
           >
             <div className="flex items-start justify-between gap-2">
               <h2 id="contact-modal-title" className="text-lg font-bold text-gray-900">
-                საკონტაქტო
+                {t("common.contact")}
               </h2>
               <button
                 type="button"
@@ -1045,34 +1057,34 @@ export default function FreelancerProfilePage() {
             <div className="mt-5 space-y-4">
               {profile.phone && profile.phone.trim() ? (
                 <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">ტელეფონი</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("common.phone")}</p>
                   <p className="mt-1 break-all font-medium text-gray-900">{profile.phone}</p>
                   <button
                     type="button"
                     onClick={() => void copyClip(profile.phone!, "ნომერი")}
                     className="mt-2 text-sm font-semibold text-[#0088FF] hover:underline"
                   >
-                    კოპირება
+                    {t("common.copy")}
                   </button>
                 </div>
               ) : null}
 
               {profile.email && profile.email.trim() ? (
                 <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">ელფოსტა</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("common.email")}</p>
                   <p className="mt-1 break-all font-medium text-gray-900">{profile.email}</p>
                   <button
                     type="button"
                     onClick={() => void copyClip(profile.email!, "ელფოსტა")}
                     className="mt-2 text-sm font-semibold text-[#0088FF] hover:underline"
                   >
-                    კოპირება
+                    {t("common.copy")}
                   </button>
                 </div>
               ) : null}
 
               {!profile.phone?.trim() && !profile.email?.trim() ? (
-                <p className="text-sm text-slate-600">ეს ფრილანსერი საკონტაქტო მონაცემებს ჯერ არ აუზუსტებია.</p>
+                <p className="text-sm text-slate-600">{t("common.contactNotSet")}</p>
               ) : null}
             </div>
           </div>
@@ -1087,7 +1099,7 @@ export default function FreelancerProfilePage() {
         >
           <img
             src={jobOrServiceImageDisplayUrl(supabase, selectedImageUrl, "detail") ?? selectedImageUrl}
-            alt="პორტფოლიო სრული ზომა"
+            alt={t("common.portfolioFullSize")}
             className="max-h-full max-w-full rounded-lg"
           />
         </button>
@@ -1105,7 +1117,7 @@ export default function FreelancerProfilePage() {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="ავატარი"
+          aria-label={t("common.fullscreenAvatar")}
           className="fixed inset-0 z-[55] flex items-center justify-center bg-black/70 p-6"
           onClick={() => setAvatarLightboxOpen(false)}
         >
@@ -1117,7 +1129,7 @@ export default function FreelancerProfilePage() {
             {profile.avatar_url ? (
               <img
                 src={profileAvatarDisplayUrl ?? profile.avatar_url}
-                alt={`${profile.full_name} ავატარი — დიდი`}
+                alt={t("common.fullscreenAvatarAlt", { name: profile.full_name })}
                 className="max-h-[min(85vh,900px)] max-w-[min(85vw,900px)] rounded-full object-contain"
               />
             ) : (
@@ -1131,7 +1143,7 @@ export default function FreelancerProfilePage() {
             onClick={() => setAvatarLightboxOpen(false)}
             className="absolute right-4 top-4 rounded-lg bg-white/90 px-3 py-1.5 text-sm font-semibold text-gray-900 shadow hover:bg-white"
           >
-            დახურვა
+            {t("common.close")}
           </button>
         </div>
       ) : null}

@@ -577,6 +577,7 @@ export interface Database {
           contact_preference: string
           created_at: string
           description: string
+          description_en: string | null
           duration_type: string
           expires_at: string | null
           hirer_profile_id: string
@@ -589,6 +590,7 @@ export interface Database {
           status: string
           subcategory_id: string | null
           title: string
+          title_en: string | null
           updated_at: string
           vacancies: number
           vip_expires_at: string | null
@@ -605,6 +607,7 @@ export interface Database {
           contact_preference: string
           created_at?: string
           description: string
+          description_en?: string | null
           duration_type: string
           expires_at?: string | null
           hirer_profile_id: string
@@ -617,6 +620,7 @@ export interface Database {
           status?: string
           subcategory_id?: string | null
           title: string
+          title_en?: string | null
           updated_at?: string
           vacancies?: number
           vip_expires_at?: string | null
@@ -633,6 +637,7 @@ export interface Database {
           contact_preference?: string
           created_at?: string
           description?: string
+          description_en?: string | null
           duration_type?: string
           expires_at?: string | null
           hirer_profile_id?: string
@@ -645,6 +650,7 @@ export interface Database {
           status?: string
           subcategory_id?: string | null
           title?: string
+          title_en?: string | null
           updated_at?: string
           vacancies?: number
           vip_expires_at?: string | null
@@ -1068,6 +1074,7 @@ export interface Database {
           created_at: string
           delivery_days: number | null
           description: string | null
+          description_en: string | null
           freelancer_profile_id: string
           id: string
           image_urls: string[]
@@ -1076,6 +1083,7 @@ export interface Database {
           price: number
           price_type: string
           title: string
+          title_en: string | null
           updated_at: string
           views_count: number
           vip_expires_at: string | null
@@ -1084,6 +1092,7 @@ export interface Database {
           created_at?: string
           delivery_days?: number | null
           description?: string | null
+          description_en?: string | null
           freelancer_profile_id: string
           id?: string
           image_urls?: string[]
@@ -1092,6 +1101,7 @@ export interface Database {
           price: number
           price_type?: string
           title: string
+          title_en?: string | null
           updated_at?: string
           views_count?: number
           vip_expires_at?: string | null
@@ -1100,6 +1110,7 @@ export interface Database {
           created_at?: string
           delivery_days?: number | null
           description?: string | null
+          description_en?: string | null
           freelancer_profile_id?: string
           id?: string
           image_urls?: string[]
@@ -1108,6 +1119,7 @@ export interface Database {
           price?: number
           price_type?: string
           title?: string
+          title_en?: string | null
           updated_at?: string
           views_count?: number
           vip_expires_at?: string | null

@@ -5,7 +5,9 @@ import { isSupabaseConfigured, supabase } from "../supabase.ts"
 export type JobData = {
   id: string
   title: string
+  titleEn: string | null
   description: string
+  descriptionEn: string | null
   status: string
   vacancies: number
   accepted_count: number
@@ -143,7 +145,9 @@ export async function fetchJobDetail(id: string): Promise<JobDetailQueryResult> 
   const mappedJob: JobData = {
     id: String(rowUnknown.id),
     title: String(rowUnknown.title ?? ""),
+    titleEn: (rowUnknown.title_en as string | null | undefined)?.trim() || null,
     description: String(rowUnknown.description ?? ""),
+    descriptionEn: (rowUnknown.description_en as string | null | undefined)?.trim() || null,
     status: String(rowUnknown.status ?? "open"),
     vacancies: vacStats.vacancies,
     accepted_count: vacStats.acceptedCount,

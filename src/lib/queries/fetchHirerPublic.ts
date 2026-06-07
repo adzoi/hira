@@ -64,7 +64,7 @@ export async function fetchHirerPublic(id: string): Promise<HirerPublicData> {
       hirer: null,
       openJobs: [],
       hirerReviews: [],
-      documentTitle: "დამქირავებლის პროფილი — გიგორი",
+      documentTitle: "დამქირავებლის პროფილი — ჰირა",
       invalidId: true,
     }
   }
@@ -96,7 +96,7 @@ export async function fetchHirerPublic(id: string): Promise<HirerPublicData> {
         },
       ],
       hirerReviews: [],
-      documentTitle: "TechStart Georgia (დემო) — გიგორი",
+      documentTitle: "TechStart Georgia (დემო) — ჰირა",
     }
   }
 
@@ -128,7 +128,7 @@ export async function fetchHirerPublic(id: string): Promise<HirerPublicData> {
       hirer: null,
       openJobs: [],
       hirerReviews: [],
-      documentTitle: "დამქირავებელი არ იძებნება — გიგორი",
+      documentTitle: "დამქირავებელი არ იძებნება — ჰირა",
     }
   }
 
@@ -243,7 +243,7 @@ export async function fetchHirerPublic(id: string): Promise<HirerPublicData> {
     hirer,
     openJobs,
     hirerReviews,
-    documentTitle: `${company} — გიგორი`,
+    documentTitle: `${company} — ჰირა`,
   }
 }
 

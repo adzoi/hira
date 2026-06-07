@@ -3,8 +3,10 @@ import type { ReactNode } from "react"
 import { useNavigate } from "react-router-dom"
 import type { User } from "@supabase/supabase-js"
 import { supabase } from "../lib/supabase"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
 
 export default function ProtectedRoute({ children }: { children: ReactNode }) {
+  const { t } = useTranslation()
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<User | null>(null)
   const navigate = useNavigate()
@@ -36,6 +38,6 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
     }
   }, [navigate])
 
-  if (loading) return <div className="p-6 text-center">იტვირთება...</div>
+  if (loading) return <div className="p-6 text-center">{t("protected.redirecting")}</div>
   return user ? <>{children}</> : null
 }

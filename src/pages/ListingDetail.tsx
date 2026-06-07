@@ -6,7 +6,7 @@ import { ViewCountEyeIcon } from "../components/ViewCountEyeIcon.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import StartConversationButton from "../components/StartConversationButton.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
-import { stripLegacyPricePrefix } from "../lib/listingDescription.ts"
+import { META_SUFFIX, resolveListingMetaPrefix, stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { formatListingPrice } from "../lib/listingPrice.ts"
 import { fetchListingDetail, type ListingDetail } from "../lib/queries/fetchListingDetail.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
@@ -14,6 +14,8 @@ import { queryKeys } from "../lib/queryKeys.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { avatarImageUrl, serviceImageDetailUrl, serviceImageThumbnailUrl } from "../lib/storageImageUrl.ts"
 import { validateInquiryMessage, validateMoneyAmount } from "../lib/validation.ts"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { pickListingDescription, pickListingTitle } from "../lib/listingLocale.ts"
 
 type ListingMeta = {
   categoryId: string | null
@@ -21,16 +23,14 @@ type ListingMeta = {
   tags: string[]
 }
 
-const META_PREFIX = "<!--gigori-meta:"
-const META_SUFFIX = "-->"
-
 function parseListingDescription(raw: string | null): { description: string; meta: ListingMeta } {
   const fallback: ListingMeta = { categoryId: null, subcategoryId: null, tags: [] }
   if (!raw) return { description: "", meta: fallback }
-  if (!raw.startsWith(META_PREFIX)) return { description: stripLegacyPricePrefix(raw), meta: fallback }
+  const metaPrefix = resolveListingMetaPrefix(raw)
+  if (!metaPrefix) return { description: stripLegacyPricePrefix(raw), meta: fallback }
   const endIndex = raw.indexOf(META_SUFFIX)
   if (endIndex < 0) return { description: raw, meta: fallback }
-  const metaChunk = raw.slice(META_PREFIX.length, endIndex).trim()
+  const metaChunk = raw.slice(metaPrefix.length, endIndex).trim()
   const body = stripLegacyPricePrefix(raw.slice(endIndex + META_SUFFIX.length))
   try {
     const parsed = JSON.parse(metaChunk) as Partial<ListingMeta>
@@ -86,6 +86,7 @@ function SendOutlineIcon({ className }: { className?: string }) {
 const cardClass = "flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
 
 export default function ListingDetailPage() {
+  const { t, locale } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { id } = useParams()
@@ -204,6 +205,29 @@ export default function ListingDetailPage() {
 
   const parsed = useMemo(() => parseListingDescription(item?.descriptionRaw ?? ""), [item?.descriptionRaw])
 
+  const displayTitle = useMemo(
+    () =>
+      item
+        ? pickListingTitle(
+            { title: item.title, titleEn: item.titleEn },
+            locale,
+            t("listingDetail.defaultTitle"),
+          )
+        : "",
+    [item, locale, t],
+  )
+
+  const displayDescription = useMemo(
+    () =>
+      item
+        ? pickListingDescription(
+            { description: parsed.description, descriptionEn: item.descriptionEn },
+            locale,
+          )
+        : "",
+    [item, parsed.description, locale],
+  )
+
   useEffect(() => {
     const sid = parsed.meta.subcategoryId?.trim()
     if (!sid || !isSupabaseConfigured || !supabase) {
@@ -222,11 +246,11 @@ export default function ListingDetailPage() {
 
   useEffect(() => {
     if (!item) return
-    document.title = `${item.title} — გიგორი`
+    document.title = t("common.titleWithBrand", { title: displayTitle, brand: t("brand.name") })
     return () => {
-      document.title = "გიგორი"
+      document.title = t("brand.name")
     }
-  }, [item])
+  }, [item, displayTitle, t])
 
   const canMakeOffer =
     Boolean(item) &&
@@ -316,7 +340,7 @@ export default function ListingDetailPage() {
           <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
             <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          განცხადებები
+          {t("listingDetail.listingsNav")}
         </Link>
 
         {loading ? (
@@ -326,12 +350,12 @@ export default function ListingDetailPage() {
           </div>
         ) : error || !item ? (
           <div className={`${cardClass} items-center justify-center p-8 text-center`}>
-            <p className="text-lg font-semibold text-[#1B2B4B]">{error || "ლისტინგი ვერ მოიძებნა."}</p>
+            <p className="text-lg font-semibold text-[#1B2B4B]">{error || t("listingDetail.notFound")}</p>
             <Link
               to="/listings"
               className="mt-4 inline-flex h-10 items-center rounded-lg bg-[#0088FF] px-4 text-sm font-semibold text-white hover:bg-[#006ACC]"
             >
-              დაბრუნდი ლისტინგებზე
+              {t("listingDetail.backToListings")}
             </Link>
           </div>
         ) : (
@@ -339,11 +363,11 @@ export default function ListingDetailPage() {
             <article className={`${cardClass} p-4 md:p-5`}>
               <div className="flex shrink-0 items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h1 className="text-xl font-bold leading-snug text-[#1B2B4B] md:text-2xl">{item.title}</h1>
+                  <h1 className="text-xl font-bold leading-snug text-[#1B2B4B] md:text-2xl">{displayTitle}</h1>
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
                     <span className="inline-flex items-center gap-1">
                       <ViewCountEyeIcon className="h-3.5 w-3.5" />
-                      {item.viewsCount} ნახვა
+                      {t("common.views", { count: item.viewsCount })}
                     </span>
                     <span className="inline-flex items-center gap-1">
                       <CalendarOutlineIcon className="h-3.5 w-3.5" />
@@ -386,7 +410,7 @@ export default function ListingDetailPage() {
 
               <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
                 <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
-                  {parsed.description || "დეტალური აღწერა ჯერ არ არის დამატებული."}
+                  {displayDescription || t("listingDetail.noDescription")}
                 </p>
               </div>
             </article>
@@ -395,8 +419,8 @@ export default function ListingDetailPage() {
               <div className="flex shrink-0 items-center gap-3 border-b border-slate-100 pb-4">
                 <FreelancerAvailabilityIndicator
                   available={item.isAcceptingNewWork}
-                  labelWhenAvailable="ხელმისაწვდომია ახალი სამუშაოებისთვის"
-                  labelWhenUnavailable="ამჟამად ახალი სამუშაოებისთვის ხელმიუწვდომელია"
+                  labelWhenAvailable={t("listingDetail.availableNewWork")}
+                  labelWhenUnavailable={t("listingDetail.unavailableNewWork")}
                 >
                   <Link
                     to={`/freelancer/${encodeURIComponent(item.freelancerSlug)}`}
@@ -429,19 +453,19 @@ export default function ListingDetailPage() {
               </div>
 
               <div className="mt-4 shrink-0">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">ფასი</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("common.price")}</p>
                 <p className="text-2xl font-bold text-[#1B2B4B]">{formatListingPrice(item.price, item.priceType)}</p>
               </div>
 
               {!item.isAcceptingNewWork ? (
                 <p className="mt-3 shrink-0 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-snug text-amber-900">
-                  ფრილანსერი ამჟამად დაკავებულია — შეთავაზება მაინც შეგიძლიათ.
+                  {t("common.busyCanStillOffer")}
                 </p>
               ) : null}
 
               {subcategoryLabel ? (
                 <p className="mt-3 shrink-0 text-xs text-slate-600">
-                  <span className="font-semibold text-[#1B2B4B]">ქვეკატეგორია:</span> {subcategoryLabel}
+                  <span className="font-semibold text-[#1B2B4B]">{t("listingDetail.subcategory")}:</span> {subcategoryLabel}
                 </p>
               ) : null}
 
@@ -458,7 +482,7 @@ export default function ListingDetailPage() {
                     to={`/freelancer/${encodeURIComponent(item.freelancerSlug)}`}
                     className="inline-flex h-9 flex-1 items-center justify-center rounded-lg bg-[#0088FF] px-3 text-sm font-semibold text-white hover:bg-[#006ACC]"
                   >
-                    პროფილი
+                    {t("nav.profile")}
                   </Link>
                   <SaveBookmarkButton resourceType="freelancer" resourceId={item.freelancerProfileId} variant="icon" />
                 </div>
@@ -466,13 +490,13 @@ export default function ListingDetailPage() {
 
               {canMakeOffer ? (
                 <div className="mt-4 flex min-h-0 flex-1 flex-col border-t border-slate-100 pt-4">
-                  <p className="shrink-0 text-sm font-semibold text-[#1B2B4B]">შეთავაზება</p>
+                  <p className="shrink-0 text-sm font-semibold text-[#1B2B4B]">{t("listingDetail.makeOffer")}</p>
                   <textarea
                     value={offerMessage}
                     onChange={(event) => setOfferMessage(event.target.value)}
                     rows={2}
                     className="mt-2 w-full shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-[#0088FF] focus:ring-2"
-                    placeholder="რა გჭირდება..."
+                    placeholder={t("listingDetail.whatDoYouNeed")}
                   />
                   <div className="mt-2 flex shrink-0 gap-2">
                     <input
@@ -481,7 +505,7 @@ export default function ListingDetailPage() {
                       value={offerBudget}
                       onChange={(event) => setOfferBudget(event.target.value)}
                       className="h-9 min-w-0 flex-1 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
-                      placeholder="₾ (არასავალდებულო)"
+                      placeholder={t("listingDetail.budgetOptionalPlaceholder")}
                     />
                     <button
                       type="button"
@@ -490,7 +514,7 @@ export default function ListingDetailPage() {
                       className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#1B2B4B] px-3 text-sm font-semibold text-white hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:opacity-60"
                     >
                       <SendOutlineIcon className="h-3.5 w-3.5" />
-                      {offerSubmitting ? "..." : "გაგზავნა"}
+                      {offerSubmitting ? "..." : t("common.send")}
                     </button>
                   </div>
                   {offerError ? <p className="mt-1.5 shrink-0 text-xs text-red-600">{offerError}</p> : null}

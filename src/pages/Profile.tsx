@@ -21,6 +21,7 @@ import { LIMITS, validateOptionalUrl, validateTextField } from "../lib/validatio
 import { fetchProfile, SKILL_PICKER_UNCATEGORIZED } from "../lib/queries/fetchProfile.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
 
 type SkillCategoryRow = { id: string; name_ka: string; parent_id: string | null }
 
@@ -62,6 +63,7 @@ type EducationForm = {
 }
 
 export default function ProfilePage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [profileUserId, setProfileUserId] = useState("")
   const {
@@ -74,7 +76,7 @@ export default function ProfilePage() {
     queryFn: fetchProfile,
     enabled: Boolean(profileUserId) && isSupabaseConfigured,
   })
-  const loadError = isError ? queryErrorMessage(queryError, "პროფილი ვერ ჩაიტვირთა.") : ""
+  const loadError = isError ? queryErrorMessage(queryError, t("profile.loadFailed")) : ""
   const [error, setError] = useState("")
   const displayError = error || loadError
   const [saving, setSaving] = useState(false)
@@ -185,8 +187,8 @@ export default function ProfilePage() {
   }, [skillsCatalog])
 
   useEffect(() => {
-    document.title = "პროფილი — გიგორი"
-  }, [])
+    document.title = t("profile.title")
+  }, [t])
 
 
   useEffect(() => {
@@ -309,8 +311,8 @@ export default function ProfilePage() {
       setAcceptingNewWork(next)
       setSuccess(
         next
-          ? "ხელმისაწვდომი"
-          : "დროებით ხელმიუწვდომელი",
+          ? t("profile.available")
+          : t("profile.unavailable"),
       )
     } catch (e) {
       setError(formatSaveError(e))
@@ -626,7 +628,7 @@ export default function ProfilePage() {
           website_url: websiteResult.value,
         }, { onConflict: "user_id" })
       }
-      setSuccess("ცვლილებები შენახულია.")
+      setSuccess(t("profile.changesSaved"))
     } catch (err) {
       setError(formatSaveError(err))
     } finally {
@@ -799,14 +801,14 @@ export default function ProfilePage() {
     }
   }
 
-  if (loading) return <div className="p-6">იტვირთება...</div>
+  if (loading) return <div className="p-6">{t("common.loading")}</div>
 
   return (
     <div className="min-h-screen bg-slate-50">
       <main className="mx-auto max-w-3xl px-6 py-10">
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
           <div className="mb-6 flex items-start justify-between gap-4">
-            <h1 className="text-3xl font-bold text-[#0088FF]">ჩემი პროფილი</h1>
+            <h1 className="text-3xl font-bold text-[#0088FF]">{t("profile.heading")}</h1>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -818,7 +820,7 @@ export default function ProfilePage() {
                 }}
                 className="rounded-lg border border-[#EF4444] px-3 py-2 text-sm font-semibold text-[#EF4444]"
               >
-                🗑 ანგარიშის წაშლა
+                🗑 {t("profile.deleteAccount")}
               </button>
             </div>
           </div>
@@ -828,7 +830,7 @@ export default function ProfilePage() {
               {avatarUrl ? (
                 <img
                   src={avatarImageUrl(supabase, avatarUrl) ?? avatarUrl}
-                  alt="პროფილის სურათი"
+                  alt={t("profile.avatarAlt")}
                   className="h-[100px] w-[100px] rounded-full object-cover"
                 />
               ) : (
@@ -857,7 +859,7 @@ export default function ProfilePage() {
                 }}
                 className="rounded-lg bg-[#0088FF] px-4 py-2 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC]"
               >
-                {avatarUrl ? "📷 სურათის შეცვლა" : "📷 პროფილის სურათის ატვირთვა"}
+                {avatarUrl ? t("profile.changePhoto") : t("profile.uploadPhoto")}
               </button>
               {avatarUrl ? (
                 <button
@@ -865,22 +867,22 @@ export default function ProfilePage() {
                   onClick={handleDeleteAvatar}
                   className="rounded-lg border border-[#EF4444] px-4 py-2 text-sm text-[#EF4444]"
                 >
-                  🗑 სურათის წაშლა
+                  🗑 {t("profile.deletePhoto")}
                 </button>
               ) : null}
-              {avatarUploading ? <p className="text-[13px] text-[#6B7280]">იტვირთება...</p> : null}
+              {avatarUploading ? <p className="text-[13px] text-[#6B7280]">{t("common.loading")}</p> : null}
             </div>
           </div>
 
           <div className="space-y-5">
             <div>
               <label className="mb-1 block text-base font-semibold text-gray-900">
-                სახელი <span className="text-[#EF4444]">*</span>
+                {t("profile.name")} <span className="text-[#EF4444]">*</span>
               </label>
               <input className="h-11 w-full rounded-lg border border-slate-300 px-3" value={fullName} onChange={(e)=>setFullName(e.target.value)} />
             </div>
             <div>
-              <label className="mb-1 block text-base font-semibold text-gray-900">ლოკაცია</label>
+              <label className="mb-1 block text-base font-semibold text-gray-900">{t("common.location")}</label>
               <LocationFilterSelect
                 value={city}
                 onChange={setCity}
@@ -889,15 +891,15 @@ export default function ProfilePage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-base font-semibold text-gray-900">ნომერი</label>
+              <label className="mb-1 block text-base font-semibold text-gray-900">{t("profile.phone")}</label>
               <input className="h-11 w-full rounded-lg border border-slate-300 px-3" value={phone} onChange={(e)=>setPhone(e.target.value)} />
             </div>
           </div>
 
           <section className="mt-8 rounded-xl border border-slate-200 bg-slate-50 p-6">
-            <h2 className="text-lg font-semibold text-[#0088FF]">ელფოსტა და პაროლი</h2>
+            <h2 className="text-lg font-semibold text-[#0088FF]">{t("profile.emailPassword")}</h2>
             <p className="mt-1 text-sm text-[#1B2B4B]">
-              <span className="font-medium">მიმდინარე ელფოსტა:</span> {accountEmail || "—"}
+              <span className="font-medium">{t("profile.currentEmail")}:</span> {accountEmail || "—"}
             </p>
 
             {accountErr ? (
@@ -915,7 +917,7 @@ export default function ProfilePage() {
               onClick={() => setEmailAccordionOpen((v) => !v)}
               className="mt-4 flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:bg-slate-50"
             >
-              <span className="text-base font-semibold text-gray-900">ელფოსტის შეცვლა</span>
+              <span className="text-base font-semibold text-gray-900">{t("profile.changeEmail")}</span>
               <span className="text-slate-500" aria-hidden>
                 {emailAccordionOpen ? "▴" : "▾"}
               </span>
@@ -923,12 +925,12 @@ export default function ProfilePage() {
             {emailAccordionOpen ? (
               <div className="mt-3 space-y-3 rounded-lg border border-slate-100 bg-white p-4">
                 <label className="block">
-                  <span className="mb-1 block text-base font-semibold text-gray-900">ახალი ელფოსტა</span>
+                  <span className="mb-1 block text-base font-semibold text-gray-900">{t("profile.newEmail")}</span>
                   <input
                     type="email"
                     autoComplete="email"
                     className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-[#0088FF]/30 focus:border-[#0088FF] focus:ring-2"
-                    placeholder="ახალი მისამართი"
+                    placeholder={t("profile.newEmailPlaceholder")}
                     value={newEmail}
                     onChange={(e) => {
                       setNewEmail(e.target.value)
@@ -943,7 +945,7 @@ export default function ProfilePage() {
                   onClick={() => void handleUpdateEmail()}
                   className="h-11 w-full rounded-lg bg-[#0088FF] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC] disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:px-6"
                 >
-                  {emailBusy ? "მიმდინარეობს..." : "ელფოსტის შეცვლა"}
+                  {emailBusy ? t("common.inProgress") : t("profile.changeEmail")}
                 </button>
               </div>
             ) : null}
@@ -954,7 +956,7 @@ export default function ProfilePage() {
               onClick={() => setPasswordAccordionOpen((v) => !v)}
               className="mt-3 flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:bg-slate-50"
             >
-              <span className="text-base font-semibold text-gray-900">პაროლის შეცვლა</span>
+              <span className="text-base font-semibold text-gray-900">{t("profile.changePassword")}</span>
               <span className="text-slate-500" aria-hidden>
                 {passwordAccordionOpen ? "▴" : "▾"}
               </span>
@@ -962,7 +964,7 @@ export default function ProfilePage() {
             {passwordAccordionOpen ? (
               <div className="mt-3 space-y-3 rounded-lg border border-slate-100 bg-white p-4">
                 <label className="block">
-                  <span className="mb-1 block text-base font-semibold text-gray-900">მიმდინარე პაროლი</span>
+                  <span className="mb-1 block text-base font-semibold text-gray-900">{t("profile.currentPassword")}</span>
                   <input
                     type="password"
                     autoComplete="current-password"
@@ -976,7 +978,7 @@ export default function ProfilePage() {
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-base font-semibold text-gray-900">ახალი პაროლი</span>
+                  <span className="mb-1 block text-base font-semibold text-gray-900">{t("auth.newPassword")}</span>
                   <input
                     type="password"
                     autoComplete="new-password"
@@ -990,7 +992,7 @@ export default function ProfilePage() {
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-base font-semibold text-gray-900">გაიმეორე პაროლი</span>
+                  <span className="mb-1 block text-base font-semibold text-gray-900">{t("auth.confirmPassword")}</span>
                   <input
                     type="password"
                     autoComplete="new-password"
@@ -1009,7 +1011,7 @@ export default function ProfilePage() {
                   onClick={() => void handleUpdatePassword()}
                   className="h-11 w-full rounded-lg bg-[#0088FF] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC] disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:px-6"
                 >
-                  {passwordBusy ? "მიმდინარეობს..." : "პაროლის განახლება"}
+                  {passwordBusy ? t("common.inProgress") : t("profile.updatePassword")}
                 </button>
               </div>
             ) : null}
@@ -1021,7 +1023,7 @@ export default function ProfilePage() {
                 <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-base font-semibold text-gray-900">სტატუსი</p>
+                      <p className="text-base font-semibold text-gray-900">{t("common.status")}</p>
                     </div>
                     <button
                       type="button"
@@ -1038,34 +1040,34 @@ export default function ProfilePage() {
                           acceptingNewWork ? "translate-x-[1.35rem]" : "translate-x-0"
                         }`}
                       />
-                      <span className="sr-only">{acceptingNewWork ? "ხელმისაწვდომი" : "ხელმიუწვდომელი"}</span>
+                      <span className="sr-only">{acceptingNewWork ? t("profile.available") : t("profile.unavailable")}</span>
                     </button>
                   </div>
                   <p className="mt-2 text-xs font-medium text-slate-700">
-                    {acceptingNewWork ? "ხელმისაწვდომი." : "დროებით მიუწვდომელი."}
+                    {acceptingNewWork ? t("profile.availableHint") : t("profile.unavailableHint")}
                   </p>
                 </div>
               ) : null}
               <div>
-                <label className="mb-1 block text-base font-semibold text-gray-900">პროფესიული სათაური</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">{t("profile.professionalTitle")}</label>
                 <input className="h-11 w-full rounded-lg border border-slate-300 px-3" placeholder="React Developer, Graphic Designer" value={professionalTitle} onChange={(e)=>setProfessionalTitle(e.target.value)} />
               </div>
               <div>
-                <label className="mb-1 block text-base font-semibold text-gray-900">ბიო</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">{t("common.bio")}</label>
                 <textarea className="w-full rounded-lg border border-slate-300 px-3 py-2" rows={4} value={bio} onChange={(e)=>setBio(e.target.value)} />
                 <p className="mt-1 text-right text-xs text-slate-500">{bio.length}/2000</p>
               </div>
               <div>
-                <label className="mb-1 block text-base font-semibold text-gray-900">დასაქმების ტიპი</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">{t("profile.employmentType")}</label>
                 <select className="h-11 w-full rounded-lg border border-slate-300 px-3" value={availability} onChange={(e)=>setAvailability(e.target.value)}>
-                  <option value="">აირჩიე...</option>
+                  <option value="">{t("profile.selectOption")}</option>
                   <option value="full_time">სრული განაკვეთი</option>
                   <option value="part_time">ნახევარი განაკვეთი</option>
                   <option value="weekends">შაბათ-კვირა</option>
                 </select>
               </div>
               <div ref={langBoxRef} className="relative">
-                <label className="mb-1 block text-base font-semibold text-gray-900">ენები</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">{t("freelancerProfile.languages")}</label>
                 <div className="min-h-[2.75rem] rounded-lg border border-slate-300 bg-white px-2 py-1.5">
                   <div className="flex flex-wrap items-center gap-1.5">
                     {languages.map((lang) => (
@@ -1086,7 +1088,7 @@ export default function ProfilePage() {
                       onClick={() => setLangDropdownOpen((o) => !o)}
                       className="ml-auto shrink-0 rounded-md border border-dashed border-slate-300 px-2 py-1 text-xs font-semibold text-[#1B2B4B] hover:border-[#D4A843]"
                     >
-                      + ენა
+                      + {t("profile.addLanguage")}
                     </button>
                   </div>
                   {langDropdownOpen ? (
@@ -1177,7 +1179,7 @@ export default function ProfilePage() {
                 onDisabledChange={setNoPortfolioWebsite}
               />
               <div className="space-y-3">
-                <label className="mb-1 block text-base font-semibold text-gray-900">უნარები (არასავალდებულო)</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">{t("profile.skillsOptional")}</label>
                 <p className="text-xs text-slate-500">
                   არჩეულია <span className="font-semibold tabular-nums text-slate-700">{selectedSkillIds.length}</span> უნარი
                 </p>
@@ -1192,7 +1194,7 @@ export default function ProfilePage() {
                     value={skillFocusCategoryId}
                     onChange={(e) => setSkillFocusCategoryId(e.target.value)}
                   >
-                    <option value="">აირჩიე კატეგორია…</option>
+                    <option value="">{t("profile.selectCategory")}</option>
                     {skillPickerMidCategories.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name_ka}
@@ -1293,7 +1295,7 @@ export default function ProfilePage() {
                 ) : null}
               </div>
               <div>
-                <label className="mb-1 block text-base font-semibold text-gray-900">სერვისები</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">{t("profile.services")}</label>
                 <div className="space-y-3">
                   {serviceListings.length === 0 ? (
                     <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
@@ -1400,7 +1402,7 @@ export default function ProfilePage() {
               </div>
 
               <div>
-                <label className="mb-1 block text-base font-semibold text-gray-900">გამოცდილება (მაქს. 10)</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">{t("onboarding.experienceMax")}</label>
                 <div className="space-y-3">
                   {experiences.length === 0 ? (
                     <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
@@ -1484,7 +1486,7 @@ export default function ProfilePage() {
               </div>
 
               <div>
-                <label className="mb-1 block text-base font-semibold text-gray-900">განათლება (არასავალდებულო, მაქს. 10)</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">{t("onboarding.educationOptional")}</label>
                 <div className="space-y-3">
                   {educations.length === 0 ? (
                     <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
@@ -1555,19 +1557,19 @@ export default function ProfilePage() {
           ) : (
             <div className="mt-5 space-y-5">
               <div>
-                <label className="mb-1 block text-base font-semibold text-gray-900">კომპანიის სახელი</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">{t("profile.companyName")}</label>
                 <input className="h-11 w-full rounded-lg border border-slate-300 px-3" value={companyName} onChange={(e)=>setCompanyName(e.target.value)} />
               </div>
               <div>
-                <label className="mb-1 block text-base font-semibold text-gray-900">კომპანიის აღწერა</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">{t("profile.companyDescriptionLong")}</label>
                 <textarea className="w-full rounded-lg border border-slate-300 px-3 py-2" rows={4} value={companyDescription} onChange={(e)=>setCompanyDescription(e.target.value)} />
               </div>
               <div>
-                <label className="mb-1 block text-base font-semibold text-gray-900">ინდუსტრია</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">{t("profile.industry")}</label>
                 <input className="h-11 w-full rounded-lg border border-slate-300 px-3" value={industry} onChange={(e)=>setIndustry(e.target.value)} />
               </div>
               <div>
-                <label className="mb-1 block text-base font-semibold text-gray-900">კომპანიის ვებსაიტი</label>
+                <label className="mb-1 block text-base font-semibold text-gray-900">{t("profile.companyWebsite")}</label>
                 <input className="h-11 w-full rounded-lg border border-slate-300 px-3" value={companyWebsite} onChange={(e)=>setCompanyWebsite(e.target.value)} />
               </div>
             </div>
@@ -1581,7 +1583,7 @@ export default function ProfilePage() {
             onClick={onSave}
             className="mt-6 h-11 w-full rounded-lg bg-[#0088FF] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC] disabled:cursor-not-allowed disabled:opacity-70"
           >
-            {saving ? "ინახება..." : "ცვლილებების შენახვა"}
+            {saving ? t("common.inProgress") : t("profile.saveChanges")}
           </button>
         </div>
       </main>
@@ -1592,7 +1594,7 @@ export default function ProfilePage() {
             {deleteStep === 1 ? (
               <div>
                 <p className="text-center text-3xl">⚠️</p>
-                <h2 className="mt-3 text-center text-xl font-bold text-[#1B2B4B]">დარწმუნებული ხარ?</h2>
+                <h2 className="mt-3 text-center text-xl font-bold text-[#1B2B4B]">{t("common.areYouSure")}</h2>
                 <p className="mt-3 text-sm text-slate-600">
                   ეს მოქმედება შეუქცევადია. შენი პროფილი, სერვისები, განცხადებები და ყველა მონაცემი სამუდამოდ წაიშლება.
                 </p>
@@ -1632,7 +1634,7 @@ export default function ProfilePage() {
                     onClick={handleDeleteAccount}
                     className="h-11 w-full rounded-lg bg-[#EF4444] text-sm font-semibold text-white disabled:opacity-60"
                   >
-                    {deleteLoading ? "მიმდინარეობს..." : "ანგარიშის წაშლა"}
+                    {deleteLoading ? t("common.inProgress") : t("profile.deleteAccount")}
                   </button>
                   <button
                     type="button"
@@ -1647,7 +1649,7 @@ export default function ProfilePage() {
 
             {deleteStep === 3 ? (
               <div className="text-center">
-                <h2 className="text-xl font-bold text-[#1B2B4B]">ანგარიში წაიშალა</h2>
+                <h2 className="text-xl font-bold text-[#1B2B4B]">{t("profile.accountDeleted")}</h2>
                 <p className="mt-2 text-sm text-slate-600">შენი ანგარიში წარმატებით წაიშალა.</p>
               </div>
             ) : null}

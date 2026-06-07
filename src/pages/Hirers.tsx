@@ -10,8 +10,9 @@ import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
-import { formatCityForDisplay, matchesLocationFilter } from "../lib/marketplaceFilters.ts"
+import { formatCityForDisplay, formatIndustryForDisplay, matchesLocationFilter } from "../lib/marketplaceFilters.ts"
 import { normalizeSearchInput, safeExternalHref } from "../lib/validation.ts"
+import { useTranslation } from "../i18n/LocaleContext.tsx"
 
 type HirerRow = {
   id: string
@@ -277,6 +278,7 @@ async function loadHirersPage(offset: number): Promise<HirersPageResult> {
 }
 
 export default function HirersPage() {
+  const { t } = useTranslation()
   const { data: industryOptions = [] } = useQuery({
     queryKey: queryKeys.hirerIndustries,
     queryFn: loadHirerIndustries,
@@ -332,11 +334,11 @@ export default function HirersPage() {
   const [avatarPreview, setAvatarPreview] = useState<{ companyName: string; avatarUrl: string | null } | null>(null)
 
   useEffect(() => {
-    document.title = "დამქირავებლები — გიგორი"
+    document.title = t("hirers.title")
     return () => {
-      document.title = "გიგორი"
+      document.title = t("brand.name")
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     if (!advancedDropdownOpen) return
@@ -446,23 +448,23 @@ export default function HirersPage() {
                   value={searchText}
                   onChange={(event) => setSearchText(normalizeSearchInput(event.target.value))}
                   className="h-10 w-full rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#0088FF]"
-                  placeholder="კომპანია, ინდუსტრია, ქალაქი ან აღწერა"
+                  placeholder={t("hirers.searchPlaceholder")}
                 />
               </div>
 
               <label className="relative inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500">
-                <span className="truncate">ინდუსტრია</span>
+                <span className="truncate">{t("hirers.industry")}</span>
                 <span className="ml-auto text-slate-400">▾</span>
                 <select
                   value={categoryId}
                   onChange={(event) => setCategoryId(event.target.value)}
                   className="absolute inset-0 cursor-pointer opacity-0"
-                  aria-label="ინდუსტრია"
+                  aria-label={t("hirers.industry")}
                 >
-                  <option value="">ყველა ინდუსტრია</option>
+                  <option value="">{t("common.allIndustries")}</option>
                   {industryOptions.map((cat) => (
                     <option key={cat.id} value={cat.id}>
-                      {cat.name_ka}
+                      {formatIndustryForDisplay(cat.name_ka) ?? cat.name_ka}
                     </option>
                   ))}
                 </select>
@@ -470,7 +472,7 @@ export default function HirersPage() {
 
               <label className="relative inline-flex h-10 min-w-[10.5rem] max-w-[14rem] shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500">
                 <span className="pointer-events-none min-w-0 flex-1 truncate">
-                  {locationFilter.trim() ? formatCityForDisplay(locationFilter) ?? locationFilter : "ლოკაცია / ქალაქი"}
+                  {locationFilter.trim() ? formatCityForDisplay(locationFilter) ?? locationFilter : t("common.locationCity")}
                 </span>
                 <span className="shrink-0 text-slate-400">▾</span>
                 <LocationFilterSelect
@@ -488,7 +490,7 @@ export default function HirersPage() {
                   onClick={() => (advancedDropdownOpen ? setAdvancedDropdownOpen(false) : openAdvancedDropdown())}
                   className="inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500 transition hover:border-slate-400"
                 >
-                  <span>გაფართოებული ძიება</span>
+                  <span>{t("common.advancedSearch")}</span>
                   <span className="text-slate-400">▾</span>
                   {advancedFilterCount > 0 ? (
                     <span className="ml-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#0088FF] px-1 text-xs font-bold text-white">
@@ -503,14 +505,14 @@ export default function HirersPage() {
                     <div
                       role="dialog"
                       aria-modal="true"
-                      aria-label="დეტალური ფილტრები"
+                      aria-label={t("common.detailedFilters")}
                       className="absolute right-0 z-50 mt-2 flex max-h-[min(72vh,560px)] w-[min(100vw-2rem,24rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
                     >
                       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-4">
-                        <h2 className="border-l-4 border-[#0088FF] pl-3 text-base font-bold text-[#1B2B4B]">გაფართოებული ფილტრები</h2>
+                        <h2 className="border-l-4 border-[#0088FF] pl-3 text-base font-bold text-[#1B2B4B]">{t("common.advancedSearch")}</h2>
                         <div className="mt-4 space-y-4">
                           <label className="block pb-1">
-                            <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">ლოკაცია / ქალაქი</span>
+                            <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("common.locationCity")}</span>
                             <LocationFilterSelect
                               value={draftLocationFilter}
                               onChange={setDraftLocationFilter}
@@ -526,7 +528,7 @@ export default function HirersPage() {
                           onClick={clearDraftAdvanced}
                           className="h-11 w-full rounded-lg border border-[#0088FF] text-sm font-semibold text-[#1B2B4B] hover:bg-[#E8F4FF]"
                         >
-                          ფილტრების გასუფთავება
+                          {t("common.clearFilters")}
                         </button>
                         <div className="flex gap-2">
                           <button
@@ -534,14 +536,14 @@ export default function HirersPage() {
                             onClick={() => setAdvancedDropdownOpen(false)}
                             className="h-11 flex-1 rounded-lg border border-slate-300 text-sm font-semibold text-[#1B2B4B] hover:bg-slate-50"
                           >
-                            გაუქმება
+                            {t("common.cancel")}
                           </button>
                           <button
                             type="button"
                             onClick={saveAdvancedFilters}
                             className="h-11 flex-1 rounded-lg bg-[#0088FF] text-sm font-semibold text-white hover:bg-[#006ACC]"
                           >
-                            შენახვა
+                            {t("common.save")}
                           </button>
                         </div>
                       </div>
@@ -551,17 +553,17 @@ export default function HirersPage() {
               </div>
 
               <label className="relative inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500">
-                <span className="truncate">სორტირება</span>
+                <span className="truncate">{t("common.sort")}</span>
                 <span className="ml-auto text-slate-400">▾</span>
                 <select
                   value={sortBy}
                   onChange={(event) => setSortBy(event.target.value as SortOption)}
                   className="absolute inset-0 cursor-pointer opacity-0"
-                  aria-label="სორტირება"
+                  aria-label={t("common.sort")}
                 >
-                  <option value="jobs_desc">განცხადებების რაოდენობა</option>
-                  <option value="completed_desc">დასრულებული სამუშაო</option>
-                  <option value="newest">ახალი რეგისტრაცია</option>
+                  <option value="jobs_desc">{t("common.sortJobsCount")}</option>
+                  <option value="completed_desc">{t("common.completedJobsSort")}</option>
+                  <option value="newest">{t("common.sortNewRegistration")}</option>
                 </select>
               </label>
 
@@ -570,22 +572,22 @@ export default function HirersPage() {
                 onClick={() => setAdvancedDropdownOpen(false)}
                 className="ml-auto inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-[#0088FF] px-8 text-base font-bold text-white transition hover:bg-[#006ACC]"
               >
-                ძიება
+                {t("common.search")}
               </button>
             </div>
           </div>
         </section>
 
         <section className="mt-6 min-w-0">
-          <p className="text-sm font-medium text-slate-600">მოიძებნა {sorted.length} დამქირავებელი</p>
+          <p className="text-sm font-medium text-slate-600">{t("hirers.found", { count: sorted.length })}</p>
 
           {error ? <ErrorState message={error} onRetry={() => void refetch()} /> : null}
 
           {!error && sorted.length === 0 ? (
             <div className="mt-6">
               <EmptyState
-                message="დამქირავებლები ჯერ არ ჩანს ან შედეგები ცარიელია საძიებლო შეკითხვით."
-                actionLabel="ფილტრების გასუფთავება"
+                message={t("hirers.empty")}
+                actionLabel={t("common.clearFilters")}
                 onAction={clearFilters}
               />
             </div>
@@ -596,7 +598,7 @@ export default function HirersPage() {
                   {sorted.map((h) => {
                     const desc = (h.description ?? "").trim()
                     const snippet =
-                      desc.length > 160 ? `${desc.slice(0, 160)}…` : desc || "კომპანიის შესახებ ტექსტი ხელმისაწვდომი იქნება პროფილიდან."
+                      desc.length > 160 ? `${desc.slice(0, 160)}…` : desc || t("common.companySnippetFallback")
                     return (
                       <li
                         key={h.id}
@@ -607,7 +609,7 @@ export default function HirersPage() {
                             type="button"
                             onClick={() => setAvatarPreview({ companyName: h.companyName, avatarUrl: h.avatarUrl })}
                             className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#1B2B4B] text-sm font-bold text-white ring-[#1B2B4B] ring-offset-2 ring-offset-white transition hover:ring-2 focus:outline-none focus-visible:ring-2"
-                            aria-label="ლოგოს გადიდება"
+                            aria-label={t("common.logoEnlarge")}
                           >
                             {h.avatarUrl ? (
                               <img
@@ -622,7 +624,9 @@ export default function HirersPage() {
                           </button>
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-lg font-bold text-gray-900">{h.companyName}</p>
-                            <p className="truncate text-sm text-slate-500">{h.industry?.trim() || "ინდუსტრია"}</p>
+                            <p className="truncate text-sm text-slate-500">
+                              {(formatIndustryForDisplay(h.industry) ?? h.industry?.trim()) || t("hirers.industry")}
+                            </p>
                             {formatCityForDisplay(h.city) ? (
                               <p className="mt-1 text-xs text-slate-500">📍 {formatCityForDisplay(h.city)}</p>
                             ) : null}
@@ -633,21 +637,21 @@ export default function HirersPage() {
 
                         <div className="mt-3 flex items-center justify-between text-sm">
                           <p className="font-semibold text-gray-900">{h.averageRating.toFixed(1)}</p>
-                          <p className="text-slate-500">({h.ratingCount} შეფასება)</p>
+                          <p className="text-slate-500">{t("common.reviewCountParen", { count: h.ratingCount })}</p>
                         </div>
 
                         <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
                           <div>
-                            <p className="text-xs text-slate-500">განცხადებები</p>
+                            <p className="text-xs text-slate-500">{t("common.jobsCount")}</p>
                             <p className="font-bold text-gray-900">{h.jobsPosted}</p>
                           </div>
                           <div>
-                            <p className="text-xs text-slate-500">დასრულებული</p>
+                            <p className="text-xs text-slate-500">{t("common.completedLabel")}</p>
                             <p className="font-bold text-gray-900">{h.completedJobs}</p>
                           </div>
                         </div>
 
-                        <p className="mt-2 text-xs text-slate-500">საკონტაქტო: {h.contactName}</p>
+                        <p className="mt-2 text-xs text-slate-500">{t("common.contactLabel", { name: h.contactName })}</p>
 
                         <div className="mt-2 flex flex-wrap gap-2">
                           {safeExternalHref(h.websiteUrl) ? (
@@ -657,12 +661,12 @@ export default function HirersPage() {
                               rel="noopener noreferrer"
                               className={`${websiteChipClass} hover:border-[#0088FF] hover:text-[#0088FF]`}
                             >
-                              ვებგვერდი
+                              {t("common.website")}
                               <ExternalLinkArrowIcon className="h-3.5 w-3.5 opacity-80" />
                             </a>
                           ) : (
-                            <span className={`${websiteChipClass} cursor-default text-slate-400`} title="ბმული არ არის დამატებული">
-                              ვებგვერდი
+                            <span className={`${websiteChipClass} cursor-default text-slate-400`} title={t("common.linkNotAdded")}>
+                              {t("common.website")}
                             </span>
                           )}
                         </div>
@@ -672,7 +676,7 @@ export default function HirersPage() {
                             to={`/hirer/${h.id}`}
                             className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-[#0088FF] px-4 text-sm font-bold text-white transition hover:bg-[#006ACC]"
                           >
-                            პროფილი
+                            {t("nav.profile")}
                           </Link>
                         </div>
                       </li>
@@ -688,7 +692,7 @@ export default function HirersPage() {
                     onClick={() => void fetchNextPage()}
                     className="h-11 rounded-lg border border-[#0088FF] px-6 text-sm font-semibold text-[#0088FF] transition hover:bg-[#E8F4FF] disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {hirersLoadingMore ? "იტვირთება…" : "მეტის ჩატვირთვა"}
+                    {hirersLoadingMore ? t("common.loading") : t("common.loadMore")}
                   </button>
                 </div>
               ) : null}
@@ -701,7 +705,7 @@ export default function HirersPage() {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="ლოგო"
+          aria-label={t("common.logo")}
           className="fixed inset-0 z-[55] flex items-center justify-center bg-black/70 p-6"
           onClick={() => setAvatarPreview(null)}
         >
@@ -713,7 +717,7 @@ export default function HirersPage() {
             {avatarPreview.avatarUrl ? (
               <img
                 src={avatarImageUrl(supabase, avatarPreview.avatarUrl) ?? avatarPreview.avatarUrl}
-                alt={`${avatarPreview.companyName} ლოგო`}
+                alt={`${avatarPreview.companyName} ${t("common.logo")}`}
                 className="max-h-[min(85vh,900px)] max-w-[min(85vw,900px)] rounded-2xl object-contain sm:rounded-full"
               />
             ) : (
@@ -727,7 +731,7 @@ export default function HirersPage() {
             onClick={() => setAvatarPreview(null)}
             className="absolute right-4 top-4 rounded-lg bg-white/90 px-3 py-1.5 text-sm font-semibold text-[#1B2B4B] shadow hover:bg-white"
           >
-            დახურვა
+            {t("common.close")}
           </button>
         </div>
       ) : null}

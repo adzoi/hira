@@ -1,5 +1,11 @@
 /** Shared limits and sanitizers for user-supplied text and payloads. */
 
+import { getCurrentLocale, translate } from "../i18n/translate.ts"
+
+function msg(key: string, params?: Record<string, string | number>): string {
+  return translate(getCurrentLocale(), key, params)
+}
+
 export const LIMITS = {
   email: 254,
   passwordMin: 6,
@@ -70,23 +76,23 @@ function fail(message: string): FieldResult<never> {
 
 export function validateUuid(raw: string, label = "ID"): FieldResult<string> {
   const t = raw.trim()
-  if (!t) return fail(`${label} სავალდებულოა.`)
-  if (t.length > LIMITS.uuid || !UUID_REGEX.test(t)) return fail(`${label} არასწორი ფორმატისაა.`)
+  if (!t) return fail(msg("validation.fieldRequired", { label }))
+  if (t.length > LIMITS.uuid || !UUID_REGEX.test(t)) return fail(msg("validation.fieldInvalid", { label }))
   return { ok: true, value: t.toLowerCase() }
 }
 
 export function validateEmail(raw: string): FieldResult<string> {
   const t = sanitizePlainText(raw).trim()
-  if (!t) return fail("ელფოსტა სავალდებულოა.")
-  if (t.length > LIMITS.email) return fail("ელფოსტა ძალიან გრძელია.")
-  if (!EMAIL_REGEX.test(t)) return fail("ელფოსტის ფორმატი არასწორია.")
+  if (!t) return fail(msg("validation.emailRequired"))
+  if (t.length > LIMITS.email) return fail(msg("validation.emailTooLong"))
+  if (!EMAIL_REGEX.test(t)) return fail(msg("validation.emailInvalid"))
   return { ok: true, value: t }
 }
 
 export function validatePassword(raw: string): FieldResult<string> {
-  if (typeof raw !== "string") return fail("პაროლი სავალდებულოა.")
-  if (raw.length < LIMITS.passwordMin) return fail(`პაროლი მინიმუმ ${LIMITS.passwordMin} სიმბოლო უნდა იყოს.`)
-  if (raw.length > LIMITS.passwordMax) return fail("პაროლი ძალიან გრძელია.")
+  if (typeof raw !== "string") return fail(msg("validation.passwordRequired"))
+  if (raw.length < LIMITS.passwordMin) return fail(msg("validation.passwordTooShort", { min: LIMITS.passwordMin }))
+  if (raw.length > LIMITS.passwordMax) return fail(msg("validation.passwordTooLong"))
   return { ok: true, value: raw }
 }
 
@@ -102,13 +108,13 @@ export function validateTextField(raw: string, opts: TextFieldOpts): FieldResult
   const min = opts.min ?? (opts.required === false ? 0 : 1)
   if (!cleaned) {
     if (opts.required === false || min === 0) return { ok: true, value: "" }
-    return fail(`${opts.label} სავალდებულოა.`)
+    return fail(msg("validation.fieldRequired", { label: opts.label }))
   }
   if (cleaned.length < min) {
-    return fail(`${opts.label} მინიმუმ ${min} სიმბოლო უნდა იყოს.`)
+    return fail(msg("validation.fieldTooShort", { label: opts.label, min }))
   }
   if (cleaned.length > opts.max) {
-    return fail(`${opts.label} მაქსიმუმ ${opts.max} სიმბოლოა.`)
+    return fail(msg("validation.fieldTooLong", { label: opts.label, max: opts.max }))
   }
   return { ok: true, value: cleaned }
 }
@@ -117,14 +123,14 @@ export function validateOptionalTextField(raw: string, opts: Omit<TextFieldOpts,
   const cleaned = sanitizePlainText(raw).trim()
   if (!cleaned) return { ok: true, value: null }
   if (opts.min != null && cleaned.length < opts.min) {
-    return fail(`${opts.label} მინიმუმ ${opts.min} სიმბოლო უნდა იყოს.`)
+    return fail(msg("validation.fieldTooShort", { label: opts.label, min: opts.min }))
   }
-  if (cleaned.length > opts.max) return fail(`${opts.label} მაქსიმუმ ${opts.max} სიმბოლოა.`)
+  if (cleaned.length > opts.max) return fail(msg("validation.fieldTooLong", { label: opts.label, max: opts.max }))
   return { ok: true, value: cleaned }
 }
 
 export function validateSearchQuery(raw: string): FieldResult<string> {
-  return validateTextField(raw, { max: LIMITS.search, required: false, label: "ძებნა", min: 0 })
+  return validateTextField(raw, { max: LIMITS.search, required: false, label: msg("common.search"), min: 0 })
 }
 
 /** Sanitized search string for URL/query params (empty when invalid). */
@@ -224,7 +230,7 @@ export function validateReviewComment(raw: string): FieldResult<string> {
   return validateTextField(raw, {
     min: LIMITS.reviewTextMin,
     max: LIMITS.reviewText,
-    label: "კომენტარი",
+    label: msg("nav.comment"),
   })
 }
 
@@ -232,7 +238,7 @@ export function validateInquiryMessage(raw: string): FieldResult<string> {
   return validateTextField(raw, {
     min: LIMITS.inquiryMessageMin,
     max: LIMITS.inquiryMessage,
-    label: "შეტყობინება",
+    label: msg("common.message"),
   })
 }
 
@@ -240,7 +246,7 @@ export function validateJobTitle(raw: string): FieldResult<string> {
   return validateTextField(raw, {
     min: LIMITS.jobTitleMin,
     max: LIMITS.jobTitle,
-    label: "სათაური",
+    label: msg("common.title"),
   })
 }
 
@@ -248,7 +254,7 @@ export function validateJobDescription(raw: string): FieldResult<string> {
   return validateTextField(raw, {
     min: LIMITS.jobDescriptionMin,
     max: LIMITS.jobDescription,
-    label: "აღწერა",
+    label: msg("common.description"),
   })
 }
 
@@ -256,7 +262,7 @@ export function validateListingTitle(raw: string): FieldResult<string> {
   return validateTextField(raw, {
     min: LIMITS.listingTitleMin,
     max: LIMITS.listingTitle,
-    label: "სათაური",
+    label: msg("common.title"),
   })
 }
 
@@ -264,7 +270,7 @@ export function validateListingDescription(raw: string): FieldResult<string> {
   return validateTextField(raw, {
     min: LIMITS.listingDescriptionMin,
     max: LIMITS.listingDescription,
-    label: "აღწერა",
+    label: msg("common.description"),
   })
 }
 
@@ -272,8 +278,8 @@ export function validateCoverLetter(raw: string): FieldResult<string | null> {
   const cleaned = sanitizePlainText(raw).trim()
   if (!cleaned) return { ok: true, value: null }
   if (cleaned.length < LIMITS.coverLetterMin) {
-    return fail(`კომენტარი მინიმუმ ${LIMITS.coverLetterMin} სიმბოლო უნდა იყოს.`)
+    return fail(msg("validation.fieldTooShort", { label: msg("nav.comment"), min: LIMITS.coverLetterMin }))
   }
-  if (cleaned.length > LIMITS.coverLetter) return fail("კომენტარი ძალიან გრძელია.")
+  if (cleaned.length > LIMITS.coverLetter) return fail(msg("validation.fieldTooLong", { label: msg("nav.comment"), max: LIMITS.coverLetter }))
   return { ok: true, value: cleaned }
 }

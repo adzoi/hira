@@ -9,7 +9,9 @@ export type HomeFreelancerServiceItem = {
   id: string
   createdAt: string
   title: string
+  titleEn: string | null
   descriptionPreview: string
+  descriptionEnPreview: string | null
   priceNegotiable: boolean
   price: number
   priceType: string
@@ -30,7 +32,9 @@ export type HomeJobListingItem = {
   id: string
   createdAt: string
   title: string
+  titleEn: string | null
   descriptionPreview: string
+  descriptionEnPreview: string | null
   imagePath: string | null
   companyName: string
   companyAvatar: string | null
@@ -67,7 +71,9 @@ const MOCK_SERVICES: HomeFreelancerServiceItem[] = [
     id: "mock-s1",
     createdAt: new Date().toISOString(),
     title: "React პაკეტი — პატარა ფიჩერები",
+    titleEn: null,
     descriptionPreview: "ლეიაუთი, ფორმები და API ინტეგრაცია სწრაფად.",
+    descriptionEnPreview: null,
     priceNegotiable: false,
     price: 450,
     priceType: "fixed",
@@ -85,7 +91,9 @@ const MOCK_SERVICES: HomeFreelancerServiceItem[] = [
     id: "mock-s2",
     createdAt: new Date(Date.now() - 86400000).toISOString(),
     title: "UI/UX რევიუ (Figma)",
+    titleEn: null,
     descriptionPreview: "ინტერფეისის აუდიტი და რეკომენდაციები.",
+    descriptionEnPreview: null,
     priceNegotiable: false,
     price: 280,
     priceType: "fixed",
@@ -106,8 +114,10 @@ const MOCK_JOB_LISTINGS: HomeJobListingItem[] = [
     id: "mock-job-1",
     createdAt: new Date(Date.now() - 43200000).toISOString(),
     title: "React Developer საჭიროა საპროექტო ჯგუფისთვის",
+    titleEn: null,
     descriptionPreview:
       "გამოცდილი React დეველოპერი კომერციული პროექტისთვის — კომპონენტები, მდგომარეობის მართვა და API.",
+    descriptionEnPreview: null,
     imagePath: null,
     companyName: "TechStart Georgia",
     companyAvatar: null,
@@ -134,7 +144,9 @@ const MOCK_JOB_LISTINGS: HomeJobListingItem[] = [
     id: "mock-job-2",
     createdAt: new Date(Date.now() - 72000000).toISOString(),
     title: "სოციალური მედიის კონტენტის სერია",
+    titleEn: null,
     descriptionPreview: "Instagram და Facebook პოსტები, სტორიები და მოკლე ვიდეო იდეები კვარტალურად.",
+    descriptionEnPreview: null,
     imagePath: null,
     companyName: "Café Leila",
     companyAvatar: null,
@@ -212,12 +224,17 @@ export async function loadHomeFeed(): Promise<HomeFeedItem[]> {
       parsed.text.length > 120 ? `${parsed.text.slice(0, 120)}…` : parsed.text || "დეტალები ლისტინგის გვერდზე."
     const priceNum = Number(row.price ?? 0)
     const priceNegotiable = listingPriceNegotiable(priceNum, parsed.text)
+    const descriptionEnRaw = String(row.description_en ?? "").replace(/\s+/g, " ").trim()
+    const descriptionEnPreview =
+      descriptionEnRaw.length > 120 ? `${descriptionEnRaw.slice(0, 120)}…` : descriptionEnRaw || null
     freelancerItems.push({
       kind: "freelancer_service",
       id: String(row.id ?? ""),
       createdAt: String(row.created_at ?? new Date().toISOString()),
       title: String(row.title ?? "").trim() || "სერვისი",
+      titleEn: String(row.title_en ?? "").trim() || null,
       descriptionPreview: snippet,
+      descriptionEnPreview,
       priceNegotiable,
       price: priceNum,
       priceType: String(row.price_type ?? "fixed"),
@@ -236,6 +253,9 @@ export async function loadHomeFeed(): Promise<HomeFeedItem[]> {
     const row = raw as Record<string, unknown>
     const desc = String(row.description ?? "").replace(/\s+/g, " ").trim()
     const snippet = desc.length > 120 ? `${desc.slice(0, 120)}…` : desc || "დეტალები განცხადების გვერდზე."
+    const descriptionEnRaw = String(row.description_en ?? "").replace(/\s+/g, " ").trim()
+    const descriptionEnPreview =
+      descriptionEnRaw.length > 120 ? `${descriptionEnRaw.slice(0, 120)}…` : descriptionEnRaw || null
     const imagePaths = Array.isArray(row.image_urls)
       ? (row.image_urls as unknown[]).map((v) => String(v)).filter(Boolean)
       : []
@@ -254,7 +274,9 @@ export async function loadHomeFeed(): Promise<HomeFeedItem[]> {
       id: String(row.id ?? ""),
       createdAt: String(row.created_at ?? new Date().toISOString()),
       title: String(row.title ?? "").trim() || "სამუშაო",
+      titleEn: String(row.title_en ?? "").trim() || null,
       descriptionPreview: snippet,
+      descriptionEnPreview,
       imagePath: imagePaths[0] ?? imagePathFlat,
       companyName,
       companyAvatar: row.avatar_url != null ? String(row.avatar_url) : null,
