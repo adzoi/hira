@@ -54,7 +54,7 @@ export function FollowStatPills({
         onClick={onOpenFollowers}
         className="border-0 bg-transparent p-0 text-left hover:opacity-80 focus:outline-none focus-visible:underline"
       >
-        <span className="font-bold tabular-nums text-[#1B2B4B]">{followerCount.toLocaleString(countLocale)}</span>
+        <span className="font-bold tabular-nums text-gray-900">{followerCount.toLocaleString(countLocale)}</span>
         <span> {t("common.followers")}</span>
       </button>
       <span className="mx-0.5 text-slate-400" aria-hidden>
@@ -65,7 +65,7 @@ export function FollowStatPills({
         onClick={onOpenFollowing}
         className="border-0 bg-transparent p-0 text-left hover:opacity-80 focus:outline-none focus-visible:underline"
       >
-        <span className="font-bold tabular-nums text-[#1B2B4B]">{followingCount.toLocaleString(countLocale)}</span>
+        <span className="font-bold tabular-nums text-gray-900">{followingCount.toLocaleString(countLocale)}</span>
         <span> {t("common.following")}</span>
       </button>
     </div>

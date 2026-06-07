@@ -2645,7 +2645,7 @@ export default function DashboardPage() {
         ) : profile?.user_type === "hirer" ? (
           <section className="space-y-6">
             <div className="rounded-xl border border-slate-200 bg-white p-6">
-              <h2 className="text-2xl font-bold text-[#1B2B4B]">
+              <h2 className="text-2xl font-bold text-gray-900">
                 გამარჯობა, {profile.full_name || "დამქირავებელო"}!
               </h2>
               <FollowStatPills
@@ -2666,11 +2666,11 @@ export default function DashboardPage() {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="rounded-xl border border-slate-200 bg-white p-5">
                 <p className="text-sm text-slate-500">განთავსებული განცხადებები</p>
-                <p className="mt-2 text-2xl font-bold text-[#1B2B4B]">{hirerProfile?.jobs_posted_count ?? 0}</p>
+                <p className="mt-2 text-2xl font-bold text-gray-900">{hirerProfile?.jobs_posted_count ?? 0}</p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-5">
                 <p className="text-sm text-slate-500">აქტიური განცხადებები</p>
-                <p className="mt-2 text-2xl font-bold text-[#1B2B4B]">{activeJobsCount}</p>
+                <p className="mt-2 text-2xl font-bold text-gray-900">{activeJobsCount}</p>
               </div>
             </div>
 
@@ -2681,8 +2681,8 @@ export default function DashboardPage() {
                   onClick={() => setHirerDashboardTab("applicants")}
                   className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
                     hirerDashboardTab === "applicants"
-                      ? "bg-[#1B2B4B] text-white"
-                      : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                      ? "bg-[#0088FF] text-white"
+                      : "border border-slate-300 bg-white text-gray-900 hover:border-[#0088FF]"
                   }`}
                 >
                   განმცხადებლები
@@ -2692,8 +2692,8 @@ export default function DashboardPage() {
                   onClick={() => setHirerDashboardTab("my_jobs")}
                   className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
                     hirerDashboardTab === "my_jobs"
-                      ? "bg-[#1B2B4B] text-white"
-                      : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                      ? "bg-[#0088FF] text-white"
+                      : "border border-slate-300 bg-white text-gray-900 hover:border-[#0088FF]"
                   }`}
                 >
                   ჩემი განცხადებები
@@ -2703,8 +2703,8 @@ export default function DashboardPage() {
                   onClick={() => setHirerDashboardTab("listing_offers")}
                   className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
                     hirerDashboardTab === "listing_offers"
-                      ? "bg-[#1B2B4B] text-white"
-                      : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                      ? "bg-[#0088FF] text-white"
+                      : "border border-slate-300 bg-white text-gray-900 hover:border-[#0088FF]"
                   }`}
                 >
                   გაგზავნილი შეთავაზებები
@@ -2714,8 +2714,8 @@ export default function DashboardPage() {
                   onClick={() => setHirerDashboardTab("ongoing")}
                   className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
                     hirerDashboardTab === "ongoing"
-                      ? "bg-[#1B2B4B] text-white"
-                      : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                      ? "bg-[#0088FF] text-white"
+                      : "border border-slate-300 bg-white text-gray-900 hover:border-[#0088FF]"
                   }`}
                 >
                   მიმდინარე სამუშაოები
@@ -2725,8 +2725,8 @@ export default function DashboardPage() {
                   onClick={() => setHirerDashboardTab("completed")}
                   className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
                     hirerDashboardTab === "completed"
-                      ? "bg-[#1B2B4B] text-white"
-                      : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                      ? "bg-[#0088FF] text-white"
+                      : "border border-slate-300 bg-white text-gray-900 hover:border-[#0088FF]"
                   }`}
                 >
                   დასრულებული სამუშაოები
@@ -2746,8 +2746,8 @@ export default function DashboardPage() {
                       onClick={() => setHirerListingOfferTimeRange("7d")}
                       className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                         hirerListingOfferTimeRange === "7d"
-                          ? "bg-[#1B2B4B] text-white"
-                          : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                          ? "bg-[#0088FF] text-white"
+                          : "border border-slate-300 bg-white text-gray-900 hover:border-[#0088FF]"
                       }`}
                     >
                       1 კვირა
@@ -2757,8 +2757,8 @@ export default function DashboardPage() {
                       onClick={() => setHirerListingOfferTimeRange("30d")}
                       className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                         hirerListingOfferTimeRange === "30d"
-                          ? "bg-[#1B2B4B] text-white"
-                          : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                          ? "bg-[#0088FF] text-white"
+                          : "border border-slate-300 bg-white text-gray-900 hover:border-[#0088FF]"
                       }`}
                     >
                       30 დღე
@@ -2768,8 +2768,8 @@ export default function DashboardPage() {
                       onClick={() => setHirerListingOfferTimeRange("all")}
                       className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                         hirerListingOfferTimeRange === "all"
-                          ? "bg-[#1B2B4B] text-white"
-                          : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                          ? "bg-[#0088FF] text-white"
+                          : "border border-slate-300 bg-white text-gray-900 hover:border-[#0088FF]"
                       }`}
                     >
                       ყველა
@@ -2788,8 +2788,8 @@ export default function DashboardPage() {
                         onClick={() => setHirerListingOfferStatusTab(statusKey)}
                         className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
                           hirerListingOfferStatusTab === statusKey
-                            ? "bg-[#1B2B4B] text-white"
-                            : "border border-slate-300 bg-white text-slate-700 hover:border-[#D4A843]"
+                            ? "bg-[#0088FF] text-white"
+                            : "border border-slate-300 bg-white text-slate-700 hover:border-[#0088FF]"
                         }`}
                       >
                         {label} ({count})
@@ -2867,7 +2867,7 @@ export default function DashboardPage() {
                 <h3 className="text-xl font-bold text-[#1B2B4B]">ჩემი განცხადებები</h3>
                 <Link
                   to="/post-job"
-                  className="rounded-lg bg-[#1B2B4B] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B]"
+                  className="rounded-lg bg-[#0088FF] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#006ACC]"
                 >
                   ახალი განცხადება
                 </Link>
@@ -2886,43 +2886,46 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {myJobs.map((job) => (
+                  {myJobs.map((job) => {
+                    const vacancyStats = jobVacancyStats(job.vacancies, job.accepted_count)
+                    return (
                     <div key={job.id} className="rounded-lg border border-slate-200 p-4">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-[#1B2B4B]">{job.title}</p>
-                          <p className="mt-1 text-sm text-slate-600">
-                            {formatBudget(job.budget_min, job.budget_max, t)} • {jobApplicationsByJobId[job.id] ?? 0}{" "}
-                            განმცხადებელი •{" "}
-                            {(() => {
-                              const vs = jobVacancyStats(job.vacancies, job.accepted_count)
-                              return `${vs.acceptedCount}/${vs.vacancies} ვაკანსია`
-                            })()}{" "}
-                            • {formatDate(job.created_at)}
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 flex-wrap items-center gap-2">
-                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                            {statusLabel(job.status, t)}
-                          </span>
-                          <Link
-                            to={`/post-job/${job.id}`}
-                            className="rounded-lg border border-[#1B2B4B] px-3 py-1.5 text-xs font-semibold text-[#1B2B4B] transition hover:bg-[#1B2B4B] hover:text-white"
-                          >
-                            რედაქტირება
-                          </Link>
-                          <button
-                            type="button"
-                            disabled={jobDeletingId === job.id}
-                            onClick={() => void handleDeleteJob(job.id)}
-                            className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-50"
-                          >
-                            {jobDeletingId === job.id ? "…" : "წაშლა"}
-                          </button>
-                        </div>
+                      <p className="truncate font-semibold text-[#1B2B4B]">{job.title}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-600">
+                        <span className="whitespace-nowrap">{formatBudget(job.budget_min, job.budget_max, t)}</span>
+                        <span className="text-slate-400" aria-hidden>•</span>
+                        <span className="whitespace-nowrap">
+                          {jobApplicationsByJobId[job.id] ?? 0} განმცხადებელი
+                        </span>
+                        <span className="text-slate-400" aria-hidden>•</span>
+                        <span className="whitespace-nowrap">
+                          {vacancyStats.acceptedCount}/{vacancyStats.vacancies} ვაკანსია
+                        </span>
+                        <span className="text-slate-400" aria-hidden>•</span>
+                        <span className="whitespace-nowrap">{formatDate(job.created_at)}</span>
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                          {statusLabel(job.status, t)}
+                        </span>
+                        <Link
+                          to={`/post-job/${job.id}`}
+                          className="rounded-lg border border-[#0088FF] px-3 py-1.5 text-xs font-semibold text-[#0088FF] transition hover:bg-[#0088FF] hover:text-white"
+                        >
+                          რედაქტირება
+                        </Link>
+                        <button
+                          type="button"
+                          disabled={jobDeletingId === job.id}
+                          onClick={() => void handleDeleteJob(job.id)}
+                          className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-50"
+                        >
+                          {jobDeletingId === job.id ? "…" : "წაშლა"}
+                        </button>
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -2955,7 +2958,7 @@ export default function DashboardPage() {
                                         type="button"
                                         disabled={applicationBusyId === item.applicationId}
                                         onClick={() => void acceptApplication(item)}
-                                        className="rounded-lg bg-[#1B2B4B] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:opacity-50"
+                                        className="rounded-lg bg-[#0088FF] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#006ACC] disabled:opacity-50"
                                       >
                                         მიღება
                                       </button>
@@ -3120,8 +3123,8 @@ export default function DashboardPage() {
                       onClick={() => setHirerApplicantTimeRange("7d")}
                       className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                         hirerApplicantTimeRange === "7d"
-                          ? "bg-[#1B2B4B] text-white"
-                          : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                          ? "bg-[#0088FF] text-white"
+                          : "border border-slate-300 bg-white text-gray-900 hover:border-[#0088FF]"
                       }`}
                     >
                       1 კვირა
@@ -3131,8 +3134,8 @@ export default function DashboardPage() {
                       onClick={() => setHirerApplicantTimeRange("30d")}
                       className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                         hirerApplicantTimeRange === "30d"
-                          ? "bg-[#1B2B4B] text-white"
-                          : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                          ? "bg-[#0088FF] text-white"
+                          : "border border-slate-300 bg-white text-gray-900 hover:border-[#0088FF]"
                       }`}
                     >
                       30 დღე
@@ -3142,8 +3145,8 @@ export default function DashboardPage() {
                       onClick={() => setHirerApplicantTimeRange("all")}
                       className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                         hirerApplicantTimeRange === "all"
-                          ? "bg-[#1B2B4B] text-white"
-                          : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
+                          ? "bg-[#0088FF] text-white"
+                          : "border border-slate-300 bg-white text-gray-900 hover:border-[#0088FF]"
                       }`}
                     >
                       ყველა 
@@ -3161,8 +3164,8 @@ export default function DashboardPage() {
                         onClick={() => setHirerApplicantStatusTab(statusKey)}
                         className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
                           hirerApplicantStatusTab === statusKey
-                            ? "bg-[#1B2B4B] text-white"
-                            : "border border-slate-300 bg-white text-slate-700 hover:border-[#D4A843]"
+                            ? "bg-[#0088FF] text-white"
+                            : "border border-slate-300 bg-white text-slate-700 hover:border-[#0088FF]"
                         }`}
                       >
                         {label} ({count})
@@ -3196,7 +3199,7 @@ export default function DashboardPage() {
                               type="button"
                               disabled={applicationBusyId === item.applicationId}
                               onClick={() => void acceptApplication(item)}
-                              className="rounded-lg bg-[#1B2B4B] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:opacity-50"
+                              className="rounded-lg bg-[#0088FF] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#006ACC] disabled:opacity-50"
                             >
                               დადასტურება
                             </button>

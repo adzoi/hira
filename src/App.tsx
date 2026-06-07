@@ -131,7 +131,7 @@ function HomePage() {
             </h1>
 
 
-            <div className="mt-8 flex flex-col gap-2 rounded-xl bg-white p-3 shadow-lg sm:flex-row sm:items-center">
+            <div className="mt-8 flex flex-row items-center gap-2 rounded-xl bg-white p-3 shadow-lg">
               <input
                 type="text"
                 value={searchText}
@@ -145,14 +145,14 @@ function HomePage() {
               <button
                 type="button"
                 onClick={handleSearch}
-                className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-white px-8 text-base font-bold text-[#0088FF] transition hover:bg-[#E8F4FF]"
+                className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-white px-4 text-sm font-bold text-[#0088FF] transition hover:bg-[#E8F4FF] sm:px-8 sm:text-base"
               >
                 {t("common.search")}
               </button>
             </div>
           </div>
 
-          <div className="flex min-h-0 items-center justify-center">
+          <div className="hidden min-h-0 items-center justify-center md:flex">
             <img
               src={mainHeroImage}
               alt={`${t("brand.name")} — ${t("brand.taglineShort")}`}

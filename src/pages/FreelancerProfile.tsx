@@ -11,7 +11,7 @@ import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import { ViewCountEyeIcon } from "../components/ViewCountEyeIcon.tsx"
 import { countFollowers, countFollowing, followUser, isFollowing, unfollowUser } from "../lib/follows.ts"
 import { avatarImageUrl, jobOrServiceImageDisplayUrl } from "../lib/storageImageUrl.ts"
-import SocialProfileLinks from "../components/SocialProfileLinks.tsx"
+import SocialProfileLinks, { hasSocialProfileLinks } from "../components/SocialProfileLinks.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import ProfilePendingOffers from "../components/ProfilePendingOffers.tsx"
 import {
@@ -575,7 +575,7 @@ export default function FreelancerProfilePage() {
 
   return (
     <div className="min-h-screen bg-[#F9FAFB] page-enter">
-      <main className="mx-auto max-w-[900px] px-6 py-10">
+      <main className="mx-auto w-full min-w-0 max-w-[900px] px-6 py-10">
         {loading ? (
           <div className="grid gap-5">
             <div className="h-48 animate-pulse rounded-[14px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05)]" />
@@ -586,208 +586,212 @@ export default function FreelancerProfilePage() {
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">{error || "შეცდომა"}</div>
         ) : (
           <div className="space-y-5">
-            <section className="rounded-[14px] border border-[#E5E7EB] bg-white px-6 py-5 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-              <div className="flex items-start gap-4">
-                <div className="flex shrink-0 flex-col items-center">
-                  <button
-                    type="button"
-                    onClick={() => setAvatarLightboxOpen(true)}
-                    className="group relative box-border h-[88px] w-[88px] shrink-0 overflow-hidden rounded-full border-2 border-[#E5E7EB] bg-white p-0 transition hover:border-[#0088FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0088FF] focus-visible:ring-offset-2"
-                    aria-label={t("common.enlargeAvatar")}
-                  >
-                    {profile.avatar_url ? (
-                      <img
-                        src={profileAvatarDisplayUrl ?? profile.avatar_url}
-                        alt={t("common.avatarAlt", { name: profile.full_name })}
-                        loading="lazy"
-                        className="h-full w-full rounded-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center rounded-full bg-[#0088FF] text-2xl font-bold text-white transition group-hover:bg-[#006ACC]">
-                        {getInitials(profile.full_name)}
-                      </div>
-                    )}
-                  </button>
+            <section className="relative min-w-0 overflow-hidden rounded-[14px] border border-[#E5E7EB] bg-white px-6 py-5 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+              {!viewerIsOwner ? (
+                <div className="absolute right-4 top-4 z-10">
+                  <SaveBookmarkButton variant="icon" resourceType="freelancer" resourceId={freelancer.id} />
                 </div>
+              ) : null}
+
+              <div className={`flex items-start gap-4 ${!viewerIsOwner ? "pr-10" : ""}`}>
+                <button
+                  type="button"
+                  onClick={() => setAvatarLightboxOpen(true)}
+                  className="group relative box-border h-[88px] w-[88px] shrink-0 overflow-hidden rounded-full border-2 border-[#E5E7EB] bg-white p-0 transition hover:border-[#0088FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0088FF] focus-visible:ring-offset-2"
+                  aria-label={t("common.enlargeAvatar")}
+                >
+                  {profile.avatar_url ? (
+                    <img
+                      src={profileAvatarDisplayUrl ?? profile.avatar_url}
+                      alt={t("common.avatarAlt", { name: profile.full_name })}
+                      loading="lazy"
+                      className="h-full w-full rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center rounded-full bg-[#0088FF] text-2xl font-bold text-white transition group-hover:bg-[#006ACC]">
+                      {getInitials(profile.full_name)}
+                    </div>
+                  )}
+                </button>
 
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
-                    <div className="min-w-0">
-                      <h1 className="text-xl font-semibold text-gray-900">{profile.full_name}</h1>
-                      <p className="mt-0.5 text-sm text-gray-500">{freelancer.professional_title ?? t("common.freelancerFallback")}</p>
-                    </div>
-                    <div className="ml-auto flex flex-shrink-0 flex-wrap items-center justify-end gap-2">
-                      {!viewerIsOwner ? (
-                        <SaveBookmarkButton variant="icon" resourceType="freelancer" resourceId={freelancer.id} />
-                      ) : null}
-                      {followButtonMode !== "hidden" ? (
-                        <button
-                          type="button"
-                          onClick={() => void handleFollowToggle()}
-                          disabled={followBusy || followButtonMode === "loading"}
-                          className={
-                            followButtonMode === "unfollow"
-                              ? `${outlineBtnClass} min-w-[8rem]`
-                              : `${primaryBtnClass} min-w-[8rem]`
-                          }
-                        >
-                          {followBusy
-                            ? t("common.inProgress")
-                            : followButtonMode === "loading"
-                              ? t("common.loading")
-                              : followButtonMode === "unfollow"
-                                ? t("common.following")
-                                : t("common.follow")}
-                        </button>
-                      ) : null}
-                      {viewerUserId && !viewerIsOwner ? (
-                        <StartConversationButton
-                          otherUserId={freelancer.user_id}
-                          className="min-w-[8rem] flex-1"
-                        />
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={() => void openContactModal()}
-                        disabled={contactLoading}
-                        className={`${primaryBtnClass} min-w-[8rem]`}
-                      >
-                        {contactLoading ? t("common.loading") : t("common.contact")}
-                      </button>
-                    </div>
-                  </div>
-
-                  {freelancer.is_accepting_new_work === false ? (
-                    <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                      {t("common.unavailableBanner")}
+                  <h1 className="text-xl font-semibold text-gray-900">{profile.full_name}</h1>
+                  <p className="mt-0.5 text-sm text-gray-500">{freelancer.professional_title ?? t("common.freelancerFallback")}</p>
+                  {formatCityForDisplay(profile.city) ? (
+                    <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-gray-500">
+                      <MapPinIcon className="h-4 w-4 shrink-0 text-red-500" />
+                      {formatCityForDisplay(profile.city)}
                     </p>
                   ) : null}
+                </div>
+              </div>
 
-                  <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-gray-500">
-                    {formatCityForDisplay(profile.city) ? (
-                      <span className="inline-flex items-center gap-1.5">
-                        <MapPinIcon className="h-4 w-4 shrink-0 text-red-500" />
-                        {formatCityForDisplay(profile.city)}
-                      </span>
-                    ) : null}
-                    <span className="inline-flex items-center gap-1.5">
-                      <CalendarOutlineIcon className="h-4 w-4 shrink-0 text-gray-400" />
-                      {formatDate(profile.member_since)}
-                    </span>
-                    <span className="inline-flex flex-wrap items-center gap-1.5">
-                      <span className="font-semibold text-gray-900">{freelancer.average_rating.toFixed(1)}</span>
-                      <span>
-                        • {t("common.reviewsCount", { count: freelancer.total_reviews_count })}
-                      </span>
-                    </span>
-                    <span className="inline-flex items-center gap-1.5">
-                      <BriefcaseOutlineIcon className="h-4 w-4 shrink-0 text-gray-400" />
-                      {t("common.completedWorkCount", { count: completedWorkCount })}
-                    </span>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {!viewerIsOwner ? (
+                <div className="mt-3 min-w-0 overflow-x-auto">
+                  <div className="flex w-max min-w-full flex-nowrap items-center justify-start gap-2">
+                  {followButtonMode !== "hidden" ? (
                     <button
                       type="button"
-                      onClick={() => {
-                        setFollowListsModalTab("followers")
-                        setFollowListsModalOpen(true)
-                      }}
-                      className="w-full rounded-[10px] bg-[#F9FAFB] px-4 py-3 text-center transition hover:bg-gray-100"
+                      onClick={() => void handleFollowToggle()}
+                      disabled={followBusy || followButtonMode === "loading"}
+                      className={
+                        followButtonMode === "unfollow"
+                          ? `${outlineBtnClass} h-11 min-h-11 shrink-0 px-3 text-xs sm:px-4 sm:text-sm`
+                          : `${primaryBtnClass} h-11 min-h-11 shrink-0 px-3 text-xs sm:px-4 sm:text-sm`
+                      }
                     >
-                      <p className="mb-1 text-xs text-gray-500">{t("freelancerProfile.subscriberStat")}</p>
-                      <p className="text-lg font-semibold tabular-nums text-gray-900">{followerCount}</p>
+                      {followBusy
+                        ? t("common.inProgress")
+                        : followButtonMode === "loading"
+                          ? t("common.loading")
+                          : followButtonMode === "unfollow"
+                            ? t("common.following")
+                            : t("common.follow")}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFollowListsModalTab("following")
-                        setFollowListsModalOpen(true)
-                      }}
-                      className="w-full rounded-[10px] bg-[#F9FAFB] px-4 py-3 text-center transition hover:bg-gray-100"
-                    >
-                      <p className="mb-1 text-xs text-gray-500">{t("freelancerProfile.subscribedStat")}</p>
-                      <p className="text-lg font-semibold tabular-nums text-gray-900">{followingCount}</p>
-                    </button>
-                    <div className="rounded-[10px] bg-[#F9FAFB] px-4 py-3 text-center">
-                      <p className="mb-1 text-xs text-gray-500">{t("freelancerProfile.ratingStat")}</p>
-                      <p className="text-lg font-semibold tabular-nums text-gray-900">{freelancer.total_reviews_count}</p>
-                    </div>
-                    <div className="rounded-[10px] bg-[#F9FAFB] px-4 py-3 text-center">
-                      <p className="mb-1 text-xs text-gray-500">{t("freelancerProfile.completedStat")}</p>
-                      <p className="text-lg font-semibold tabular-nums text-gray-900">{completedWorkCount}</p>
-                    </div>
-                  </div>
-
-                  {ownerVisitCount !== null ? (
-                    <p className="mt-3 text-xs text-gray-500">
-                      {t("freelancerProfile.publicViewsCount")}{" "}
-                      <span className="font-semibold tabular-nums text-gray-900" title={t("common.publicViewsOwnerOnly")}>
-                        {ownerVisitCount}
-                      </span>
-                    </p>
                   ) : null}
-
-                  <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-4">
-                    <span className="text-sm text-gray-500">{t("freelancerProfile.languages")}:</span>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {freelancer.languages.map((language) => (
-                        <span key={language} className={tagChipClass}>
-                          {language}
-                        </span>
-                      ))}
-                    </div>
-                    <SocialProfileLinks urls={freelancer} className="ml-auto flex flex-wrap items-center gap-2" />
+                  {viewerUserId ? (
+                    <StartConversationButton
+                      otherUserId={freelancer.user_id}
+                      className="h-11 shrink-0 px-3 text-xs sm:px-4 sm:text-sm"
+                    />
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => void openContactModal()}
+                    disabled={contactLoading}
+                    className={`${primaryBtnClass} h-11 min-h-11 shrink-0 px-3 text-xs sm:px-4 sm:text-sm`}
+                  >
+                    {contactLoading ? t("common.loading") : t("common.contact")}
+                  </button>
                   </div>
+                </div>
+              ) : null}
 
-                  <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-gray-100 pt-4">
-                    <span className="text-sm text-gray-500">{t("freelancerProfile.resume")}:</span>
-                    {viewerIsOwner ? (
-                      <>
-                        <input
-                          ref={ownerCvInputRef}
-                          type="file"
-                          accept="application/pdf"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0]
-                            if (file) void handleOwnerCvUpload(file)
-                            e.currentTarget.value = ""
-                          }}
-                        />
-                        <button
-                          type="button"
-                          disabled={cvUploading}
-                          onClick={() => ownerCvInputRef.current?.click()}
-                          className={outlineBtnClass}
-                        >
-                          {cvUploading ? t("common.loading") : t("common.addCv")}
-                        </button>
-                        <Link to="/cv-generator" className={outlineBtnClass}>
-                          {t("common.cvGeneration")}
-                        </Link>
-                      </>
-                    ) : null}
-                    {profile.cv_url ? (
-                      <a
-                        href={profile.cv_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={primaryBtnClass}
-                      >
-                        {t("common.openCv")}
-                      </a>
-                    ) : publicCvSlug ? (
-                      <Link to={`/cv/${encodeURIComponent(publicCvSlug)}`} className={primaryBtnClass}>
-                        {t("common.openCv")}
-                      </Link>
-                    ) : null}
-                    {profile.cv_url || publicCvSlug ? (
-                      <button type="button" onClick={() => void copyCvLink()} className={outlineBtnClass}>
-                        {t("common.copyLink")}
-                      </button>
-                    ) : null}
-                  </div>
+              <div className="mt-3 flex flex-wrap items-center justify-start gap-x-4 gap-y-2 text-sm text-gray-500">
+                <span className="inline-flex items-center gap-1.5">
+                  <CalendarOutlineIcon className="h-4 w-4 shrink-0 text-gray-400" />
+                  {formatDate(profile.member_since)}
+                </span>
+                <span className="inline-flex flex-wrap items-center gap-1.5">
+                  <span className="font-semibold text-gray-900">{freelancer.average_rating.toFixed(1)}</span>
+                  <span>
+                    • {t("common.reviewsCount", { count: freelancer.total_reviews_count })}
+                  </span>
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <BriefcaseOutlineIcon className="h-4 w-4 shrink-0 text-gray-400" />
+                  {t("common.completedWorkCount", { count: completedWorkCount })}
+                </span>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFollowListsModalTab("followers")
+                    setFollowListsModalOpen(true)
+                  }}
+                  className="w-full rounded-[10px] bg-[#F9FAFB] px-4 py-3 text-left transition hover:bg-gray-100"
+                >
+                  <p className="mb-1 text-xs text-gray-500">{t("freelancerProfile.subscriberStat")}</p>
+                  <p className="text-lg font-semibold tabular-nums text-gray-900">{followerCount}</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFollowListsModalTab("following")
+                    setFollowListsModalOpen(true)
+                  }}
+                  className="w-full rounded-[10px] bg-[#F9FAFB] px-4 py-3 text-left transition hover:bg-gray-100"
+                >
+                  <p className="mb-1 text-xs text-gray-500">{t("freelancerProfile.subscribedStat")}</p>
+                  <p className="text-lg font-semibold tabular-nums text-gray-900">{followingCount}</p>
+                </button>
+                <div className="rounded-[10px] bg-[#F9FAFB] px-4 py-3 text-left">
+                  <p className="mb-1 text-xs text-gray-500">{t("freelancerProfile.ratingStat")}</p>
+                  <p className="text-lg font-semibold tabular-nums text-gray-900">{freelancer.total_reviews_count}</p>
+                </div>
+                <div className="rounded-[10px] bg-[#F9FAFB] px-4 py-3 text-left">
+                  <p className="mb-1 text-xs text-gray-500">{t("freelancerProfile.completedStat")}</p>
+                  <p className="text-lg font-semibold tabular-nums text-gray-900">{completedWorkCount}</p>
+                </div>
+              </div>
+
+              {ownerVisitCount !== null ? (
+                <p className="mt-3 text-left text-xs text-gray-500">
+                  {t("freelancerProfile.publicViewsCount")}{" "}
+                  <span className="font-semibold tabular-nums text-gray-900" title={t("common.publicViewsOwnerOnly")}>
+                    {ownerVisitCount}
+                  </span>
+                </p>
+              ) : null}
+
+              <div className="mt-4 flex flex-wrap items-center justify-start gap-2 border-t border-gray-100 pt-4">
+                <span className="shrink-0 text-sm text-gray-500">{t("freelancerProfile.languages")}:</span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {freelancer.languages.map((language) => (
+                    <span key={language} className={tagChipClass}>
+                      {language}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {hasSocialProfileLinks(freelancer) ? (
+                <div className="mt-4 flex flex-wrap items-center justify-start gap-2 border-t border-gray-100 pt-4">
+                  <span className="shrink-0 text-sm text-gray-500">{t("freelancerProfile.socialNetworks")}:</span>
+                  <SocialProfileLinks urls={freelancer} className="flex min-w-0 flex-wrap items-center gap-2" />
+                </div>
+              ) : null}
+
+              <div className="mt-4 min-w-0 overflow-x-auto border-t border-gray-100 pt-4">
+                <div className="flex w-max min-w-full flex-nowrap items-center justify-start gap-2">
+                <span className="shrink-0 text-sm text-gray-500">{t("freelancerProfile.resume")}:</span>
+                {viewerIsOwner ? (
+                  <>
+                    <input
+                      ref={ownerCvInputRef}
+                      type="file"
+                      accept="application/pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) void handleOwnerCvUpload(file)
+                        e.currentTarget.value = ""
+                      }}
+                    />
+                    <button
+                      type="button"
+                      disabled={cvUploading}
+                      onClick={() => ownerCvInputRef.current?.click()}
+                      className={`${outlineBtnClass} shrink-0`}
+                    >
+                      {cvUploading ? t("common.loading") : t("common.addCv")}
+                    </button>
+                    <Link to="/cv-generator" className={`${outlineBtnClass} shrink-0`}>
+                      {t("common.cvGeneration")}
+                    </Link>
+                  </>
+                ) : null}
+                {profile.cv_url ? (
+                  <a
+                    href={profile.cv_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`${primaryBtnClass} shrink-0`}
+                  >
+                    {t("common.openCv")}
+                  </a>
+                ) : publicCvSlug ? (
+                  <Link to={`/cv/${encodeURIComponent(publicCvSlug)}`} className={`${primaryBtnClass} shrink-0`}>
+                    {t("common.openCv")}
+                  </Link>
+                ) : null}
+                {profile.cv_url || publicCvSlug ? (
+                  <button type="button" onClick={() => void copyCvLink()} className={`${outlineBtnClass} shrink-0`}>
+                    {t("common.copyLink")}
+                  </button>
+                ) : null}
                 </div>
               </div>
             </section>
@@ -802,11 +806,12 @@ export default function FreelancerProfilePage() {
               />
             ) : null}
 
-            <div className="mt-5 flex flex-wrap gap-2">
+            <div className="min-w-0 overflow-x-auto">
+              <div className="mt-5 flex w-max min-w-full flex-nowrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => setProfileTab("services")}
-                className={`cursor-pointer rounded-full px-5 py-2 text-sm font-medium transition-colors duration-150 ${
+                className={`shrink-0 cursor-pointer rounded-full px-5 py-2 text-sm font-medium transition-colors duration-150 ${
                   profileTab === "services"
                     ? "border border-[#0088FF] bg-[#0088FF] text-white"
                     : "border border-[#E5E7EB] bg-white text-[#6B7280]"
@@ -817,7 +822,7 @@ export default function FreelancerProfilePage() {
               <button
                 type="button"
                 onClick={() => setProfileTab("bio")}
-                className={`cursor-pointer rounded-full px-5 py-2 text-sm font-medium transition-colors duration-150 ${
+                className={`shrink-0 cursor-pointer rounded-full px-5 py-2 text-sm font-medium transition-colors duration-150 ${
                   profileTab === "bio"
                     ? "border border-[#0088FF] bg-[#0088FF] text-white"
                     : "border border-[#E5E7EB] bg-white text-[#6B7280]"
@@ -828,7 +833,7 @@ export default function FreelancerProfilePage() {
               <button
                 type="button"
                 onClick={() => setProfileTab("reviews")}
-                className={`cursor-pointer rounded-full px-5 py-2 text-sm font-medium transition-colors duration-150 ${
+                className={`shrink-0 cursor-pointer rounded-full px-5 py-2 text-sm font-medium transition-colors duration-150 ${
                   profileTab === "reviews"
                     ? "border border-[#0088FF] bg-[#0088FF] text-white"
                     : "border border-[#E5E7EB] bg-white text-[#6B7280]"
@@ -836,6 +841,7 @@ export default function FreelancerProfilePage() {
               >
                 {t("common.reviews")}
               </button>
+              </div>
             </div>
 
             {profileTab === "services" ? (

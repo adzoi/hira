@@ -5,6 +5,7 @@ import EmptyState from "../components/ui/EmptyState.tsx"
 import ErrorState from "../components/ui/ErrorState.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
+import MarketplaceCatalogToolbar, { marketplaceFilterPillClass } from "../components/MarketplaceCatalogToolbar.tsx"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
@@ -437,145 +438,77 @@ export default function HirersPage() {
   const websiteChipClass =
     "inline-flex items-center gap-1 rounded-full border border-[#D1D5DB] bg-white px-2.5 py-1 text-xs font-medium text-[#374151]"
 
+  const hirersCategoryFilterSlot = (
+    <div className="grid w-full grid-cols-2 gap-1.5 sm:flex sm:w-auto sm:items-center sm:gap-1.5">
+      <label className={`${marketplaceFilterPillClass} min-w-0 sm:shrink-0`}>
+        <span className="pointer-events-none min-w-0 flex-1 truncate">{t("hirers.industry")}</span>
+        <span className="shrink-0 text-slate-400">▾</span>
+        <select
+          value={categoryId}
+          onChange={(event) => setCategoryId(event.target.value)}
+          className="absolute inset-0 cursor-pointer opacity-0"
+          aria-label={t("hirers.industry")}
+        >
+          <option value="">{t("common.allIndustries")}</option>
+          {industryOptions.map((cat) => (
+            <option key={cat.id} value={cat.id}>
+              {formatIndustryForDisplay(cat.name_ka) ?? cat.name_ka}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className={`${marketplaceFilterPillClass} min-w-0 sm:min-w-[10.5rem] sm:max-w-[14rem] sm:shrink-0`}>
+        <span className="pointer-events-none min-w-0 flex-1 truncate">
+          {locationFilter.trim() ? formatCityForDisplay(locationFilter) ?? locationFilter : t("common.locationCity")}
+        </span>
+        <span className="shrink-0 text-slate-400">▾</span>
+        <LocationFilterSelect
+          value={locationFilter}
+          onChange={setLocationFilter}
+          className="absolute inset-0 z-10 h-full w-full min-h-[2.5rem] min-w-0 cursor-pointer opacity-0"
+        />
+      </label>
+    </div>
+  )
+
   return (
     <div className="min-h-screen bg-white page-enter">
       <main className="mx-auto w-full max-w-7xl px-6 py-6 font-sans text-slate-600 md:px-8 md:py-8">
         <section className="p-1 md:p-0">
-          <div className="mt-5 p-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <div className="min-w-[220px] flex-[0_1_320px]">
-                <input
-                  value={searchText}
-                  onChange={(event) => setSearchText(normalizeSearchInput(event.target.value))}
-                  className="h-10 w-full rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#0088FF]"
-                  placeholder={t("hirers.searchPlaceholder")}
-                />
-              </div>
-
-              <label className="relative inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500">
-                <span className="truncate">{t("hirers.industry")}</span>
-                <span className="ml-auto text-slate-400">▾</span>
-                <select
-                  value={categoryId}
-                  onChange={(event) => setCategoryId(event.target.value)}
-                  className="absolute inset-0 cursor-pointer opacity-0"
-                  aria-label={t("hirers.industry")}
-                >
-                  <option value="">{t("common.allIndustries")}</option>
-                  {industryOptions.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {formatIndustryForDisplay(cat.name_ka) ?? cat.name_ka}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="relative inline-flex h-10 min-w-[10.5rem] max-w-[14rem] shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500">
-                <span className="pointer-events-none min-w-0 flex-1 truncate">
-                  {locationFilter.trim() ? formatCityForDisplay(locationFilter) ?? locationFilter : t("common.locationCity")}
-                </span>
-                <span className="shrink-0 text-slate-400">▾</span>
+          <MarketplaceCatalogToolbar
+            eyebrow=""
+            title=""
+            showPageHeader={false}
+            searchValue={searchText}
+            onSearchChange={(value) => setSearchText(normalizeSearchInput(value))}
+            searchPlaceholder={t("hirers.searchPlaceholder")}
+            categorySlot={hirersCategoryFilterSlot}
+            sortValue={sortBy}
+            onSortChange={(value) => setSortBy(value as SortOption)}
+            sortOptions={[
+              { value: "jobs_desc", label: t("common.sortJobsCount") },
+              { value: "completed_desc", label: t("common.completedJobsSort") },
+              { value: "newest", label: t("common.sortNewRegistration") },
+            ]}
+            advancedDropdownOpen={advancedDropdownOpen}
+            advancedFilterCount={advancedFilterCount}
+            onToggleAdvanced={openAdvancedDropdown}
+            advancedDropdownRef={advancedDropdownRef}
+            onDismissAdvanced={() => setAdvancedDropdownOpen(false)}
+            onSaveAdvanced={saveAdvancedFilters}
+            onClearDraftAdvanced={clearDraftAdvanced}
+            childrenAdvancedBody={
+              <label className="block pb-1">
+                <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("common.locationCity")}</span>
                 <LocationFilterSelect
-                  value={locationFilter}
-                  onChange={setLocationFilter}
-                  className="absolute inset-0 z-10 h-full w-full min-h-[2.5rem] min-w-0 cursor-pointer opacity-0"
+                  value={draftLocationFilter}
+                  onChange={setDraftLocationFilter}
+                  className="h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
                 />
               </label>
-
-              <div className="relative" ref={advancedDropdownRef}>
-                <button
-                  type="button"
-                  aria-expanded={advancedDropdownOpen}
-                  aria-haspopup="dialog"
-                  onClick={() => (advancedDropdownOpen ? setAdvancedDropdownOpen(false) : openAdvancedDropdown())}
-                  className="inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500 transition hover:border-slate-400"
-                >
-                  <span>{t("common.advancedSearch")}</span>
-                  <span className="text-slate-400">▾</span>
-                  {advancedFilterCount > 0 ? (
-                    <span className="ml-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#0088FF] px-1 text-xs font-bold text-white">
-                      {advancedFilterCount}
-                    </span>
-                  ) : null}
-                </button>
-
-                {advancedDropdownOpen ? (
-                  <>
-                    <div className="fixed inset-0 z-40 bg-black/20 md:hidden" aria-hidden onClick={() => setAdvancedDropdownOpen(false)} />
-                    <div
-                      role="dialog"
-                      aria-modal="true"
-                      aria-label={t("common.detailedFilters")}
-                      className="absolute right-0 z-50 mt-2 flex max-h-[min(72vh,560px)] w-[min(100vw-2rem,24rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
-                    >
-                      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-4">
-                        <h2 className="border-l-4 border-[#0088FF] pl-3 text-base font-bold text-[#1B2B4B]">{t("common.advancedSearch")}</h2>
-                        <div className="mt-4 space-y-4">
-                          <label className="block pb-1">
-                            <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("common.locationCity")}</span>
-                            <LocationFilterSelect
-                              value={draftLocationFilter}
-                              onChange={setDraftLocationFilter}
-                              className="h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
-                            />
-                          </label>
-                        </div>
-                      </div>
-
-                      <div className="shrink-0 space-y-2 border-t border-slate-100 bg-white p-3">
-                        <button
-                          type="button"
-                          onClick={clearDraftAdvanced}
-                          className="h-11 w-full rounded-lg border border-[#0088FF] text-sm font-semibold text-[#1B2B4B] hover:bg-[#E8F4FF]"
-                        >
-                          {t("common.clearFilters")}
-                        </button>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setAdvancedDropdownOpen(false)}
-                            className="h-11 flex-1 rounded-lg border border-slate-300 text-sm font-semibold text-[#1B2B4B] hover:bg-slate-50"
-                          >
-                            {t("common.cancel")}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={saveAdvancedFilters}
-                            className="h-11 flex-1 rounded-lg bg-[#0088FF] text-sm font-semibold text-white hover:bg-[#006ACC]"
-                          >
-                            {t("common.save")}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </>
-                ) : null}
-              </div>
-
-              <label className="relative inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500">
-                <span className="truncate">{t("common.sort")}</span>
-                <span className="ml-auto text-slate-400">▾</span>
-                <select
-                  value={sortBy}
-                  onChange={(event) => setSortBy(event.target.value as SortOption)}
-                  className="absolute inset-0 cursor-pointer opacity-0"
-                  aria-label={t("common.sort")}
-                >
-                  <option value="jobs_desc">{t("common.sortJobsCount")}</option>
-                  <option value="completed_desc">{t("common.completedJobsSort")}</option>
-                  <option value="newest">{t("common.sortNewRegistration")}</option>
-                </select>
-              </label>
-
-              <button
-                type="button"
-                onClick={() => setAdvancedDropdownOpen(false)}
-                className="ml-auto inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-[#0088FF] px-8 text-base font-bold text-white transition hover:bg-[#006ACC]"
-              >
-                {t("common.search")}
-              </button>
-            </div>
-          </div>
+            }
+          />
         </section>
 
         <section className="mt-6 min-w-0">

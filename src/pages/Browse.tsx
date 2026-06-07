@@ -23,6 +23,7 @@ import {
 import FreelancerAvailabilityIndicator from "../components/FreelancerAvailabilityIndicator.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
+import MarketplaceCatalogToolbar, { marketplaceFilterPillClass } from "../components/MarketplaceCatalogToolbar.tsx"
 import { LIMITS, normalizeSearchInput, sanitizeDisplayText } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { pickCategoryName } from "../lib/categoryLocale.ts"
@@ -611,260 +612,188 @@ export default function BrowsePage() {
     return n
   }, [selectedSkillIds, availabilityFilters, minimumRating, minPrice, maxPrice, locationFilter])
 
+  const browseCategoryFilterSlot = (
+    <div className="grid w-full grid-cols-2 gap-1.5 sm:flex sm:w-auto sm:items-center sm:gap-1.5">
+      <label className={`${marketplaceFilterPillClass} min-w-0 sm:min-w-[9rem] sm:max-w-[11rem] sm:shrink-0`}>
+        <span className="pointer-events-none min-w-0 flex-1 truncate">{t("common.category")}</span>
+        <span className="shrink-0 text-slate-400">▾</span>
+        <select
+          value={filterRootCategoryId}
+          onChange={(event) => {
+            setFilterRootCategoryId(event.target.value)
+            setFilterMidCategoryId("")
+          }}
+          className="absolute inset-0 z-10 h-full w-full min-h-[2.5rem] min-w-0 cursor-pointer opacity-0"
+          aria-label={t("common.category")}
+        >
+          <option value="">{t("common.all")}</option>
+          {categoryRootsList.map((c) => (
+            <option key={c.id} value={c.id}>
+              {pickCategoryName(c, locale)}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className={`${marketplaceFilterPillClass} min-w-0 sm:min-w-[9rem] sm:max-w-[11rem] sm:shrink-0`}>
+        <span className="pointer-events-none min-w-0 flex-1 truncate">{t("common.subcategory")}</span>
+        <span className="shrink-0 text-slate-400">▾</span>
+        <select
+          value={filterMidCategoryId}
+          disabled={!filterRootCategoryId || categoryMidsList.length === 0}
+          onChange={(event) => setFilterMidCategoryId(event.target.value)}
+          className="absolute inset-0 z-10 h-full w-full min-h-[2.5rem] min-w-0 cursor-pointer opacity-0 disabled:cursor-not-allowed"
+          aria-label={t("common.subcategory")}
+        >
+          <option value="">
+            {!filterRootCategoryId
+              ? t("common.categoryFirst")
+              : categoryMidsList.length === 0
+                ? t("common.none")
+                : t("common.all")}
+          </option>
+          {categoryMidsList.map((c) => (
+            <option key={c.id} value={c.id}>
+              {pickCategoryName(c, locale)}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  )
+
+  const browseAdvancedBody = (
+    <>
+      <div>
+        <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">{t("common.skills")}</p>
+        <div className="max-h-40 space-y-2 overflow-auto rounded-lg border border-slate-200 p-2">
+          {topSkills.map((skill) => (
+            <label key={skill.id} className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={draftSkillIds.includes(skill.id)} onChange={() => toggleDraftSkill(skill.id)} />
+              {skill.name}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">{t("browse.availability")}</p>
+        <div className="space-y-2">
+          {(Object.keys(availabilityLabel) as Availability[]).map((value) => (
+            <label key={value} className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={draftAvailability.includes(value)} onChange={() => toggleDraftAvailability(value)} />
+              {availabilityLabel[value]}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <label className="block">
+        <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("browse.minRating")}</span>
+        <select
+          value={draftMinRating}
+          onChange={(event) => {
+            const value = Number(event.target.value)
+            if ([0, 3, 4, 5].includes(value)) {
+              setDraftMinRating(value as 0 | 3 | 4 | 5)
+            }
+          }}
+          className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
+        >
+          <option value={0}>{t("common.anyLocation")}</option>
+          <option value={3}>3+</option>
+          <option value={4}>4+</option>
+          <option value={5}>5</option>
+        </select>
+      </label>
+
+      <div>
+        <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">{t("browse.priceRange")}</p>
+        <div className="grid grid-cols-2 gap-2">
+          <input
+            type="number"
+            min={0}
+            value={draftMinPrice}
+            onChange={(event) => {
+              const value = event.target.value
+              const numValue = Number(value)
+              if (value === "" || (Number.isFinite(numValue) && numValue >= MIN_PRICE && numValue <= MAX_PRICE)) {
+                setDraftMinPrice(value)
+              }
+            }}
+            placeholder={t("common.min")}
+            className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
+          />
+          <input
+            type="number"
+            min={0}
+            value={draftMaxPrice}
+            onChange={(event) => {
+              const value = event.target.value
+              const numValue = Number(value)
+              if (value === "" || (Number.isFinite(numValue) && numValue >= MIN_PRICE && numValue <= MAX_PRICE)) {
+                setDraftMaxPrice(value)
+              }
+            }}
+            placeholder={t("common.max")}
+            className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
+          />
+        </div>
+      </div>
+
+      <label className="block pb-1">
+        <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("common.location")}</span>
+        <LocationFilterSelect
+          value={draftLocationFilter}
+          onChange={setDraftLocationFilter}
+          className="h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
+        />
+      </label>
+    </>
+  )
+
   return (
     <div className="min-h-screen bg-white page-enter">
       <main className="mx-auto w-full max-w-7xl px-6 py-6 font-sans text-slate-600 md:px-8 md:py-8">
         <section className="p-1 md:p-0">
-          <div className="mt-5 p-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <div className="min-w-[220px] flex-[0_1_320px]">
-                <input
-                  value={searchText}
-                  onChange={(event) => {
-                    const value = event.target.value
-                    if (value.length <= MAX_SEARCH_LENGTH) {
-                      setSearchText(normalizeSearchInput(value))
-                    }
-                  }}
-                  className="h-10 w-full rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:ring-2 focus:ring-[#0088FF]"
-                  placeholder={t("common.search")}
-                />
-                {searchText.length >= 80 ? (
-                  <p className="mt-0.5 text-xs text-slate-400">
-                    {searchText.length}/{MAX_SEARCH_LENGTH}
-                  </p>
-                ) : null}
-              </div>
-
-              <label className="relative inline-flex h-10 min-w-[9rem] max-w-[11rem] shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500">
-                <span className="pointer-events-none min-w-0 flex-1 truncate">{t("common.category")}</span>
-                <span className="shrink-0 text-slate-400">▾</span>
-                <select
-                  value={filterRootCategoryId}
-                  onChange={(event) => {
-                    setFilterRootCategoryId(event.target.value)
-                    setFilterMidCategoryId("")
-                  }}
-                  className="absolute inset-0 z-10 h-full w-full min-h-[2.5rem] min-w-0 cursor-pointer opacity-0"
-                  aria-label={t("common.category")}
-                >
-                  <option value="">{t("common.all")}</option>
-                  {categoryRootsList.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {pickCategoryName(c, locale)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="relative inline-flex h-10 min-w-[9rem] max-w-[11rem] shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500">
-                <span className="pointer-events-none min-w-0 flex-1 truncate">{t("common.subcategory")}</span>
-                <span className="shrink-0 text-slate-400">▾</span>
-                <select
-                  value={filterMidCategoryId}
-                  disabled={!filterRootCategoryId || categoryMidsList.length === 0}
-                  onChange={(event) => setFilterMidCategoryId(event.target.value)}
-                  className="absolute inset-0 z-10 h-full w-full min-h-[2.5rem] min-w-0 cursor-pointer opacity-0 disabled:cursor-not-allowed"
-                  aria-label={t("common.subcategory")}
-                >
-                  <option value="">
-                    {!filterRootCategoryId
-                      ? t("common.categoryFirst")
-                      : categoryMidsList.length === 0
-                        ? t("common.none")
-                        : t("common.all")}
-                  </option>
-                  {categoryMidsList.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {pickCategoryName(c, locale)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <div className="relative" ref={advancedDropdownRef}>
-                <button
-                  type="button"
-                  aria-expanded={advancedDropdownOpen}
-                  aria-haspopup="dialog"
-                  onClick={() => (advancedDropdownOpen ? setAdvancedDropdownOpen(false) : openAdvancedDropdown())}
-                  className="inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500 transition hover:border-slate-400"
-                >
-                  <span aria-hidden></span>
-                  <span>{t("listings.detailedSearch")}</span>
-                  <span className="text-slate-400">▾</span>
-                  {advancedFilterCount > 0 ? (
-                    <span className="ml-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#0088FF] px-1 text-xs font-bold text-white">
-                      {advancedFilterCount}
-                    </span>
-                  ) : null}
-                </button>
-
-                {advancedDropdownOpen ? (
-                  <>
-                    <div className="fixed inset-0 z-40 bg-black/20 md:hidden" aria-hidden onClick={() => setAdvancedDropdownOpen(false)} />
-                    <div
-                      role="dialog"
-                      aria-modal="true"
-                      aria-label={t("common.detailedFilters")}
-                      className="absolute right-0 z-50 mt-2 flex max-h-[min(72vh,560px)] w-[min(100vw-2rem,24rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
-                    >
-                      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-4">
-                        <h2 className="border-l-4 border-[#0088FF] pl-3 text-base font-bold text-[#1B2B4B]">{t("common.detailedFilters")}</h2>
-                        <div className="mt-4 space-y-4">
-                          <div>
-                            <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">{t("common.skills")}</p>
-                            <div className="max-h-40 space-y-2 overflow-auto rounded-lg border border-slate-200 p-2">
-                              {topSkills.map((skill) => (
-                                <label key={skill.id} className="flex items-center gap-2 text-sm text-slate-700">
-                                  <input type="checkbox" checked={draftSkillIds.includes(skill.id)} onChange={() => toggleDraftSkill(skill.id)} />
-                                  {skill.name}
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div>
-                            <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">{t("browse.availability")}</p>
-                            <div className="space-y-2">
-                              {(Object.keys(availabilityLabel) as Availability[]).map((value) => (
-                                <label key={value} className="flex items-center gap-2 text-sm text-slate-700">
-                                  <input type="checkbox" checked={draftAvailability.includes(value)} onChange={() => toggleDraftAvailability(value)} />
-                                  {availabilityLabel[value]}
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-
-                          <label className="block">
-                            <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("browse.minRating")}</span>
-                            <select
-                              value={draftMinRating}
-                              onChange={(event) => {
-                                const value = Number(event.target.value)
-                                if ([0, 3, 4, 5].includes(value)) {
-                                  setDraftMinRating(value as 0 | 3 | 4 | 5)
-                                }
-                              }}
-                              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
-                            >
-                              <option value={0}>{t("common.anyLocation")}</option>
-                              <option value={3}>3+</option>
-                              <option value={4}>4+</option>
-                              <option value={5}>5</option>
-                            </select>
-                          </label>
-
-                          <div>
-                            <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">{t("browse.priceRange")}</p>
-                            <div className="grid grid-cols-2 gap-2">
-                              <input
-                                type="number"
-                                min={0}
-                                value={draftMinPrice}
-                                onChange={(event) => {
-                                  const value = event.target.value
-                                  const numValue = Number(value)
-                                  if (value === "" || (Number.isFinite(numValue) && numValue >= MIN_PRICE && numValue <= MAX_PRICE)) {
-                                    setDraftMinPrice(value)
-                                  }
-                                }}
-                                placeholder={t("common.min")}
-                                className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
-                              />
-                              <input
-                                type="number"
-                                min={0}
-                                value={draftMaxPrice}
-                                onChange={(event) => {
-                                  const value = event.target.value
-                                  const numValue = Number(value)
-                                  if (value === "" || (Number.isFinite(numValue) && numValue >= MIN_PRICE && numValue <= MAX_PRICE)) {
-                                    setDraftMaxPrice(value)
-                                  }
-                                }}
-                                placeholder={t("common.max")}
-                                className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
-                              />
-                            </div>
-                          </div>
-
-                          <label className="block pb-1">
-                            <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("common.location")}</span>
-                            <LocationFilterSelect
-                              value={draftLocationFilter}
-                              onChange={setDraftLocationFilter}
-                              className="h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-[#0088FF] focus:ring-2"
-                            />
-                          </label>
-                        </div>
-                      </div>
-
-                      <div className="shrink-0 space-y-2 border-t border-slate-100 bg-white p-3">
-                        <button
-                          type="button"
-                          onClick={clearDraftAdvanced}
-                          className="h-11 w-full rounded-lg border border-[#0088FF] text-sm font-semibold text-[#1B2B4B] hover:bg-[#E8F4FF]"
-                        >
-                          {t("common.clearFilters")}
-                        </button>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setAdvancedDropdownOpen(false)}
-                            className="h-11 flex-1 rounded-lg border border-slate-300 text-sm font-semibold text-[#1B2B4B] hover:bg-slate-50"
-                          >
-                            {t("common.cancel")}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={saveAdvancedFilters}
-                            className="h-11 flex-1 rounded-lg bg-[#0088FF] text-sm font-semibold text-white hover:bg-[#006ACC]"
-                          >
-                            {t("common.save")}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </>
-                ) : null}
-              </div>
-
-              <label className="relative inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500">
-                <span aria-hidden></span>
-                <span className="truncate">{t("common.sort")}</span>
-                <span className="ml-auto text-slate-400">▾</span>
-                <select
-                  value={sortBy}
-                  onChange={(event) => setSortBy(event.target.value as SortOption)}
-                  className="absolute inset-0 cursor-pointer opacity-0"
-                  aria-label={t("common.sort")}
-                >
-                  <option value="rating">{t("common.rating")}</option>
-                  <option value="price_asc">{t("common.priceAsc")}</option>
-                  <option value="price_desc">{t("common.priceDesc")}</option>
-                  <option value="newest">{t("browse.sortNewest")}</option>
-                  <option value="completed">{t("common.completedJobsSort")}</option>
-                </select>
-              </label>
-
-              <button
-                type="button"
-                disabled={loading || freelancersLoadingMore}
-                onClick={() => setAdvancedDropdownOpen(false)}
-                className="ml-auto inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-[#0088FF] px-8 text-base font-bold text-white transition hover:bg-[#006ACC] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {t("common.search")}
-              </button>
-            </div>
-          </div>
+          <MarketplaceCatalogToolbar
+            eyebrow=""
+            title=""
+            showPageHeader={false}
+            searchValue={searchText}
+            onSearchChange={(value) => {
+              if (value.length <= MAX_SEARCH_LENGTH) {
+                setSearchText(normalizeSearchInput(value))
+              }
+            }}
+            searchPlaceholder={t("common.search")}
+            categorySlot={browseCategoryFilterSlot}
+            advancedSearchLabel={t("listings.detailedSearch")}
+            sortValue={sortBy}
+            onSortChange={(value) => setSortBy(value as SortOption)}
+            sortOptions={[
+              { value: "rating", label: t("common.rating") },
+              { value: "price_asc", label: t("common.priceAsc") },
+              { value: "price_desc", label: t("common.priceDesc") },
+              { value: "newest", label: t("browse.sortNewest") },
+              { value: "completed", label: t("common.completedJobsSort") },
+            ]}
+            advancedDropdownOpen={advancedDropdownOpen}
+            advancedFilterCount={advancedFilterCount}
+            onToggleAdvanced={openAdvancedDropdown}
+            advancedDropdownRef={advancedDropdownRef}
+            onDismissAdvanced={() => setAdvancedDropdownOpen(false)}
+            onSaveAdvanced={saveAdvancedFilters}
+            onClearDraftAdvanced={clearDraftAdvanced}
+            childrenAdvancedBody={browseAdvancedBody}
+          />
         </section>
 
         <section className="mt-6 min-w-0">
           {error ? (
             <ErrorState message={error} onRetry={() => void refetch()} />
           ) : loading ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, index) => (
                 <SkeletonCard key={`skeleton-${index}`} avatar lines={4} />
               ))}
@@ -882,7 +811,7 @@ export default function BrowsePage() {
                   onAction={clearFilters}
                 />
               ) : (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                   {sortedFreelancers.map((freelancer) => {
                     const lowestPricedService = getLowestPricedService(freelancer.services)
                     const negotiable = !lowestPricedService
@@ -966,7 +895,7 @@ export default function BrowsePage() {
                           />
                           <Link
                             to={`/freelancer/${freelancer.slug}`}
-                            className="inline-flex h-11 min-w-0 flex-1 items-center justify-center rounded-full bg-[#0088FF] px-4 text-sm font-semibold text-white transition hover:bg-[#006ACC]"
+                            className="inline-flex h-11 min-w-0 flex-1 items-center justify-center whitespace-nowrap rounded-full bg-[#0088FF] px-4 text-sm font-semibold text-white transition hover:bg-[#006ACC]"
                           >
                             {t("nav.viewProfile")}
                           </Link>

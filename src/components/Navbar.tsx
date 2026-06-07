@@ -227,6 +227,7 @@ export default function Navbar() {
   }
 
   const toggleNotificationsPanel = () => {
+    setMenuOpen(false)
     setNotificationsOpen((v) => {
       const opening = !v
       if (opening) {
@@ -397,140 +398,191 @@ export default function Navbar() {
           ))}
         </nav>
 
-        <div className="flex shrink-0 items-center justify-end gap-2 lg:gap-3">
-          <div className="hidden items-center gap-2 md:flex lg:gap-3">
+        <div className="flex shrink-0 items-center justify-end gap-1.5 md:gap-2 lg:gap-3">
           {isAuthed ? (
             <>
+              <div className="hidden items-center gap-2 md:flex lg:gap-3">
+                <Link
+                  to="/dashboard"
+                  className={`inline-flex h-10 items-center rounded-full border px-4 text-sm font-medium transition ${
+                    location.pathname.startsWith("/dashboard")
+                      ? "border-transparent bg-[#0088FF] text-white"
+                      : "border-[#B3DEFF] bg-[#E8F4FF] text-[#0088FF] hover:border-[#80C8FF] hover:bg-[#D4EEFF]"
+                  }`}
+                >
+                  {t("nav.dashboard")}
+                </Link>
+                <Link
+                  to={postListingOrJob.to}
+                  aria-label={postListingOrJob.ariaLabel}
+                  title={postListingOrJob.ariaLabel}
+                  className={`grid h-10 w-10 shrink-0 place-items-center rounded-full border transition ${
+                    postListingOrJob.active
+                      ? "border-transparent bg-[#0088FF] text-white"
+                      : "border-[#B3DEFF] bg-[#E8F4FF] text-[#0088FF] hover:border-[#80C8FF] hover:bg-[#D4EEFF]"
+                  }`}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden className="h-[1.125rem] w-[1.125rem] shrink-0">
+                    <path stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" d="M12 5v14M5 12h14" />
+                  </svg>
+                </Link>
+              </div>
               <Link
-                to="/dashboard"
-                className={`inline-flex h-10 items-center rounded-full border px-4 text-sm font-medium transition ${
-                  location.pathname.startsWith("/dashboard")
-                    ? "border-transparent bg-[#0088FF] text-white"
-                    : "border-[#B3DEFF] bg-[#E8F4FF] text-[#0088FF] hover:border-[#80C8FF] hover:bg-[#D4EEFF]"
+                to="/messages"
+                aria-label={t("nav.chat")}
+                title={t("nav.chat")}
+                className={`relative inline-flex h-9 w-9 items-center justify-center rounded-xl border transition md:h-10 md:w-10 ${
+                  location.pathname.startsWith("/messages")
+                    ? "border-[#0088FF] bg-[#E8F4FF] text-[#0088FF]"
+                    : "border-slate-300 bg-white text-slate-500 hover:border-slate-400 hover:text-slate-700"
                 }`}
               >
-                {t("nav.dashboard")}
-              </Link>
-              <Link
-                to={postListingOrJob.to}
-                aria-label={postListingOrJob.ariaLabel}
-                title={postListingOrJob.ariaLabel}
-                className={`grid h-10 w-10 shrink-0 place-items-center rounded-full border transition ${
-                  postListingOrJob.active
-                    ? "border-transparent bg-[#0088FF] text-white"
-                    : "border-[#B3DEFF] bg-[#E8F4FF] text-[#0088FF] hover:border-[#80C8FF] hover:bg-[#D4EEFF]"
-                }`}
-              >
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden className="h-[1.125rem] w-[1.125rem] shrink-0">
-                  <path stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" d="M12 5v14M5 12h14" />
-                </svg>
-              </Link>
-            </>
-          ) : null}
-
-          {isAuthed ? (
-            <>
-            <Link
-              to="/messages"
-              aria-label={t("nav.chat")}
-              title={t("nav.chat")}
-              className={`relative inline-flex h-10 w-10 items-center justify-center rounded-xl border transition ${
-                location.pathname.startsWith("/messages")
-                  ? "border-[#0088FF] bg-[#E8F4FF] text-[#0088FF]"
-                  : "border-slate-300 bg-white text-slate-500 hover:border-slate-400 hover:text-slate-700"
-              }`}
-            >
-              <ChatIcon className="h-5 w-5" />
-              {unreadMessages > 0 ? (
-                <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
-                  {unreadMessages > 99 ? "99+" : unreadMessages}
-                </span>
-              ) : null}
-            </Link>
-            <div className="relative" ref={notificationsRef}>
-              <button
-                type="button"
-                aria-expanded={notificationsOpen}
-                aria-haspopup="menu"
-                onClick={() => toggleNotificationsPanel()}
-                className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 transition hover:border-slate-400 hover:text-slate-700"
-              >
-                <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.4-1.4a2 2 0 0 1-.6-1.4V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5m6 0a3 3 0 0 1-6 0m6 0H9" />
-                </svg>
-                {unreadNotifications > 0 ? (
+                <ChatIcon className="h-5 w-5" />
+                {unreadMessages > 0 ? (
                   <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
-                    {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                    {unreadMessages > 99 ? "99+" : unreadMessages}
                   </span>
                 ) : null}
-              </button>
-
-              {notificationsOpen ? (
-                <div
-                  role="menu"
-                  className="fixed left-4 right-4 top-[72px] z-50 max-h-[min(70vh,420px)] overflow-hidden rounded-2xl border border-slate-200 bg-white text-[#1B2B4B] shadow-xl md:absolute md:right-0 md:left-auto md:top-full md:mt-2 md:w-[min(100vw-2rem,22rem)]"
+              </Link>
+              <div className="relative" ref={notificationsRef}>
+                <button
+                  type="button"
+                  aria-expanded={notificationsOpen}
+                  aria-haspopup="menu"
+                  onClick={() => toggleNotificationsPanel()}
+                  className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 transition hover:border-slate-400 hover:text-slate-700 md:h-10 md:w-10"
                 >
-                  <div className="flex items-start justify-between gap-2 border-b border-slate-100 px-4 py-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-[#1B2B4B]">{t("nav.notifications")}</p>
-                      <p className="text-xs text-slate-500">
-                        {notifications.length === 0
-                          ? t("nav.empty")
-                          : t("nav.recentNotifications", { count: Math.min(10, notifications.length) })}
-                      </p>
+                  <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.4-1.4a2 2 0 0 1-.6-1.4V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5m6 0a3 3 0 0 1-6 0m6 0H9" />
+                  </svg>
+                  {unreadNotifications > 0 ? (
+                    <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
+                      {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                    </span>
+                  ) : null}
+                </button>
+
+                {notificationsOpen ? (
+                  <div
+                    role="menu"
+                    className="fixed left-4 right-4 top-[72px] z-50 max-h-[min(70vh,420px)] overflow-hidden rounded-2xl border border-slate-200 bg-white text-[#1B2B4B] shadow-xl md:absolute md:right-0 md:left-auto md:top-full md:mt-2 md:w-[min(100vw-2rem,22rem)]"
+                  >
+                    <div className="flex items-start justify-between gap-2 border-b border-slate-100 px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-[#1B2B4B]">{t("nav.notifications")}</p>
+                        <p className="text-xs text-slate-500">
+                          {notifications.length === 0
+                            ? t("nav.empty")
+                            : t("nav.recentNotifications", { count: Math.min(10, notifications.length) })}
+                        </p>
+                      </div>
+                      {notifications.some((n) => !n.is_read) ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleMarkAllNotificationsRead()}
+                          className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-[#1B2B4B] underline-offset-2 hover:bg-slate-50 hover:underline"
+                        >
+                          {t("nav.markAllRead")}
+                        </button>
+                      ) : null}
                     </div>
-                    {notifications.some((n) => !n.is_read) ? (
-                      <button
-                        type="button"
-                        onClick={() => void handleMarkAllNotificationsRead()}
-                        className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-[#1B2B4B] underline-offset-2 hover:bg-slate-50 hover:underline"
-                      >
-                        {t("nav.markAllRead")}
-                      </button>
-                    ) : null}
+                    <div className="max-h-[min(52vh,340px)] overflow-y-auto overscroll-contain">
+                      {notifications.length === 0 ? (
+                        <p className="px-4 py-8 text-center text-sm text-slate-600">{t("nav.noNewNotifications")}</p>
+                      ) : (
+                        <ul className="divide-y divide-slate-100">
+                          {notifications.slice(0, 10).map((n) => (
+                            <li key={n.id} className="flex items-stretch gap-0">
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => void handleNotificationActivate(n)}
+                                className={`flex min-w-0 flex-1 flex-col gap-0.5 border-l-4 py-3 pl-3 pr-2 text-left transition hover:bg-slate-50 ${
+                                  n.is_read ? "border-transparent opacity-90" : "border-[#D4A843] bg-amber-50/40"
+                                }`}
+                              >
+                                <span className={`text-sm ${n.is_read ? "font-medium text-[#1B2B4B]/90" : "font-bold text-[#1B2B4B]"}`}>{n.title}</span>
+                                {n.body ? (
+                                  <span className="text-xs text-slate-600">{truncateNotificationBody(n.body)}</span>
+                                ) : null}
+                                <span className="text-[11px] text-slate-400">
+                                  {formatNotificationRelativeTime(n.created_at, t, locale)}
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={t("nav.deleteNotification")}
+                                onClick={(event) => void deleteNotification(n.id, event)}
+                                className="shrink-0 border-l border-slate-100 px-3 py-3 text-sm text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+                              >
+                                ✕
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   </div>
-                  <div className="max-h-[min(52vh,340px)] overflow-y-auto overscroll-contain">
-                    {notifications.length === 0 ? (
-                      <p className="px-4 py-8 text-center text-sm text-slate-600">{t("nav.noNewNotifications")}</p>
-                    ) : (
-                      <ul className="divide-y divide-slate-100">
-                        {notifications.slice(0, 10).map((n) => (
-                          <li key={n.id} className="flex items-stretch gap-0">
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={() => void handleNotificationActivate(n)}
-                              className={`flex min-w-0 flex-1 flex-col gap-0.5 border-l-4 py-3 pl-3 pr-2 text-left transition hover:bg-slate-50 ${
-                                n.is_read ? "border-transparent opacity-90" : "border-[#D4A843] bg-amber-50/40"
-                              }`}
-                            >
-                              <span className={`text-sm ${n.is_read ? "font-medium text-[#1B2B4B]/90" : "font-bold text-[#1B2B4B]"}`}>{n.title}</span>
-                              {n.body ? (
-                                <span className="text-xs text-slate-600">{truncateNotificationBody(n.body)}</span>
-                              ) : null}
-                              <span className="text-[11px] text-slate-400">
-                                {formatNotificationRelativeTime(n.created_at, t, locale)}
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={t("nav.deleteNotification")}
-                              onClick={(event) => void deleteNotification(n.id, event)}
-                              className="shrink-0 border-l border-slate-100 px-3 py-3 text-sm text-slate-400 transition hover:bg-red-50 hover:text-red-600"
-                            >
-                              ✕
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
+                ) : null}
+              </div>
+              <div className="relative md:hidden">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false)
+                    setMenuOpen((v) => !v)
+                  }}
+                  aria-label={userDisplayName}
+                  className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-slate-300 bg-white transition hover:border-slate-400"
+                >
+                  {avatarUrl ? (
+                    <img
+                      src={navbarAvatarSrc ?? avatarUrl}
+                      alt={t("nav.userAvatar")}
+                      loading="lazy"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-xs font-bold text-[#1B2B4B]">{initials}</span>
+                  )}
+                </button>
+                <div
+                  className={`absolute right-0 top-11 z-50 w-52 origin-top-right rounded-lg border border-slate-200 bg-white p-2 shadow-lg transition ${
+                    menuOpen ? "scale-100 opacity-100" : "pointer-events-none scale-95 opacity-0"
+                  }`}
+                >
+                  <LanguageToggle locale={locale} onChange={setLocale} />
+                  <Link to="/settings" onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
+                    {t("nav.settings")}
+                  </Link>
+                  <Link to="/saved" onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
+                    {t("nav.saved")}
+                  </Link>
+                  <Link
+                    to={postListingOrJob.to}
+                    onClick={() => setMenuOpen(false)}
+                    className="block rounded px-3 py-2 text-sm hover:bg-slate-50"
+                  >
+                    {postListingOrJob.ariaLabel}
+                  </Link>
+                  {publicProfileHref ? (
+                    <Link to={publicProfileHref} onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
+                      {t("nav.profile")}
+                    </Link>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={confirmAndLogout}
+                    className="mt-1 block w-full rounded border-t border-slate-100 px-3 py-2 pt-3 text-left text-sm text-red-600 hover:bg-red-50"
+                  >
+                    {t("nav.logout")}
+                  </button>
                 </div>
-              ) : null}
-            </div>
+              </div>
             </>
           ) : null}
 
+          <div className="hidden items-center gap-2 md:flex lg:gap-3">
           {isAuthed ? (
             <div className="relative">
               <button
@@ -563,9 +615,6 @@ export default function Navbar() {
                 </Link>
                 <Link to="/saved" onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
                   {t("nav.saved")}
-                </Link>
-                <Link to="/messages" onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
-                  {t("nav.chat")}
                 </Link>
                 {publicProfileHref ? (
                   <Link to={publicProfileHref} onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
@@ -615,7 +664,10 @@ export default function Navbar() {
           </div>
           <button
             type="button"
-            onClick={() => setMobileMenuOpen((v) => !v)}
+            onClick={() => {
+              setMenuOpen(false)
+              setMobileMenuOpen((v) => !v)
+            }}
             className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-slate-300 bg-white md:hidden"
           >
             <span className="text-lg">{mobileMenuOpen ? "✕" : "☰"}</span>
@@ -628,7 +680,7 @@ export default function Navbar() {
 
       <div
         className={`overflow-hidden border-t border-slate-100 bg-white transition-all md:hidden ${
-          mobileMenuOpen ? "max-h-[520px] opacity-100" : "max-h-0 opacity-0"
+          mobileMenuOpen ? "max-h-[420px] opacity-100" : "max-h-0 opacity-0"
         }`}
       >
         <div className="mx-auto flex max-w-[1200px] flex-col gap-1 px-4 py-3">
@@ -646,65 +698,9 @@ export default function Navbar() {
           ))}
           {isAuthed ? (
             <>
-              <Link
-                to="/messages"
-                onClick={() => setMobileMenuOpen(false)}
-                className={`flex items-center justify-between rounded-md px-3 py-3 text-sm font-semibold ${
-                  location.pathname.startsWith("/messages") ? "bg-amber-50 text-[#1B2B4B]" : "text-[#1B2B4B]"
-                }`}
-              >
-                <span>{t("nav.chat")}</span>
-                {unreadMessages > 0 ? (
-                  <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">
-                    {unreadMessages > 99 ? "99+" : unreadMessages}
-                  </span>
-                ) : null}
-              </Link>
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false)
-                  toggleNotificationsPanel()
-                }}
-                className="flex items-center justify-between rounded-md px-3 py-3 text-sm font-semibold text-[#1B2B4B]"
-              >
-                <span>{t("nav.notifications")}</span>
-                {unreadNotifications > 0 ? (
-                  <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span>
-                ) : null}
-              </button>
               <Link to="/dashboard" onClick={() => setMobileMenuOpen(false)} className="rounded-md px-3 py-3 text-sm font-semibold text-[#1B2B4B]">
                 {t("nav.dashboard")}
               </Link>
-              <Link
-                to={postListingOrJob.to}
-                aria-label={postListingOrJob.ariaLabel}
-                title={postListingOrJob.ariaLabel}
-                onClick={() => setMobileMenuOpen(false)}
-                className={`grid place-items-center rounded-md px-3 py-3 ${
-                  postListingOrJob.active ? "bg-amber-50 text-[#1B2B4B]" : "text-[#1B2B4B]"
-                }`}
-              >
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden className="h-6 w-6 shrink-0">
-                  <path stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" d="M12 5v14M5 12h14" />
-                </svg>
-              </Link>
-              <LanguageToggle locale={locale} onChange={setLocale} />
-              <Link to="/settings" onClick={() => setMobileMenuOpen(false)} className="rounded-md px-3 py-3 text-sm font-semibold text-[#1B2B4B]">
-                {t("nav.settings")}
-              </Link>
-              {publicProfileHref ? (
-                <Link to={publicProfileHref} onClick={() => setMobileMenuOpen(false)} className="rounded-md px-3 py-3 text-sm font-semibold text-[#1B2B4B]">
-                  {t("nav.profile")}
-                </Link>
-              ) : null}
-              <button
-                type="button"
-                onClick={confirmAndLogout}
-                className="rounded-md px-3 py-3 text-left text-sm font-semibold text-red-600"
-              >
-                {t("nav.logout")}
-              </button>
             </>
           ) : authStatus === "anon" ? (
             <div className="grid gap-2 pt-2">
@@ -732,6 +728,7 @@ export default function Navbar() {
               <div className="h-11 rounded-md bg-slate-100" />
             </div>
           )}
+          <LanguageToggle locale={locale} onChange={setLocale} />
         </div>
       </div>
     </header>

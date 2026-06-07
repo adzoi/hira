@@ -22,7 +22,7 @@ export const ka: T = {
     logout: "გასვლა",
     user: "მომხმარებელი",
     postJob: "სამუშაოს განთავსება",
-    postListing: "ლისტინგის განთავსება",
+    postListing: "განცხადების დამატება",
     completeProfile: "პროფილის შევსება",
     notifications: "შეტყობინებები",
     empty: "ცარიელია",
@@ -677,6 +677,7 @@ export const ka: T = {
   freelancerProfile: {
     title: "ფრილანსერები — ჰირა",
     languages: "ენები",
+    socialNetworks: "სოციალური ქსელები",
     resume: "რეზიუმე (CV)",
     experience: "გამოცდილება",
     education: "განათლება",

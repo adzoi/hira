@@ -23,6 +23,7 @@ export type JobData = {
   category_name: string
   subcategory_name: string | null
   skills: Array<{ id: string; name: string }>
+  image_urls: string[]
   hirer_profile_id: string
   hirer_company_name: string
   hirer_jobs_posted_count: number
@@ -95,7 +96,30 @@ export async function fetchJobDetail(id: string): Promise<JobDetailQueryResult> 
   const { data: jobRow, error: jobError } = await supabase
     .from("jobs")
     .select(`
-            *,
+            id,
+            title,
+            title_en,
+            description,
+            description_en,
+            status,
+            vacancies,
+            accepted_count,
+            created_at,
+            views_count,
+            is_urgent,
+            budget_type,
+            budget_min,
+            budget_max,
+            duration_type,
+            location_type,
+            application_deadline,
+            image_urls,
+            contact_preference,
+            is_vip,
+            vip_tier,
+            vip_expires_at,
+            hirer_profile_id,
+            subcategory_id,
             categories (name_ka),
             subcategories (name_ka),
             hirer_profiles (
@@ -172,6 +196,9 @@ export async function fetchJobDetail(id: string): Promise<JobDetailQueryResult> 
           s != null && typeof s.id === "string" && s.id.length > 0 && typeof s.name === "string" && s.name.length > 0,
       )
       .map((skill) => ({ id: skill.id, name: skill.name })),
+    image_urls: Array.isArray(rowUnknown.image_urls)
+      ? (rowUnknown.image_urls as unknown[]).map((x) => String(x)).filter(Boolean).slice(0, 3)
+      : [],
     hirer_profile_id: hirerProfileIdSafe,
     hirer_company_name:
       (typeof hirerProfilesRaw?.company_name === "string" && hirerProfilesRaw.company_name.trim()

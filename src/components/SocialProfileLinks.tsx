@@ -67,6 +67,10 @@ function buildLinks(urls: FreelancerSocialUrls): SocialLinkDef[] {
   return out
 }
 
+export function hasSocialProfileLinks(urls: FreelancerSocialUrls): boolean {
+  return buildLinks(urls).length > 0
+}
+
 export default function SocialProfileLinks({ urls, className }: { urls: FreelancerSocialUrls; className?: string }) {
   const links = buildLinks(urls)
   if (links.length === 0) return null

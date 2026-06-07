@@ -18,6 +18,7 @@ import {
 import { fetchPostJob } from "../lib/queries/fetchPostJob.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
+import { queryClient } from "../lib/queryClient.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { getCurrentLocale, translate } from "../i18n/translate.ts"
 
@@ -554,6 +555,13 @@ export default function PostJobPage() {
           .eq("id", currentJobId)
           .eq("hirer_profile_id", hirerProfileId)
         if (imageSaveError) throw imageSaveError
+      }
+
+      void queryClient.invalidateQueries({ queryKey: queryKeys.jobDetail(currentJobId) })
+      void queryClient.invalidateQueries({ queryKey: ["jobs-page"] })
+      void queryClient.invalidateQueries({ queryKey: ["jobs-catalog"] })
+      if (postJobUserId) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.postJob(postJobUserId, currentJobId) })
       }
 
       navigate("/dashboard", {

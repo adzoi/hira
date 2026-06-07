@@ -5,7 +5,7 @@ import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import EmptyState from "../components/ui/EmptyState.tsx"
 import ErrorState from "../components/ui/ErrorState.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
-import MarketplaceCatalogToolbar from "../components/MarketplaceCatalogToolbar.tsx"
+import MarketplaceCatalogToolbar, { marketplaceFilterPillClass } from "../components/MarketplaceCatalogToolbar.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
 import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
 import { fetchJobsPagePayload } from "../lib/marketplaceEdge.ts"
@@ -501,8 +501,8 @@ export default function JobsPage() {
   )
 
   const jobsCategoryFilterSlot = (
-    <div className="flex flex-wrap items-center gap-2">
-      <label className="relative inline-flex h-10 min-w-[8.5rem] max-w-[10.5rem] shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 text-sm font-medium text-slate-600">
+    <div className="grid w-full grid-cols-3 gap-1.5 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:gap-2">
+      <label className={`${marketplaceFilterPillClass} min-w-0`}>
         <span className="pointer-events-none min-w-0 flex-1 truncate">{t("common.category")}</span>
         <span className="shrink-0 text-slate-400">▾</span>
         <select
@@ -524,7 +524,7 @@ export default function JobsPage() {
           ))}
         </select>
       </label>
-      <label className="relative inline-flex h-10 min-w-[8.5rem] max-w-[10.5rem] shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 text-sm font-medium text-slate-600">
+      <label className={`${marketplaceFilterPillClass} min-w-0`}>
         <span className="pointer-events-none min-w-0 flex-1 truncate">{t("common.subcategory")}</span>
         <span className="shrink-0 text-slate-400">▾</span>
         <select
@@ -551,7 +551,7 @@ export default function JobsPage() {
           ))}
         </select>
       </label>
-      <label className="relative inline-flex h-10 min-w-[8.5rem] max-w-[11rem] shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 text-sm font-medium text-slate-600">
+      <label className={`${marketplaceFilterPillClass} min-w-0`}>
         <span className="pointer-events-none min-w-0 flex-1 truncate">{t("common.specialization")}</span>
         <span className="shrink-0 text-slate-400">▾</span>
         <select
@@ -950,7 +950,7 @@ export default function JobsPage() {
             <ErrorState message={error} onRetry={() => void refetch()} />
           </div>
         ) : loading ? (
-          <div className="mt-6 space-y-4">
+          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 5 }).map((_, index) => (
               <SkeletonCard key={index} avatar lines={3} />
             ))}
@@ -963,11 +963,11 @@ export default function JobsPage() {
                 <EmptyState message={t("jobs.empty")} actionLabel={t("common.clearFilters")} onAction={clearFilters} />
               </div>
             ) : (
-              <div className="mt-6 space-y-4">
+              <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {sortedJobs.map((job) => (
                   <article
                     key={job.id}
-                    className="flex w-full max-w-full flex-col rounded-2xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-4 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#0088FF] hover:shadow-[-4px_0_12px_rgba(0,136,255,0.25)]"
+                    className="flex h-full w-full max-w-full flex-col rounded-2xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-4 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#0088FF] hover:shadow-[-4px_0_12px_rgba(0,136,255,0.25)]"
                   >
                     <div className="flex items-start gap-3">
                       {job.companyAvatar ? (
@@ -1049,7 +1049,7 @@ export default function JobsPage() {
                       ) : null}
                     </div>
 
-                    <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+                    <div className="mt-auto flex flex-wrap items-center justify-end gap-2 pt-4">
                       <SaveBookmarkButton variant="icon" resourceType="job" resourceId={job.id} />
                       <Link
                         to={`/job/${job.id}`}

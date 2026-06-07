@@ -15,9 +15,9 @@ type StartConversationButtonProps = {
 
 const variantClass: Record<NonNullable<StartConversationButtonProps["variant"]>, string> = {
   primary:
-    "inline-flex h-11 items-center justify-center rounded-lg bg-[#0088FF] px-4 text-sm font-semibold text-white transition hover:bg-[#006ACC]",
+    "inline-flex h-11 items-center justify-center whitespace-nowrap rounded-lg bg-[#0088FF] px-4 text-sm font-semibold text-white transition hover:bg-[#006ACC]",
   outline:
-    "inline-flex h-11 items-center justify-center rounded-lg border border-[#0088FF] bg-white px-4 text-sm font-semibold text-[#0088FF] transition hover:bg-[#E8F4FF]",
+    "inline-flex h-11 items-center justify-center whitespace-nowrap rounded-lg border border-[#0088FF] bg-white px-4 text-sm font-semibold text-[#0088FF] transition hover:bg-[#E8F4FF]",
 }
 
 export default function StartConversationButton({

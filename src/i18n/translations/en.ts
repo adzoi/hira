@@ -681,6 +681,7 @@ export const en: T = {
   freelancerProfile: {
     title: "Freelancers — Hira",
     languages: "Languages",
+    socialNetworks: "Social networks",
     resume: "Resume (CV)",
     experience: "Experience",
     education: "Education",

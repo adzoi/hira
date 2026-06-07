@@ -332,7 +332,7 @@ export default function ListingDetailPage() {
 
   return (
     <div className="bg-slate-50 page-enter">
-      <main className="mx-auto flex w-full max-w-[1100px] flex-col px-4 py-4 md:px-6 md:py-5 lg:h-[calc(100dvh-11rem)] lg:max-h-[calc(100dvh-11rem)]">
+      <main className="mx-auto flex w-full max-w-[1100px] flex-col px-4 py-4 md:px-6 md:py-5 lg:h-[calc(100dvh-11rem)] lg:max-h-[calc(100dvh-11rem)] lg:min-h-0">
         <Link
           to="/listings"
           className="mb-3 inline-flex shrink-0 items-center gap-1 text-sm font-medium text-slate-600 transition hover:text-[#0088FF]"
@@ -344,7 +344,7 @@ export default function ListingDetailPage() {
         </Link>
 
         {loading ? (
-          <div className="grid min-h-[420px] flex-1 grid-cols-2 gap-4">
+          <div className="grid min-h-[420px] flex-1 grid-cols-1 gap-4 md:grid-cols-2">
             <SkeletonCard lines={8} />
             <SkeletonCard lines={8} avatar />
           </div>
@@ -359,7 +359,7 @@ export default function ListingDetailPage() {
             </Link>
           </div>
         ) : (
-          <div className="grid min-h-0 flex-1 grid-cols-2 gap-4">
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 md:grid-cols-2 md:items-stretch">
             <article className={`${cardClass} p-4 md:p-5`}>
               <div className="flex shrink-0 items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -416,7 +416,7 @@ export default function ListingDetailPage() {
             </article>
 
             <aside className={`${cardClass} p-4 md:p-5`}>
-              <div className="flex shrink-0 items-center gap-3 border-b border-slate-100 pb-4">
+              <div className="flex shrink-0 items-start gap-3 border-b border-slate-100 pb-4">
                 <FreelancerAvailabilityIndicator
                   available={item.isAcceptingNewWork}
                   labelWhenAvailable={t("listingDetail.availableNewWork")}
@@ -450,6 +450,9 @@ export default function ListingDetailPage() {
                     {item.averageRating.toFixed(1)}
                   </p>
                 </div>
+                {!viewerOwnsListing ? (
+                  <SaveBookmarkButton resourceType="freelancer" resourceId={item.freelancerProfileId} variant="icon" />
+                ) : null}
               </div>
 
               <div className="mt-4 shrink-0">
@@ -470,21 +473,20 @@ export default function ListingDetailPage() {
               ) : null}
 
               {!viewerOwnsListing ? (
-                <div className="mt-4 flex shrink-0 flex-wrap gap-2">
+                <div className="mt-4 flex shrink-0 flex-col gap-2 md:flex-row md:flex-wrap">
                   {item.freelancerUserId ? (
                     <StartConversationButton
                       otherUserId={item.freelancerUserId}
                       serviceInquiryId={existingInquiryId}
-                      className="min-w-0 flex-1"
+                      className="min-w-0 w-full md:flex-1"
                     />
                   ) : null}
                   <Link
                     to={`/freelancer/${encodeURIComponent(item.freelancerSlug)}`}
-                    className="inline-flex h-9 flex-1 items-center justify-center rounded-lg bg-[#0088FF] px-3 text-sm font-semibold text-white hover:bg-[#006ACC]"
+                    className="inline-flex h-9 w-full items-center justify-center rounded-lg bg-[#0088FF] px-3 text-sm font-semibold text-white hover:bg-[#006ACC] md:flex-1"
                   >
                     {t("nav.profile")}
                   </Link>
-                  <SaveBookmarkButton resourceType="freelancer" resourceId={item.freelancerProfileId} variant="icon" />
                 </div>
               ) : null}
 
@@ -511,7 +513,7 @@ export default function ListingDetailPage() {
                       type="button"
                       onClick={() => void submitOffer()}
                       disabled={offerSubmitting}
-                      className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#1B2B4B] px-3 text-sm font-semibold text-white hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:opacity-60"
+                      className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#0088FF] px-3 text-sm font-semibold text-white hover:bg-[#006ACC] disabled:opacity-60"
                     >
                       <SendOutlineIcon className="h-3.5 w-3.5" />
                       {offerSubmitting ? "..." : t("common.send")}
