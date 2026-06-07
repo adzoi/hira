@@ -117,13 +117,15 @@ export default function MessagesPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const threadViewportRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<HTMLTextAreaElement>(null)
-  const composerBarRef = useRef<HTMLDivElement>(null)
   const otherLastReadAtRef = useRef<string | null>(null)
   const activeIdRef = useRef<string | null>(activeId)
   const scrollBehaviorRef = useRef<ScrollBehavior>("auto")
   const startChatInFlightRef = useRef(false)
-  const [keyboardInset, setKeyboardInset] = useState(0)
-  const [composerHeight, setComposerHeight] = useState(72)
+  const MOBILE_NAVBAR_HEIGHT = 72
+  const [mobileChatFrame, setMobileChatFrame] = useState({ top: MOBILE_NAVBAR_HEIGHT, bottom: 0 })
+  const [isMobileViewport, setIsMobileViewport] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches,
+  )
 
   const validatedActiveId = useMemo(() => {
     if (!activeId) return null
@@ -464,27 +466,38 @@ export default function MessagesPage() {
   const mobileThreadActive = Boolean(validatedActiveId)
 
   useEffect(() => {
-    if (!mobileThreadActive || window.matchMedia("(min-width: 768px)").matches) return
+    const mq = window.matchMedia("(max-width: 767px)")
+    const update = () => setIsMobileViewport(mq.matches)
+    update()
+    mq.addEventListener("change", update)
+    return () => mq.removeEventListener("change", update)
+  }, [])
+
+  useEffect(() => {
+    if (!mobileThreadActive || !isMobileViewport) return
     const prev = document.body.style.overflow
     document.body.style.overflow = "hidden"
     return () => {
       document.body.style.overflow = prev
     }
-  }, [mobileThreadActive])
+  }, [mobileThreadActive, isMobileViewport])
 
   useEffect(() => {
-    if (!mobileThreadActive || window.matchMedia("(min-width: 768px)").matches) {
-      setKeyboardInset(0)
+    if (!mobileThreadActive || !isMobileViewport) {
+      setMobileChatFrame({ top: MOBILE_NAVBAR_HEIGHT, bottom: 0 })
       return
     }
 
     const vv = window.visualViewport
     if (!vv) return
 
-    const updateKeyboardInset = () => {
-      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
-      setKeyboardInset(inset)
-      if (inset > 0) {
+    const updateMobileChatFrame = () => {
+      const bottom = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+      setMobileChatFrame({
+        top: MOBILE_NAVBAR_HEIGHT + vv.offsetTop,
+        bottom,
+      })
+      if (bottom > 0) {
         requestAnimationFrame(() => {
           threadViewportRef.current?.scrollTo({
             top: threadViewportRef.current.scrollHeight,
@@ -494,24 +507,14 @@ export default function MessagesPage() {
       }
     }
 
-    vv.addEventListener("resize", updateKeyboardInset)
-    vv.addEventListener("scroll", updateKeyboardInset)
-    updateKeyboardInset()
+    vv.addEventListener("resize", updateMobileChatFrame)
+    vv.addEventListener("scroll", updateMobileChatFrame)
+    updateMobileChatFrame()
     return () => {
-      vv.removeEventListener("resize", updateKeyboardInset)
-      vv.removeEventListener("scroll", updateKeyboardInset)
+      vv.removeEventListener("resize", updateMobileChatFrame)
+      vv.removeEventListener("scroll", updateMobileChatFrame)
     }
-  }, [mobileThreadActive, validatedActiveId])
-
-  useEffect(() => {
-    const bar = composerBarRef.current
-    if (!bar) return
-    const updateHeight = () => setComposerHeight(bar.offsetHeight)
-    updateHeight()
-    const observer = new ResizeObserver(updateHeight)
-    observer.observe(bar)
-    return () => observer.disconnect()
-  }, [validatedActiveId, mobileThreadActive, draft])
+  }, [mobileThreadActive, validatedActiveId, isMobileViewport])
 
   const scrollThreadToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     threadViewportRef.current?.scrollTo({
@@ -521,7 +524,7 @@ export default function MessagesPage() {
   }, [])
 
   const onComposerFocus = () => {
-    if (!mobileThreadActive || window.matchMedia("(min-width: 768px)").matches) return
+    if (!mobileThreadActive || !isMobileViewport) return
     window.setTimeout(() => scrollThreadToBottom("smooth"), 300)
   }
 
@@ -539,9 +542,14 @@ export default function MessagesPage() {
     <div
       className={`page-enter bg-[#f8f9fc] ${
         mobileThreadActive
-          ? "fixed inset-x-0 bottom-0 top-[4.5rem] z-30 flex flex-col overflow-hidden md:static md:inset-auto md:top-auto md:z-auto md:min-h-dvh md:overflow-visible"
+          ? "fixed inset-x-0 z-30 flex flex-col overflow-hidden md:static md:inset-auto md:top-auto md:bottom-auto md:z-auto md:min-h-dvh md:overflow-visible"
           : "flex min-h-dvh flex-col"
       }`}
+      style={
+        mobileThreadActive && isMobileViewport
+          ? { top: mobileChatFrame.top, bottom: mobileChatFrame.bottom }
+          : undefined
+      }
     >
       <main
         className={`mx-auto flex w-full max-w-[1200px] min-h-0 flex-1 flex-col ${
@@ -644,7 +652,7 @@ export default function MessagesPage() {
             </div>
           </aside>
 
-          <section className={`flex min-w-0 flex-1 flex-col ${mobileThreadActive ? "flex" : "hidden md:flex"}`}>
+          <section className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${mobileThreadActive ? "flex" : "hidden md:flex"}`}>
             {!validatedActiveId ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center text-slate-500">
                 <ChatIcon className="h-12 w-12 text-slate-300" />
@@ -695,11 +703,6 @@ export default function MessagesPage() {
                 <div
                   ref={threadViewportRef}
                   className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-slate-50/50 px-3 py-4 sm:px-4"
-                  style={
-                    mobileThreadActive
-                      ? { paddingBottom: `${composerHeight + keyboardInset + 12}px` }
-                      : undefined
-                  }
                 >
                   {loadingThread ? (
                     <div className="flex justify-center py-12">
@@ -744,23 +747,7 @@ export default function MessagesPage() {
                   )}
                 </div>
 
-                <div
-                  ref={composerBarRef}
-                  className={`shrink-0 border-t border-slate-100 bg-white p-3 sm:p-4 md:static ${
-                    mobileThreadActive ? "fixed inset-x-0 z-40 md:relative md:inset-auto md:z-auto" : ""
-                  }`}
-                  style={
-                    mobileThreadActive
-                      ? {
-                          bottom: keyboardInset,
-                          paddingBottom:
-                            keyboardInset > 0 ? "0.75rem" : "max(0.75rem, env(safe-area-inset-bottom))",
-                        }
-                      : {
-                          paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))",
-                        }
-                  }
-                >
+                <div className="shrink-0 border-t border-slate-100 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
                   <div className="flex items-end gap-2">
                     <textarea
                       ref={composerRef}
