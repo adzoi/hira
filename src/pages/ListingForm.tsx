@@ -666,18 +666,18 @@ export default function ListingFormPage() {
 
           {displayError ? <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{displayError}</p> : null}
 
-          <div className="mt-6 flex gap-3">
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <button
               type="button"
               onClick={handleSave}
               disabled={!canSubmit}
-              className="h-11 rounded-lg bg-[#0088FF] px-5 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC] disabled:pointer-events-none disabled:opacity-60"
+              className="h-11 w-full rounded-lg bg-[#0088FF] px-5 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC] disabled:pointer-events-none disabled:opacity-60 sm:w-auto"
             >
               {saving ? t("common.inProgress") : t("common.save")}
             </button>
             <Link
               to="/dashboard"
-              className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-300 px-5 text-sm font-semibold text-slate-700"
+              className="inline-flex h-11 w-full items-center justify-center rounded-lg border border-slate-300 px-5 text-sm font-semibold text-slate-700 sm:w-auto"
             >
               {t("common.cancel")}
             </Link>
@@ -685,7 +685,7 @@ export default function ListingFormPage() {
               <button
                 type="button"
                 onClick={() => setVipOpen(true)}
-                className="h-11 rounded-lg border border-[#D4A843] bg-amber-50 px-5 text-sm font-semibold text-[#1B2B4B]"
+                className="h-11 w-full rounded-lg border border-[#D4A843] bg-amber-50 px-5 text-sm font-semibold text-[#1B2B4B] sm:w-auto"
                 disabled={!id}
                 title={!id ? t("listingForm.saveFirstForVip") : undefined}
               >

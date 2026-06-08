@@ -818,9 +818,9 @@ export default function ProfilePage() {
                   setDeletePassword("")
                   setDeleteError("")
                 }}
-                className="rounded-lg border border-[#EF4444] px-3 py-2 text-sm font-semibold text-[#EF4444]"
+                className="shrink-0 whitespace-nowrap rounded-lg border border-[#EF4444] px-2 py-1.5 text-xs font-semibold text-[#EF4444]"
               >
-                🗑 {t("profile.deleteAccount")}
+                {t("profile.deleteAccount")}
               </button>
             </div>
           </div>
@@ -857,7 +857,7 @@ export default function ProfilePage() {
                   const element = document.getElementById("avatar-input") as HTMLInputElement | null
                   element?.click()
                 }}
-                className="rounded-lg bg-[#0088FF] px-4 py-2 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC]"
+                className="whitespace-nowrap rounded-lg bg-[#0088FF] px-2 py-1.5 text-xs font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC]"
               >
                 {avatarUrl ? t("profile.changePhoto") : t("profile.uploadPhoto")}
               </button>
@@ -865,9 +865,9 @@ export default function ProfilePage() {
                 <button
                   type="button"
                   onClick={handleDeleteAvatar}
-                  className="rounded-lg border border-[#EF4444] px-4 py-2 text-sm text-[#EF4444]"
+                  className="whitespace-nowrap rounded-lg border border-[#EF4444] px-2 py-1.5 text-xs font-semibold text-[#EF4444]"
                 >
-                  🗑 {t("profile.deletePhoto")}
+                  {t("profile.deletePhoto")}
                 </button>
               ) : null}
               {avatarUploading ? <p className="text-[13px] text-[#6B7280]">{t("common.loading")}</p> : null}

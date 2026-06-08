@@ -1945,7 +1945,7 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => setFreelancerDashboardTab("listing_offers")}
-                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                  className={`rounded-lg px-2 py-1.5 text-xs font-semibold transition sm:px-3 sm:py-2 sm:text-sm ${
                     freelancerDashboardTab === "listing_offers"
                       ? "bg-[#1B2B4B] text-white"
                       : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
@@ -1956,7 +1956,7 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => setFreelancerDashboardTab("job_offers")}
-                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                  className={`rounded-lg px-2 py-1.5 text-xs font-semibold transition sm:px-3 sm:py-2 sm:text-sm ${
                     freelancerDashboardTab === "job_offers"
                       ? "bg-[#1B2B4B] text-white"
                       : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
@@ -1967,7 +1967,7 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => setFreelancerDashboardTab("my_services")}
-                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                  className={`rounded-lg px-2 py-1.5 text-xs font-semibold transition sm:px-3 sm:py-2 sm:text-sm ${
                     freelancerDashboardTab === "my_services"
                       ? "bg-[#1B2B4B] text-white"
                       : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
@@ -1978,7 +1978,7 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => setFreelancerDashboardTab("ongoing")}
-                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                  className={`rounded-lg px-2 py-1.5 text-xs font-semibold transition sm:px-3 sm:py-2 sm:text-sm ${
                     freelancerDashboardTab === "ongoing"
                       ? "bg-[#1B2B4B] text-white"
                       : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
@@ -1989,7 +1989,7 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => setFreelancerDashboardTab("completed")}
-                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                  className={`rounded-lg px-2 py-1.5 text-xs font-semibold transition sm:px-3 sm:py-2 sm:text-sm ${
                     freelancerDashboardTab === "completed"
                       ? "bg-[#1B2B4B] text-white"
                       : "border border-slate-300 bg-white text-[#1B2B4B] hover:border-[#D4A843]"
@@ -2367,13 +2367,13 @@ export default function DashboardPage() {
 
             {freelancerDashboardTab === "my_services" ? (
               <div className="rounded-xl border border-slate-200 bg-white p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-xl font-bold text-[#1B2B4B]">ჩემი სერვისები</h3>
+              <div className="mb-4 flex flex-nowrap items-center justify-between gap-2">
+                <h3 className="shrink-0 whitespace-nowrap text-base font-bold text-[#1B2B4B] sm:text-xl">ჩემი სერვისები</h3>
                 <button
                   type="button"
                   onClick={() => navigate("/listing/new")}
                   disabled={serviceDrafts.length >= 3}
-                  className="rounded-lg bg-[#1B2B4B] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="shrink-0 rounded-lg bg-[#1B2B4B] px-2 py-1 text-xs font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:cursor-not-allowed disabled:opacity-50 sm:px-4 sm:py-2 sm:text-sm"
                 >
                   ახალი სერვისის დამატება
                 </button>
@@ -2387,7 +2387,7 @@ export default function DashboardPage() {
                     <div key={service.id ?? `new-${originalIndex}`} className="rounded-xl border border-slate-200 bg-slate-50/40 p-4">
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <p className="font-semibold text-[#1B2B4B]">სერვისი #{originalIndex + 1}</p>
-                        <div className="flex items-center gap-2">
+                        <div className="hidden items-center gap-2 sm:flex">
                           {service.id ? (
                             <button
                               type="button"
@@ -2438,6 +2438,37 @@ export default function DashboardPage() {
                           />
                           აქტიური
                         </label>
+                      </div>
+                      <div className="mt-3 flex items-center gap-2 sm:hidden">
+                        {service.id ? (
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/listing/${service.id}/edit`)}
+                            className="text-xs font-semibold text-[#1B2B4B]"
+                          >
+                            რედაქტირება
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!service.id) return
+                            setVipListingId(service.id)
+                            setVipListingTitle(service.title?.trim() || "ჩემი სერვისი")
+                            setVipOpen(true)
+                          }}
+                          className="text-xs font-semibold text-[#D4A843]"
+                          disabled={!service.id}
+                        >
+                          VIP განახლება
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeServiceDraft(originalIndex)}
+                          className="text-xs font-semibold text-red-600"
+                        >
+                          წაშლა
+                        </button>
                       </div>
                     </div>
                   ))}

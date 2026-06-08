@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import Navbar from "../components/Navbar.tsx"
 import { fetchSavedItems, type SavedListEntry } from "../lib/queries/fetchSavedItems.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
@@ -59,7 +58,6 @@ export default function SavedPage() {
 
   return (
     <div className="min-h-screen bg-[#F8F9FC]">
-      <Navbar />
       <main className="mx-auto max-w-3xl px-4 py-8 md:px-6 md:py-10">
         <h1 className="text-2xl font-extrabold text-[#1B2B4B]">{t("saved.heading")}</h1>
         <p className="mt-1 text-sm text-slate-600">{t("saved.description")}</p>
