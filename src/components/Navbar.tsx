@@ -19,6 +19,7 @@ import { getAuthenticatedSession } from "../lib/supabaseAuth.ts"
 import { sanitizeInternalPath } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import LanguageToggle from "./LanguageToggle.tsx"
+import ThemeToggle from "./ThemeToggle.tsx"
 import logoImage from "../../images/logo.png"
 
 function buildNavLinks(t: (key: string) => string) {
@@ -427,6 +428,9 @@ export default function Navbar() {
                   </svg>
                 </Link>
               </div>
+              <div className="hidden md:block">
+                <ThemeToggle variant="icon" />
+              </div>
               <Link
                 to="/messages"
                 aria-label={t("nav.chat")}
@@ -552,6 +556,7 @@ export default function Navbar() {
                   }`}
                 >
                   <LanguageToggle locale={locale} onChange={setLocale} />
+                  <ThemeToggle />
                   <Link to="/settings" onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
                     {t("nav.settings")}
                   </Link>
@@ -610,6 +615,7 @@ export default function Navbar() {
                 }`}
               >
                 <LanguageToggle locale={locale} onChange={setLocale} />
+                <ThemeToggle />
                 <Link to="/settings" onClick={() => setMenuOpen(false)} className="block rounded px-3 py-2 text-sm hover:bg-slate-50">
                   {t("nav.settings")}
                 </Link>
@@ -673,7 +679,10 @@ export default function Navbar() {
             <span className="text-lg">{mobileMenuOpen ? "✕" : "☰"}</span>
           </button>
           {authStatus === "anon" ? (
-            <LanguageToggle locale={locale} onChange={setLocale} variant="flags" />
+            <div className="flex shrink-0 items-center gap-0.5">
+              <ThemeToggle variant="icon" />
+              <LanguageToggle locale={locale} onChange={setLocale} variant="flags" />
+            </div>
           ) : null}
         </div>
       </div>
@@ -728,6 +737,7 @@ export default function Navbar() {
               <div className="h-11 rounded-md bg-slate-100" />
             </div>
           )}
+          <ThemeToggle />
           <LanguageToggle locale={locale} onChange={setLocale} />
         </div>
       </div>
