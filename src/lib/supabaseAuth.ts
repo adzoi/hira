@@ -54,10 +54,59 @@ export async function recoverFromStaleAuthSession(client: SupabaseClient): Promi
 
 let authRecoveryStarted = false
 
+const AUTH_HASH_PARAM_KEYS = ["access_token", "refresh_token", "type", "error", "error_description"] as const
+
+export const AUTH_RECOVERY_HINT_KEY = "hira-auth-recovery"
+
+/** True when the URL hash looks like a Supabase auth redirect (implicit / recovery flow). */
+export function urlHasAuthHash(): boolean {
+  if (typeof window === "undefined") return false
+  const hash = window.location.hash.replace(/^#/, "")
+  if (!hash) return false
+  const params = new URLSearchParams(hash)
+  return AUTH_HASH_PARAM_KEYS.some((key) => params.has(key))
+}
+
+/** Remove auth tokens from the URL and browser history after Supabase has consumed them. */
+export function stripAuthHashFromUrl(): void {
+  if (typeof window === "undefined" || !urlHasAuthHash()) return
+
+  const hash = window.location.hash
+  if (/\btype=recovery\b/.test(hash)) {
+    try {
+      sessionStorage.setItem(AUTH_RECOVERY_HINT_KEY, "1")
+    } catch {
+      // Ignore private browsing / quota errors.
+    }
+  }
+
+  window.history.replaceState(null, "", window.location.pathname)
+}
+
+/** Parse hash tokens once on load, then strip them from the address bar. */
+async function consumeAuthHashFromUrl(client: SupabaseClient): Promise<void> {
+  if (!urlHasAuthHash()) return
+  await client.auth.getSession()
+  stripAuthHashFromUrl()
+}
+
+/** Strip hash tokens if Supabase finishes parsing after the initial getSession. */
+export function initAuthHashCleanup(client: SupabaseClient): () => void {
+  const {
+    data: { subscription },
+  } = client.auth.onAuthStateChange((event) => {
+    if (event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "PASSWORD_RECOVERY") {
+      stripAuthHashFromUrl()
+    }
+  })
+  return () => subscription.unsubscribe()
+}
+
 /** Run once before the app mounts so public pages never send a rejected JWT. */
-export function initSupabaseAuth(client: SupabaseClient): Promise<void> {
+export async function initSupabaseAuth(client: SupabaseClient): Promise<void> {
   if (authRecoveryStarted) return recoverFromStaleAuthSession(client)
   authRecoveryStarted = true
+  await consumeAuthHashFromUrl(client)
   return recoverFromStaleAuthSession(client)
 }
 

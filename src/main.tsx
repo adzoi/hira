@@ -8,12 +8,13 @@ import { ToastProvider } from "./components/ui/ToastProvider.tsx"
 import { LocaleProvider } from "./i18n/LocaleContext.tsx"
 import { queryClient } from "./lib/queryClient.ts"
 import { isSupabaseConfigured, supabase } from "./lib/supabase.ts"
-import { initSupabaseAuth, initAuthStateCleanup } from "./lib/supabaseAuth.ts"
+import { initAuthHashCleanup, initSupabaseAuth, initAuthStateCleanup } from "./lib/supabaseAuth.ts"
 import { initRealtimeAuth } from "./lib/realtimeAuth.ts"
 
 async function bootstrap() {
   if (isSupabaseConfigured && supabase) {
     await initSupabaseAuth(supabase)
+    initAuthHashCleanup(supabase)
     initAuthStateCleanup(supabase, queryClient)
     initRealtimeAuth(supabase)
   }

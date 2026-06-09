@@ -3,11 +3,17 @@ import { useEffect, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import Navbar from "../components/Navbar.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
+import { AUTH_RECOVERY_HINT_KEY } from "../lib/supabaseAuth.ts"
 import { validatePassword } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 
 function recoveryHintFromBrowser(): boolean {
   if (typeof window === "undefined") return false
+  try {
+    if (sessionStorage.getItem(AUTH_RECOVERY_HINT_KEY) === "1") return true
+  } catch {
+    // Ignore storage errors.
+  }
   const hash = window.location.hash
   const searchParams = new URLSearchParams(window.location.search)
   if (/\btype=recovery\b/.test(hash)) return true
@@ -104,6 +110,11 @@ export default function ResetPasswordPage() {
       const { error: upErr } = await supabase.auth.updateUser({ password: passwordResult.value })
       if (upErr) throw upErr
       await supabase.auth.signOut({ scope: "local" }).catch(() => {})
+      try {
+        sessionStorage.removeItem(AUTH_RECOVERY_HINT_KEY)
+      } catch {
+        // Ignore storage errors.
+      }
       navigate("/login", { replace: true, state: { reason: "password-reset" as const } })
     } catch (e) {
       setError(e instanceof Error ? e.message : t("auth.passwordSaveFailed"))
