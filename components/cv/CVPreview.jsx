@@ -9,6 +9,7 @@ import {
   initialsFromName,
   stripUrlForDisplay,
 } from "../../src/lib/cvFromProfile.ts"
+import { compressImageForUpload } from "../../src/lib/compressImageForUpload.ts"
 
 const A4_WIDTH = 794
 const A4_HEIGHT = 1123
@@ -139,6 +140,8 @@ function AvatarEditor({ fullName, avatarUrl, onChangeUrl, onRemove, onPickFile, 
           <img
             src={avatarImageUrl(supabase, avatarUrl) ?? avatarUrl}
             alt=""
+            width={48}
+            height={48}
             className="h-12 w-12 rounded-full object-cover ring-2 ring-white/30"
           />
         ) : (
@@ -245,11 +248,13 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
       } = await supabase.auth.getUser()
       if (!user) throw new Error("Session expired. Please log in again.")
 
-      const extRaw = String(file.name || "").split(".").pop()?.toLowerCase() || ""
-      const ext = /^[a-z0-9]{2,8}$/.test(extRaw) ? extRaw : "jpg"
-      const path = `${user.id}/cv-avatar.${ext}`
+      const compressed = await compressImageForUpload(file, "avatar")
+      const path = `${user.id}/cv-avatar.webp`
 
-      const { error: uploadError } = await supabase.storage.from("avatars").upload(path, file, { upsert: true })
+      const { error: uploadError } = await supabase.storage.from("avatars").upload(path, compressed, {
+        upsert: true,
+        contentType: "image/webp",
+      })
       if (uploadError) throw uploadError
 
       const publicUrl = avatarPublicUrl(supabase, path).trim()
@@ -311,7 +316,7 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
         ? avatarImageUrl(supabase, localCV.avatar_url) ?? localCV.avatar_url
         : localCV.avatar_url
     const avatarBlock = truthyHttpUrl(avatarPrintSrc)
-      ? `<img class="avatar" src="${esc(avatarPrintSrc)}" alt="" />`
+      ? `<img class="avatar" src="${esc(avatarPrintSrc)}" alt="" width="96" height="96" />`
       : truthyStr(localCV.full_name)
         ? `<div class="avatar-fallback">${esc(initialsFromName(localCV.full_name))}</div>`
         : ""
@@ -485,6 +490,8 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
               <img
                 src={avatarImageUrl(supabase, localCV.avatar_url) ?? localCV.avatar_url}
                 alt=""
+                width={96}
+                height={96}
                 className="mx-auto mb-4 h-24 w-24 rounded-full object-cover ring-2 ring-white/30"
               />
             ) : truthyStr(localCV.full_name) ? (

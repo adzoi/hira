@@ -37,6 +37,7 @@ import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { validateCvUpload } from "../lib/uploadValidation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { usePageMeta } from "../lib/usePageMeta.ts"
 import { pickListingDescription, pickListingTitle } from "../lib/listingLocale.ts"
 
 function getInitials(fullName: string) {
@@ -147,12 +148,7 @@ export default function FreelancerProfilePage() {
     freelancer?.id && viewerHirerProfileId && viewerUserId && !viewerIsOwner,
   )
 
-  useEffect(() => {
-    document.title = t("freelancerProfile.title")
-    return () => {
-      document.title = t("brand.name")
-    }
-  }, [t])
+  usePageMeta(t("freelancerProfile.title"), t("freelancerProfile.metaDescription"))
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return
@@ -602,6 +598,8 @@ export default function FreelancerProfilePage() {
                     <img
                       src={profileAvatarDisplayUrl ?? profile.avatar_url}
                       alt={t("common.avatarAlt", { name: profile.full_name })}
+                      width={88}
+                      height={88}
                       loading="lazy"
                       className="h-full w-full rounded-full object-cover"
                     />
@@ -1015,6 +1013,8 @@ export default function FreelancerProfilePage() {
                       <img
                         src={jobOrServiceImageDisplayUrl(supabase, item.image_url, "thumbnail") ?? item.image_url}
                         alt={t("common.portfolioImageAlt", { title: item.title })}
+                        width={400}
+                        height={144}
                         loading="lazy"
                         className="h-36 w-full object-cover"
                       />
@@ -1104,6 +1104,8 @@ export default function FreelancerProfilePage() {
           <img
             src={jobOrServiceImageDisplayUrl(supabase, selectedImageUrl, "detail") ?? selectedImageUrl}
             alt={t("common.portfolioFullSize")}
+            width={900}
+            height={900}
             className="max-h-full max-w-full rounded-lg"
           />
         </button>
@@ -1134,6 +1136,8 @@ export default function FreelancerProfilePage() {
               <img
                 src={profileAvatarDisplayUrl ?? profile.avatar_url}
                 alt={t("common.fullscreenAvatarAlt", { name: profile.full_name })}
+                width={900}
+                height={900}
                 className="max-h-[min(85vh,900px)] max-w-[min(85vw,900px)] rounded-full object-contain"
               />
             ) : (

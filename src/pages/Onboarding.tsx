@@ -10,6 +10,7 @@ import OptionalSocialUrlField from "../components/OptionalSocialUrlField.tsx"
 import { parseFreelancerSocialFields } from "../lib/freelancerSocialFields.ts"
 import { avatarPublicUrl } from "../lib/storageImageUrl.ts"
 import { validateAvatarUpload } from "../lib/uploadValidation.ts"
+import { compressImageForUpload } from "../lib/compressImageForUpload.ts"
 import { fetchOnboarding } from "../lib/queries/fetchOnboarding.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
@@ -224,12 +225,15 @@ export default function OnboardingPage() {
     setAvatarUploading(true)
     setError("")
     try {
-      const fileExt = file.name.split(".").pop()
-      const filePath = `${user.id}/avatar.${fileExt}`
-      const { error: uploadError } = await supabase.storage.from("avatars").upload(filePath, file, { upsert: true })
+      const compressed = await compressImageForUpload(file, "avatar")
+      const filePath = `${user.id}/avatar.webp`
+      const { error: uploadError } = await supabase.storage.from("avatars").upload(filePath, compressed, {
+        upsert: true,
+        contentType: "image/webp",
+      })
       if (uploadError) throw uploadError
       setAvatarUrl(avatarPublicUrl(supabase, filePath))
-      setAvatarPreview(URL.createObjectURL(file))
+      setAvatarPreview(URL.createObjectURL(compressed))
     } catch (err: any) {
       setError(`ავატარის ატვირთვა ვერ მოხერხდა: ${err.message}`)
     } finally {
@@ -919,6 +923,8 @@ export default function OnboardingPage() {
                       <img
                         src={avatarPreview}
                         alt="Avatar preview"
+                        width={100}
+                        height={100}
                         className="mb-3 h-[100px] w-[100px] rounded-full object-cover"
                       />
                     )}

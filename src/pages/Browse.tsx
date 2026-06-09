@@ -11,6 +11,7 @@ import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
+import { usePageMeta } from "../lib/usePageMeta.ts"
 import { matchesLocationFilter } from "../lib/marketplaceFilters.ts"
 import {
   catalogSelectionMatchesEntity,
@@ -381,12 +382,7 @@ export default function BrowsePage() {
     [filterRootCategoryId, filterMidCategoryId],
   )
 
-  useEffect(() => {
-    document.title = t("browse.title")
-    return () => {
-      document.title = t("brand.name")
-    }
-  }, [t])
+  usePageMeta(t("browse.title"), t("browse.metaDescription"))
 
   useEffect(() => {
     const query = searchParams.get("q")
@@ -836,6 +832,8 @@ export default function BrowsePage() {
                                 <img
                                   src={avatarImageUrl(supabase, freelancer.avatarUrl) ?? freelancer.avatarUrl}
                                   alt={t("common.avatarAlt", { name: freelancer.fullName })}
+                                  width={64}
+                                  height={64}
                                   loading="lazy"
                                   onError={(e) => {
                                     e.currentTarget.style.display = "none"

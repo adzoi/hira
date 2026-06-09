@@ -1,5 +1,10 @@
 /// <reference types="vite/client" />
 
+declare module "*.webp" {
+  const src: string
+  export default src
+}
+
 declare module "*.jsx" {
   import type { ComponentType } from "react"
   const Component: ComponentType<Record<string, unknown>>

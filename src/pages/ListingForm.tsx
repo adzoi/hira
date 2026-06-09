@@ -20,6 +20,8 @@ import { fetchListingForm } from "../lib/queries/fetchListingForm.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { usePageMeta } from "../lib/usePageMeta.ts"
+import { compressImageForUpload } from "../lib/compressImageForUpload.ts"
 
 type ListingMeta = {
   categoryId: string | null
@@ -36,44 +38,6 @@ type TagOption = {
 
 const MAX_LISTING_IMAGES = 3
 const MAX_INPUT_IMAGE_BYTES = 10 * 1024 * 1024
-const MAX_IMAGE_EDGE = 1600
-const TARGET_IMAGE_BYTES = 700 * 1024
-
-async function fileToImageBitmap(file: File): Promise<ImageBitmap> {
-  return await createImageBitmap(file)
-}
-
-async function canvasToJpegBlob(canvas: HTMLCanvasElement, quality: number, failMsg: string): Promise<Blob> {
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality))
-  if (!blob) throw new Error(failMsg)
-  return blob
-}
-
-async function compressImage(file: File, failMsg: string): Promise<Blob> {
-  const bitmap = await fileToImageBitmap(file)
-  try {
-    const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(bitmap.width, bitmap.height))
-    const width = Math.max(1, Math.round(bitmap.width * scale))
-    const height = Math.max(1, Math.round(bitmap.height * scale))
-
-    const canvas = document.createElement("canvas")
-    canvas.width = width
-    canvas.height = height
-    const ctx = canvas.getContext("2d")
-    if (!ctx) throw new Error(failMsg)
-    ctx.drawImage(bitmap, 0, 0, width, height)
-
-    let quality = 0.86
-    let best = await canvasToJpegBlob(canvas, quality, failMsg)
-    while (best.size > TARGET_IMAGE_BYTES && quality > 0.45) {
-      quality -= 0.08
-      best = await canvasToJpegBlob(canvas, quality, failMsg)
-    }
-    return best
-  } finally {
-    bitmap.close()
-  }
-}
 
 function buildListingDescription(description: string, meta: ListingMeta) {
   const cleanedMeta: ListingMeta = {
@@ -126,9 +90,7 @@ export default function ListingFormPage() {
   const [newImageFiles, setNewImageFiles] = useState<File[]>([])
   const [vipOpen, setVipOpen] = useState(false)
 
-  useEffect(() => {
-    document.title = isEdit ? t("listingForm.editTitle") : t("listingForm.newTitle")
-  }, [isEdit, t])
+  usePageMeta(isEdit ? t("listingForm.editTitle") : t("listingForm.newTitle"), t("listingForm.metaDescription"))
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return
@@ -367,15 +329,14 @@ export default function ListingFormPage() {
       let uploadedImagePaths: string[] = []
       if (newImageFiles.length > 0) {
         const bucket = "service-images"
-        const imageFailMsg = t("listingForm.imageProcessFailed")
-        const compressedFiles = await Promise.all(newImageFiles.map((file) => compressImage(file, imageFailMsg)))
+        const compressedFiles = await Promise.all(newImageFiles.map((file) => compressImageForUpload(file, "portfolio")))
         uploadedImagePaths = []
         for (let i = 0; i < compressedFiles.length; i += 1) {
           const blob = compressedFiles[i]
-          const safeName = `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 8)}.jpg`
+          const safeName = `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 8)}.webp`
           const path = `${freelancerProfileId}/${listingId}/${safeName}`
           const { error: uploadError } = await supabase.storage.from(bucket).upload(path, blob, {
-            contentType: "image/jpeg",
+            contentType: "image/webp",
             upsert: false,
           })
           if (uploadError) {
@@ -630,6 +591,8 @@ export default function ListingFormPage() {
                         <img
                           src={supabase ? serviceImageThumbnailUrl(supabase, url) : ""}
                           alt=""
+                          width={160}
+                          height={80}
                           className="h-20 w-full object-cover"
                         />
                         <button
@@ -643,7 +606,13 @@ export default function ListingFormPage() {
                     ))}
                     {newImagePreviews.map((preview, index) => (
                       <div key={`${preview.file.name}-${index}`} className="overflow-hidden rounded-md border border-slate-200 bg-white">
-                        <img src={preview.url} alt="" className="h-20 w-full object-cover" />
+                        <img
+                          src={preview.url}
+                          alt=""
+                          width={160}
+                          height={80}
+                          className="h-20 w-full object-cover"
+                        />
                         <button
                           type="button"
                           onClick={() => removeNewImage(index)}

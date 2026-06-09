@@ -31,7 +31,7 @@ export function buildContentSecurityPolicy(opts = {}) {
   const directives = [
     "default-src 'self'",
     `script-src ${scriptSrc.join(" ")}`,
-    "style-src 'self' https://fonts.googleapis.com https://*.paypal.com https://*.paypalobjects.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.paypal.com https://*.paypalobjects.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: blob: https://*.supabase.co https://*.paypal.com https://*.paypalobjects.com",
     "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.paypal.com https://*.paypalobjects.com",
@@ -74,6 +74,20 @@ export function buildSecurityHeaders(opts = {}) {
   return headers
 }
 
+const LONG_CACHE = "public, max-age=31536000, immutable"
+
+const LONG_CACHE_PATHS = [
+  "/assets/*",
+  "/*.js",
+  "/*.css",
+  "/*.webp",
+  "/*.png",
+  "/*.jpg",
+  "/*.jpeg",
+  "/*.svg",
+  "/*.woff2",
+]
+
 /** Netlify / Cloudflare Pages `_headers` file body (no per-request nonce; prod build has no inline scripts). */
 export function buildHeadersFile(opts = {}) {
   const headers = buildSecurityHeaders(opts)
@@ -81,6 +95,16 @@ export function buildHeadersFile(opts = {}) {
   for (const [name, value] of Object.entries(headers)) {
     lines.push(`  ${name}: ${value}`)
   }
+  for (const path of LONG_CACHE_PATHS) {
+    lines.push("", `${path}`, `  Cache-Control: ${LONG_CACHE}`)
+  }
   lines.push("")
   return lines.join("\n")
+}
+
+/** @param {string} pathname */
+export function longCacheControlForPath(pathname) {
+  if (pathname.startsWith("/assets/")) return LONG_CACHE
+  if (/\.(?:js|css|webp|png|jpe?g|svg|woff2)$/i.test(pathname)) return LONG_CACHE
+  return null
 }

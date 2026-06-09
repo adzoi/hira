@@ -70,6 +70,8 @@ export const en: T = {
   about: {
     title: "About us",
     pageTitle: "About us — Hira",
+    metaDescription:
+      "Our mission is to connect Georgian talent with opportunity — so everyone can grow professionally in their own country.",
     heroHeading: "Hira — Georgian freelance platform",
     heroMission:
       "Our mission is to connect Georgian talent with opportunity — so everyone can grow professionally in their own country.",
@@ -400,6 +402,7 @@ export const en: T = {
     areYouSure: "Are you sure?",
     dontHaveOne: "I don't have one",
     pageNotFound: "Page not found",
+    notFoundMetaDescription: "The page you requested was not found on Hira.",
     goHome: "Go to home",
     stepOf: "Step {step}/{total}",
     subcategory: "Subcategory",
@@ -511,6 +514,10 @@ export const en: T = {
     registerTitle: "Sign up — Hira",
     forgotTitle: "Reset password — Hira",
     resetTitle: "New password — Hira",
+    loginMetaDescription: "Sign in to your Hira account to manage listings, jobs, and messages.",
+    registerMetaDescription: "Create a free Hira account as a freelancer or hirer on Georgia's freelance marketplace.",
+    forgotMetaDescription: "Request a password reset link for your Hira account.",
+    resetMetaDescription: "Set a new password for your Hira account.",
     loginHeading: "Log in to your account",
     registerHeading: "Sign up",
     loginForPostJob: "Sign in to post a job",
@@ -547,12 +554,14 @@ export const en: T = {
     checkingLink: "Verifying link…",
     invalidRecoveryLink: "Recovery link not found, expired, or already used.",
     repeatPassword: "Repeat password",
-    passwordMinPlaceholder: "Min. 6 characters",
+    passwordMinPlaceholder: "Min. 8 characters, letter + number",
     passwordSaveFailed: "Could not save password.",
     supabaseNotConfigured: "Supabase is not configured.",
   },
   home: {
     title: "Hira — Georgian freelance platform",
+    metaDescription:
+      "Georgian freelance marketplace — find services, hire professionals, and discover jobs in one place.",
     heroBrand: "Hira",
     heroTagline: "Georgian freelance platform",
     searchPlaceholder: "What are you looking for?",
@@ -590,6 +599,7 @@ export const en: T = {
   },
   browse: {
     title: "Freelancers — Hira",
+    metaDescription: "Browse Georgian freelancers by skill, rating, availability, and price on Hira.",
     availability: "Availability",
     minRating: "Min. rating",
     priceRange: "Price range (₾)",
@@ -599,6 +609,7 @@ export const en: T = {
   },
   listings: {
     title: "Service listings — Hira",
+    metaDescription: "Search service listings from Georgian freelancers — filter by category, price, and rating.",
     detailedSearch: "Detailed search",
     minFreelancerRating: "Min. rating (freelancer)",
     listingPriceRange: "Listing price range (₾)",
@@ -618,6 +629,7 @@ export const en: T = {
   },
   jobs: {
     title: "Jobs — Hira",
+    metaDescription: "Find freelance jobs and projects posted by Georgian hirers on Hira.",
     searchPlaceholder: "Title, description, skills, category…",
     budgetType: "Budget type",
     budgetRange: "Budget range",
@@ -646,6 +658,7 @@ export const en: T = {
   },
   jobDetail: {
     title: "Jobs — Hira",
+    metaDescription: "View job details, requirements, budget, and apply on Hira.",
     requiredSkills: "Required skills",
     oneTime: "One-time",
     ongoing: "Ongoing",
@@ -661,6 +674,7 @@ export const en: T = {
   },
   hirers: {
     title: "Hirers — Hira",
+    metaDescription: "Discover companies and hirers posting freelance projects on Hira.",
     industry: "Industry",
     found: "Found {count} hirers",
     listingsCompleted: "Listings / completed",
@@ -670,6 +684,7 @@ export const en: T = {
   },
   hirerPublic: {
     title: "Hirer profile — Hira",
+    metaDescription: "View a hirer company profile, active job listings, and ratings on Hira.",
     backToHirers: "← Hirers",
     notFound: "Hirer not found",
     allHirers: "All hirers",
@@ -682,6 +697,7 @@ export const en: T = {
   },
   freelancerProfile: {
     title: "Freelancers — Hira",
+    metaDescription: "View a freelancer profile, portfolio, skills, reviews, and services on Hira.",
     languages: "Languages",
     socialNetworks: "Social networks",
     resume: "Resume (CV)",
@@ -698,6 +714,7 @@ export const en: T = {
     subscribedStat: "Following",
   },
   listingDetail: {
+    metaDescription: "View service listing details, pricing, and contact the freelancer on Hira.",
     backToListings: "Back to listings",
     subcategory: "Subcategory",
     makeOffer: "Make an offer",
@@ -713,6 +730,7 @@ export const en: T = {
   listingForm: {
     newTitle: "New listing — Hira",
     editTitle: "Edit listing — Hira",
+    metaDescription: "Create or edit your service listing on Hira.",
     addNew: "Add new listing",
     editListing: "Edit listing",
     backToDashboard: "Back to dashboard",
@@ -760,6 +778,7 @@ export const en: T = {
   postJob: {
     postTitle: "Post a job — Hira",
     editTitle: "Edit listing — Hira",
+    metaDescription: "Create or edit a job listing and find freelancers on Hira.",
     postHeading: "Post a job",
     editHeading: "Edit listing",
     postSubtitle: "Create a new listing and find the best freelancer.",
@@ -848,6 +867,7 @@ export const en: T = {
   },
   dashboard: {
     title: "Dashboard — Hira",
+    metaDescription: "Manage your listings, jobs, applications, offers, and reviews on Hira.",
     heading: "Dashboard",
     hello: "Hello, {name}!",
     completeProfile: "Complete your profile",
@@ -880,6 +900,7 @@ export const en: T = {
   },
   profile: {
     title: "Profile — Hira",
+    metaDescription: "Edit your Hira profile, skills, experience, avatar, and portfolio.",
     heading: "My profile",
     emailPassword: "Email and password",
     changeEmail: "Change email",
@@ -903,6 +924,8 @@ export const en: T = {
     newEmail: "New email",
     newEmailPlaceholder: "New address",
     currentPassword: "Current password",
+    passwordPolicyNotice:
+      "Your current password may not meet our new security requirements. We recommend updating it in settings.",
     updatePassword: "Update password",
     available: "Available",
     unavailable: "Unavailable",
@@ -919,7 +942,9 @@ export const en: T = {
   },
   messages: {
     heading: "Chat",
+    title: "Messages — Hira",
     subtitle: "Messaging with hirers and freelancers",
+    metaDescription: "Chat with hirers and freelancers on Hira.",
     conversations: "Conversations",
     startConversation: "Start a conversation",
     selectOrStart: "Select a conversation or start a new one",
@@ -935,6 +960,7 @@ export const en: T = {
   },
   saved: {
     title: "Saved — Hira",
+    metaDescription: "Freelancers, hirers, jobs, and services you saved on Hira.",
     heading: "Saved",
     description: "Freelancers, hirers, jobs, and services you want to revisit later.",
     typeFreelancer: "Freelancer",
@@ -959,6 +985,8 @@ export const en: T = {
   cv: {
     generatorTitle: "CV generator — Hira",
     publicTitle: "Public CV — Hira",
+    generatorMetaDescription: "Build and download a professional CV from your Hira profile.",
+    publicMetaDescription: "View a public CV shared from Hira.",
     loadFailed: "Could not load CV.",
   },
   vip: {

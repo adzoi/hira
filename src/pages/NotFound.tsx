@@ -1,9 +1,11 @@
 import { Link } from "react-router-dom"
 import Navbar from "../components/Navbar.tsx"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { usePageMeta } from "../lib/usePageMeta.ts"
 
 export default function NotFoundPage() {
   const { t } = useTranslation()
+  usePageMeta(t("common.pageNotFound"), t("common.notFoundMetaDescription"))
   return (
     <div className="min-h-screen bg-[#F8F9FC]">
       <Navbar />

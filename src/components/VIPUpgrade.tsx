@@ -1,4 +1,4 @@
-import { PayPalButtons } from "@paypal/react-paypal-js"
+import { PayPalButtons, PayPalScriptProvider } from "@paypal/react-paypal-js"
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type PointerEvent } from "react"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
@@ -446,12 +446,19 @@ export default function VIPUpgrade({
   }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
-      onPointerDown={handleBackdropPointerDown}
+    <PayPalScriptProvider
+      options={{
+        clientId: paypalClientId.trim(),
+        currency: "USD",
+        intent: "capture",
+      }}
     >
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+        onPointerDown={handleBackdropPointerDown}
+      >
       <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-slate-200 bg-[#F8F9FC] p-5 shadow-xl sm:p-6">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -549,5 +556,6 @@ export default function VIPUpgrade({
         </p>
       </div>
     </div>
+    </PayPalScriptProvider>
   )
 }

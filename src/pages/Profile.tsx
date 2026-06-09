@@ -18,11 +18,13 @@ import { avatarImageUrl, avatarPublicUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { isAuthRateLimited, signInWithRateLimit } from "../lib/authRateLimit"
 import { validateAvatarUpload } from "../lib/uploadValidation.ts"
-import { LIMITS, validateOptionalUrl, validateTextField } from "../lib/validation.ts"
+import { compressImageForUpload } from "../lib/compressImageForUpload.ts"
+import { LIMITS, validateOptionalUrl, validatePassword, validateTextField } from "../lib/validation.ts"
 import { fetchProfile, SKILL_PICKER_UNCATEGORIZED } from "../lib/queries/fetchProfile.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { usePageMeta } from "../lib/usePageMeta.ts"
 
 type SkillCategoryRow = { id: string; name_ka: string; parent_id: string | null }
 
@@ -187,10 +189,7 @@ export default function ProfilePage() {
     return m
   }, [skillsCatalog])
 
-  useEffect(() => {
-    document.title = t("profile.title")
-  }, [t])
-
+  usePageMeta(t("profile.title"), t("profile.metaDescription"))
 
   useEffect(() => {
     if (!langDropdownOpen) return
@@ -263,9 +262,12 @@ export default function ProfilePage() {
     setAvatarUploading(true)
     setError("")
     try {
-      const ext = file.name.split(".").pop()
-      const path = `${user.id}/avatar.${ext}`
-      const { error: uploadError } = await supabase.storage.from("avatars").upload(path, file, { upsert: true })
+      const compressed = await compressImageForUpload(file, "avatar")
+      const path = `${user.id}/avatar.webp`
+      const { error: uploadError } = await supabase.storage.from("avatars").upload(path, compressed, {
+        upsert: true,
+        contentType: "image/webp",
+      })
       if (uploadError) throw uploadError
       setAvatarUrl(avatarPublicUrl(supabase, path))
     } catch (err: any) {
@@ -767,12 +769,13 @@ export default function ProfilePage() {
       setAccountErr("შეიყვანეთ მიმდინარე და ახალი პაროლი.")
       return
     }
-    if (newPassword.length < 6) {
-      setAccountErr("ახალი პაროლი უნდა შედგებოდეს მინიმუმ 6 სიმბოლოსგან.")
+    const newPasswordResult = validatePassword(newPassword)
+    if (!newPasswordResult.ok) {
+      setAccountErr(newPasswordResult.message)
       return
     }
-    if (newPassword !== confirmNewPassword) {
-      setAccountErr("პაროლი არ ემთხვევა.")
+    if (newPasswordResult.value !== confirmNewPassword) {
+      setAccountErr(t("validation.passwordsMismatch"))
       return
     }
     setPasswordBusy(true)
@@ -787,7 +790,7 @@ export default function ProfilePage() {
         }
         return
       }
-      const { error: pwErr } = await supabase.auth.updateUser({ password: newPassword })
+      const { error: pwErr } = await supabase.auth.updateUser({ password: newPasswordResult.value })
       if (pwErr) throw pwErr
       setAccountMessage("პაროლი განახლდა.")
       setCurrentPasswordPw("")
@@ -830,6 +833,8 @@ export default function ProfilePage() {
                 <img
                   src={avatarImageUrl(supabase, avatarUrl) ?? avatarUrl}
                   alt={t("profile.avatarAlt")}
+                  width={100}
+                  height={100}
                   className="h-[100px] w-[100px] rounded-full object-cover"
                 />
               ) : (
@@ -962,6 +967,9 @@ export default function ProfilePage() {
             </button>
             {passwordAccordionOpen ? (
               <div className="mt-3 space-y-3 rounded-lg border border-slate-100 bg-white p-4">
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                  {t("profile.passwordPolicyNotice")}
+                </p>
                 <label className="block">
                   <span className="mb-1 block text-base font-semibold text-gray-900">{t("profile.currentPassword")}</span>
                   <input

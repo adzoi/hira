@@ -1,7 +1,7 @@
-import { useEffect } from "react"
 import { Link } from "react-router-dom"
 import I18nText from "../i18n/I18nText.tsx"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { usePageMeta } from "../lib/usePageMeta.ts"
 
 const valueCards = [
   { titleKey: "about.qualityTitle", descKey: "about.qualityDesc" },
@@ -12,9 +12,7 @@ const valueCards = [
 export default function AboutPage() {
   const { t } = useTranslation()
 
-  useEffect(() => {
-    document.title = t("about.pageTitle")
-  }, [t])
+  usePageMeta(t("about.pageTitle"), t("about.metaDescription"))
 
   return (
     <main className="page-enter bg-slate-50">

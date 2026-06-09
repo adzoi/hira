@@ -16,6 +16,7 @@ import { avatarImageUrl, serviceImageDetailUrl, serviceImageThumbnailUrl } from 
 import { validateInquiryMessage, validateMoneyAmount } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { pickListingDescription, pickListingTitle } from "../lib/listingLocale.ts"
+import { usePageMeta } from "../lib/usePageMeta.ts"
 
 type ListingMeta = {
   categoryId: string | null
@@ -228,6 +229,23 @@ export default function ListingDetailPage() {
     [item, parsed.description, locale],
   )
 
+  const pageTitle = useMemo(
+    () =>
+      item
+        ? t("common.titleWithBrand", { title: displayTitle, brand: t("brand.name") })
+        : t("brand.name"),
+    [item, displayTitle, t],
+  )
+
+  const pageDescription = useMemo(() => {
+    if (!item) return undefined
+    const desc = displayDescription.trim()
+    if (desc) return desc.length > 160 ? desc.slice(0, 160) : desc
+    return t("listingDetail.metaDescription")
+  }, [item, displayDescription, t])
+
+  usePageMeta(pageTitle, pageDescription)
+
   useEffect(() => {
     const sid = parsed.meta.subcategoryId?.trim()
     if (!sid || !isSupabaseConfigured || !supabase) {
@@ -243,14 +261,6 @@ export default function ListingDetailPage() {
       cancelled = true
     }
   }, [parsed.meta.subcategoryId, supabase])
-
-  useEffect(() => {
-    if (!item) return
-    document.title = t("common.titleWithBrand", { title: displayTitle, brand: t("brand.name") })
-    return () => {
-      document.title = t("brand.name")
-    }
-  }, [item, displayTitle, t])
 
   const canMakeOffer =
     Boolean(item) &&
@@ -386,6 +396,8 @@ export default function ListingDetailPage() {
                     <img
                       src={imagePublicUrls[Math.min(selectedImage, imagePublicUrls.length - 1)].detail}
                       alt=""
+                      width={800}
+                      height={450}
                       className="h-36 w-full object-cover md:h-44"
                     />
                   </div>
@@ -400,7 +412,14 @@ export default function ListingDetailPage() {
                             selectedImage === index ? "border-[#0088FF]" : "border-slate-200"
                           }`}
                         >
-                          <img src={urls.thumb} alt="" className="h-full w-full object-cover" />
+                          <img
+                            src={urls.thumb}
+                            alt=""
+                            width={80}
+                            height={80}
+                            loading="lazy"
+                            className="h-full w-full object-cover"
+                          />
                         </button>
                       ))}
                     </div>
@@ -430,6 +449,9 @@ export default function ListingDetailPage() {
                       <img
                         src={avatarImageUrl(supabase, item.avatarUrl) ?? item.avatarUrl}
                         alt=""
+                        width={56}
+                        height={56}
+                        loading="lazy"
                         className="h-full w-full object-cover"
                       />
                     ) : (

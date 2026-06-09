@@ -89,6 +89,14 @@ export function validateEmail(raw: string): FieldResult<string> {
   return { ok: true, value: t }
 }
 
+/** Login only — verify presence and max length; policy is not enforced on sign-in. */
+export function validatePasswordForLogin(raw: string): FieldResult<string> {
+  if (typeof raw !== "string" || raw.length === 0) return fail(msg("validation.passwordRequired"))
+  if (raw.length > LIMITS.passwordMax) return fail(msg("validation.passwordTooLong"))
+  return { ok: true, value: raw }
+}
+
+/** Registration, password change, and password reset — full policy. */
 export function validatePassword(raw: string): FieldResult<string> {
   if (typeof raw !== "string") return fail(msg("validation.passwordRequired"))
   if (raw.length < LIMITS.passwordMin) return fail(msg("validation.passwordTooShort", { min: LIMITS.passwordMin }))

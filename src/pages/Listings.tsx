@@ -17,6 +17,7 @@ import { fetchListingsPagePayload } from "../lib/marketplaceEdge.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { isSupabaseConfigured, supabase, formatSupabaseClientError } from "../lib/supabase"
+import { usePageMeta } from "../lib/usePageMeta.ts"
 import { mergeFreelancerCompletedWorkCounts } from "../lib/freelancerCompletedWorkCounts.ts"
 import { formatCityForDisplay, matchesLocationFilter } from "../lib/marketplaceFilters.ts"
 import {
@@ -606,12 +607,7 @@ export default function ListingsPage() {
     }
   }
 
-  useEffect(() => {
-    document.title = t("listings.title")
-    return () => {
-      document.title = t("brand.name")
-    }
-  }, [t])
+  usePageMeta(t("listings.title"), t("listings.metaDescription"))
 
   useEffect(() => {
     const query = searchParams.get("q")
@@ -1143,6 +1139,8 @@ export default function ListingsPage() {
                                   <img
                                     src={avatarImageUrl(supabase, item.avatarUrl) ?? item.avatarUrl}
                                     alt=""
+                                    width={64}
+                                    height={64}
                                     loading="lazy"
                                     className="h-16 w-16 rounded-full object-cover"
                                   />

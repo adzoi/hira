@@ -19,7 +19,7 @@ import { getAuthenticatedSession } from "../lib/supabaseAuth.ts"
 import { sanitizeInternalPath } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import LanguageToggle from "./LanguageToggle.tsx"
-import logoImage from "../../images/logo.png"
+import logoImage from "../../images/logo.webp"
 
 function buildNavLinks(t: (key: string) => string) {
   return [
@@ -379,7 +379,13 @@ export default function Navbar() {
     <header className={`sticky top-0 z-40 border-b border-slate-200 bg-white font-sans ${isScrolled ? "shadow-sm" : ""}`}>
       <div className="mx-auto grid w-full max-w-none grid-cols-[auto_1fr_auto] items-center gap-2 px-4 py-3 md:gap-3 md:pl-12 md:pr-6 lg:pl-16 lg:pr-8">
         <Link to="/" className="inline-flex shrink-0 items-center" aria-label={t("nav.home")}>
-          <img src={logoImage} alt={t("brand.name")} className="h-[52px] w-auto object-contain" />
+          <img
+            src={logoImage}
+            alt={t("brand.name")}
+            width={280}
+            height={105}
+            className="h-[52px] w-auto object-contain"
+          />
         </Link>
 
         <nav className="hidden min-w-0 items-center justify-center gap-1.5 text-sm font-medium md:flex lg:gap-2">
@@ -539,6 +545,8 @@ export default function Navbar() {
                     <img
                       src={navbarAvatarSrc ?? avatarUrl}
                       alt={t("nav.userAvatar")}
+                      width={36}
+                      height={36}
                       loading="lazy"
                       className="h-full w-full object-cover"
                     />
@@ -595,6 +603,8 @@ export default function Navbar() {
                     <img
                       src={navbarAvatarSrc ?? avatarUrl}
                       alt={t("nav.userAvatar")}
+                      width={32}
+                      height={32}
                       loading="lazy"
                       className="h-full w-full object-cover"
                     />

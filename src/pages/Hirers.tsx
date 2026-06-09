@@ -11,6 +11,7 @@ import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
+import { usePageMeta } from "../lib/usePageMeta.ts"
 import { formatCityForDisplay, formatIndustryForDisplay, matchesLocationFilter } from "../lib/marketplaceFilters.ts"
 import { normalizeSearchInput, safeExternalHref } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
@@ -334,12 +335,7 @@ export default function HirersPage() {
   const [draftLocationFilter, setDraftLocationFilter] = useState("")
   const [avatarPreview, setAvatarPreview] = useState<{ companyName: string; avatarUrl: string | null } | null>(null)
 
-  useEffect(() => {
-    document.title = t("hirers.title")
-    return () => {
-      document.title = t("brand.name")
-    }
-  }, [t])
+  usePageMeta(t("hirers.title"), t("hirers.metaDescription"))
 
   useEffect(() => {
     if (!advancedDropdownOpen) return
@@ -548,6 +544,8 @@ export default function HirersPage() {
                               <img
                                 src={avatarImageUrl(supabase, h.avatarUrl) ?? h.avatarUrl}
                                 alt=""
+                                width={56}
+                                height={56}
                                 loading="lazy"
                                 className="h-full w-full object-cover"
                               />
@@ -651,6 +649,8 @@ export default function HirersPage() {
               <img
                 src={avatarImageUrl(supabase, avatarPreview.avatarUrl) ?? avatarPreview.avatarUrl}
                 alt={`${avatarPreview.companyName} ${t("common.logo")}`}
+                width={900}
+                height={900}
                 className="max-h-[min(85vh,900px)] max-w-[min(85vw,900px)] rounded-2xl object-contain sm:rounded-full"
               />
             ) : (

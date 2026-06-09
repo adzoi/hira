@@ -1,6 +1,6 @@
-import { useEffect } from "react"
 import I18nText from "../i18n/I18nText.tsx"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { usePageMeta } from "../lib/usePageMeta.ts"
 
 export type InfoSection = {
   heading: string
@@ -24,9 +24,7 @@ export default function InfoPageLayout({
 }: InfoPageLayoutProps) {
   const { t } = useTranslation()
 
-  useEffect(() => {
-    document.title = t(pageTitle)
-  }, [t, pageTitle])
+  usePageMeta(t(pageTitle), heroSubtitle ? t(heroSubtitle) : undefined)
 
   return (
     <main className="page-enter bg-slate-50">

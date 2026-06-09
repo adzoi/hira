@@ -17,6 +17,7 @@ import { formatJobBudget, jobApplicationRateLabel } from "../lib/listingPrice.ts
 import { formatHirerContactForApplicant, hirerContactCopyText } from "../lib/jobContactPreference.ts"
 import { validateCoverLetter, validateMoneyAmount } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { usePageMeta } from "../lib/usePageMeta.ts"
 import { pickListingTitle } from "../lib/listingLocale.ts"
 import { displayJobDescription } from "../lib/jobDescriptionDisplay.ts"
 
@@ -112,12 +113,7 @@ export default function JobDetailPage() {
     setHirerContact(data.hirerContact)
   }, [data])
 
-  useEffect(() => {
-    document.title = t("jobDetail.title")
-    return () => {
-      document.title = t("brand.name")
-    }
-  }, [t])
+  usePageMeta(t("jobDetail.title"), t("jobDetail.metaDescription"))
 
   useEffect(() => {
     if (!supabase || !job?.id) return
@@ -345,6 +341,8 @@ export default function JobDetailPage() {
                   <img
                     src={imagePublicUrls[Math.min(selectedImage, imagePublicUrls.length - 1)].detail}
                     alt=""
+                    width={800}
+                    height={450}
                     className="h-36 w-full object-cover md:h-44"
                   />
                 </div>
@@ -359,7 +357,14 @@ export default function JobDetailPage() {
                           selectedImage === index ? "border-[#0088FF]" : "border-slate-200"
                         }`}
                       >
-                        <img src={urls.thumb} alt="" className="h-full w-full object-cover" />
+                        <img
+                          src={urls.thumb}
+                          alt=""
+                          width={80}
+                          height={80}
+                          loading="lazy"
+                          className="h-full w-full object-cover"
+                        />
                       </button>
                     ))}
                   </div>
@@ -399,6 +404,9 @@ export default function JobDetailPage() {
                   <img
                     src={avatarImageUrl(supabase, job.hirer_avatar_url) ?? job.hirer_avatar_url}
                     alt=""
+                    width={56}
+                    height={56}
+                    loading="lazy"
                     className="h-full w-full object-cover"
                   />
                 ) : (

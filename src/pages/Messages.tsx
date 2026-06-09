@@ -31,6 +31,7 @@ import { unreadCountsQueryKey } from "../lib/unreadCountsCache.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase.ts"
 import { LIMITS, validateUuid } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { usePageMeta } from "../lib/usePageMeta.ts"
 
 function formatRelativeTime(iso: string | null, t: (key: string, params?: Record<string, string | number>) => string): string {
   if (!iso) return ""
@@ -66,7 +67,18 @@ function Avatar({
     <span
       className={`flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#E8F4FF] font-bold text-[#1B2B4B] ${dim}`}
     >
-      {avatarUrl ? <img src={avatarUrl} alt="" className="h-full w-full object-cover" /> : initials(name)}
+      {avatarUrl ? (
+        <img
+          src={avatarUrl}
+          alt=""
+          width={size === "sm" ? 36 : 44}
+          height={size === "sm" ? 36 : 44}
+          loading="lazy"
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        initials(name)
+      )}
     </span>
   )
 }
@@ -96,6 +108,7 @@ function ProfileLink({
 
 export default function MessagesPage() {
   const { t } = useTranslation()
+  usePageMeta(t("messages.title"), t("messages.metaDescription"))
   const { conversationId: routeConversationId } = useParams<{ conversationId?: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()

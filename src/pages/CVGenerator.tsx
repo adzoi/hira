@@ -10,6 +10,7 @@ import { useToast } from "../components/ui/ToastProvider.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { getAuthenticatedSession } from "../lib/supabaseAuth.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { usePageMeta } from "../lib/usePageMeta.ts"
 
 export default function CVGeneratorPage() {
   const { t } = useTranslation()
@@ -40,9 +41,7 @@ export default function CVGeneratorPage() {
     }
   }, [pushToast])
 
-  useEffect(() => {
-    document.title = t("cv.generatorTitle")
-  }, [t])
+  usePageMeta(t("cv.generatorTitle"), t("cv.generatorMetaDescription"))
 
   useEffect(() => {
     let cancelled = false

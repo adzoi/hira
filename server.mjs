@@ -6,6 +6,7 @@ import {
   buildSecurityHeaders,
   generateCspNonce,
   injectScriptNonces,
+  longCacheControlForPath,
 } from "./security/csp.mjs"
 
 const root = join(fileURLToPath(new URL(".", import.meta.url)), "dist")
@@ -42,10 +43,12 @@ function applySecurityHeaders(res, headers) {
   }
 }
 
-function sendFile(res, filePath, headers = staticSecurityHeaders) {
+function sendFile(res, filePath, urlPath, headers = staticSecurityHeaders) {
   applySecurityHeaders(res, headers)
   const ext = extname(filePath)
   res.setHeader("Content-Type", MIME[ext] ?? "application/octet-stream")
+  const cacheControl = longCacheControlForPath(urlPath)
+  if (cacheControl) res.setHeader("Cache-Control", cacheControl)
   createReadStream(filePath).pipe(res)
 }
 
@@ -62,7 +65,7 @@ const server = createServer((req, res) => {
   const candidate = join(root, safePath)
 
   if (safePath !== "/" && existsSync(candidate) && statSync(candidate).isFile()) {
-    sendFile(res, candidate)
+    sendFile(res, candidate, safePath)
     return
   }
 

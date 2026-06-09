@@ -10,6 +10,7 @@ import {
 } from "../lib/authRateLimit"
 import { validateEmail } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { usePageMeta } from "../lib/usePageMeta.ts"
 
 export default function ForgotPasswordPage() {
   const { t } = useTranslation()
@@ -20,9 +21,7 @@ export default function ForgotPasswordPage() {
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null)
   const [cooldownSeconds, setCooldownSeconds] = useState(0)
 
-  useEffect(() => {
-    document.title = t("auth.forgotTitle")
-  }, [t])
+  usePageMeta(t("auth.forgotTitle"), t("auth.forgotMetaDescription"))
 
   useEffect(() => {
     if (!cooldownUntil) {

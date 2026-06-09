@@ -69,6 +69,8 @@ export const ka: T = {
   about: {
     title: "ჩვენს შესახებ",
     pageTitle: "ჩვენს შესახებ — ჰირა",
+    metaDescription:
+      "ჩვენი მისიაა ქართული ნიჭისა და შესაძლებლობების დაკავშირება - რათა ყველას შეეძლოს პროფესიული ზრდა ჩვენს ქვეყანაში.",
     heroHeading: "ჰირა — ქართული ფრილანს პლატფორმა",
     heroMission:
       "ჩვენი მისიაა ქართული ნიჭისა და შესაძლებლობების დაკავშირება - რათა ყველას შეეძლოს პროფესიული ზრდა ჩვენს ქვეყანაში.",
@@ -396,6 +398,7 @@ export const ka: T = {
     areYouSure: "დარწმუნებული ხარ?",
     dontHaveOne: "არ მაქვს",
     pageNotFound: "გვერდი ვერ მოიძებნა",
+    notFoundMetaDescription: "მოთხოვნილი გვერდი ჰირაზე ვერ მოიძებნა.",
     goHome: "მთავარ გვერდზე",
     stepOf: "ნაბიჯი {step}/{total}",
     subcategory: "ქვეკატეგორია",
@@ -507,6 +510,10 @@ export const ka: T = {
     registerTitle: "რეგისტრაცია — ჰირა",
     forgotTitle: "პაროლის აღდგენა — ჰირა",
     resetTitle: "ახალი პაროლი — ჰირა",
+    loginMetaDescription: "შედი შენს ჰირას ანგარიშში — განცხადებები, სამუშაოები და შეტყობინებები.",
+    registerMetaDescription: "შექმენი უფასო ანგარიში ფრილანსერად ან დამქირავებლად ჰირაზე.",
+    forgotMetaDescription: "მოითხოვე პაროლის აღდგენის ბმული შენს ჰირას ანგარიშისთვის.",
+    resetMetaDescription: "დააყენე ახალი პაროლი შენს ჰირას ანგარიშზე.",
     loginHeading: "ანგარიშში შესვლა",
     registerHeading: "რეგისტრაცია",
     loginForPostJob: "სამუშაოს განსათავსებლად გაიარე ავტორიზაცია",
@@ -543,12 +550,14 @@ export const ka: T = {
     checkingLink: "მიმდინარეობს ბმულის შემოწმება…",
     invalidRecoveryLink: "აღდგენის ბმული არ იძებნება, ვადა გაუვიდა ან იგი უკვე გამოყენებული იყო.",
     repeatPassword: "გამეორება",
-    passwordMinPlaceholder: "მინ. 6 სიმბოლო",
+    passwordMinPlaceholder: "მინ. 8 სიმბოლო, ასო + ციფრი",
     passwordSaveFailed: "პაროლი ვერ შეინახვა.",
     supabaseNotConfigured: "Supabase არ არის კონფიგურირებული.",
   },
   home: {
     title: "ჰირა — ქართული freelance პლატფორმა",
+    metaDescription:
+      "ქართული freelance ბაზარი — იპოვე სერვისები, დაიქირავე პროფესიონალები და აღმოაჩინე სამუშაოები ერთ ადგილას.",
     heroBrand: "ᲰᲘᲠᲐ",
     heroTagline: "ᲥᲐᲠᲗᲣᲚᲘ ᲤᲠᲘᲚᲐᲜᲡ ᲞᲚᲐᲢᲤᲝᲠᲛᲐ",
     searchPlaceholder: "რას ეძებ?",
@@ -586,6 +595,7 @@ export const ka: T = {
   },
   browse: {
     title: "ფრილანსერები — ჰირა",
+    metaDescription: "იხილე ქართული ფრილანსერები უნარით, რეიტინგით და ფასით ჰირაზე.",
     availability: "დატვირთვა",
     minRating: "მინ. რეიტინგი",
     priceRange: "ფასის დიაპაზონი (₾)",
@@ -595,6 +605,7 @@ export const ka: T = {
   },
   listings: {
     title: "სერვისების ლისტინგები — ჰირა",
+    metaDescription: "მოძებნე ქართული ფრილანსერების სერვისები — კატეგორია, ფასი და რეიტინგით.",
     detailedSearch: "დეტალური ძებნა",
     minFreelancerRating: "მინ. რეიტინგი (ფრილანსერი)",
     listingPriceRange: "ფასის დიაპაზონი (ლისტინგი ₾)",
@@ -614,6 +625,7 @@ export const ka: T = {
   },
   jobs: {
     title: "სამუშაოები — ჰირა",
+    metaDescription: "იპოვე ფრილანს სამუშაოები და პროექტები ქართული დამქირავებლებისგან ჰირაზე.",
     searchPlaceholder: "სათაური, აღწერა, უნარები, კატეგორია...",
     budgetType: "ბიუჯეტის ტიპი",
     budgetRange: "ბიუჯეტის დიაპაზონი",
@@ -642,6 +654,7 @@ export const ka: T = {
   },
   jobDetail: {
     title: "სამუშაოები — ჰირა",
+    metaDescription: "ნახე სამუშაოს დეტალები, მოთხოვნები, ბიუჯეტი და განაცხადება ჰირაზე.",
     requiredSkills: "საჭირო უნარები",
     oneTime: "ერთჯერადი",
     ongoing: "მიმდინარე",
@@ -657,6 +670,7 @@ export const ka: T = {
   },
   hirers: {
     title: "დამქირავებლები — ჰირა",
+    metaDescription: "აღმოაჩინე კომპანიები და დამქირავებლები, რომლებიც პროექტებს ათავსებენ ჰირაზე.",
     industry: "ინდუსტრია",
     found: "მოიძებნა {count} დამქირავებელი",
     listingsCompleted: "განცხადებები / დასრულებული",
@@ -666,6 +680,7 @@ export const ka: T = {
   },
   hirerPublic: {
     title: "დამქირავებლის პროფილი — ჰირა",
+    metaDescription: "ნახე დამქირავებლის პროფილი, აქტიური განცხადებები და რეიტინგი ჰირაზე.",
     backToHirers: "← დამქირავებლები",
     notFound: "დამქირავებელი ვერ მოიძებნა",
     allHirers: "ყველა დამქირავებელზე",
@@ -678,6 +693,7 @@ export const ka: T = {
   },
   freelancerProfile: {
     title: "ფრილანსერები — ჰირა",
+    metaDescription: "ნახე ფრილანსერის პროფილი, პორტფოლიო, უნარები და შეფასებები ჰირაზე.",
     languages: "ენები",
     socialNetworks: "სოციალური ქსელები",
     resume: "რეზიუმე (CV)",
@@ -694,6 +710,7 @@ export const ka: T = {
     subscribedStat: "გამოწერილი",
   },
   listingDetail: {
+    metaDescription: "ნახე სერვისის დეტალები, ფასი და დაუკავშირდი ფრილანსერს ჰირაზე.",
     backToListings: "დაბრუნდი ლისტინგებზე",
     subcategory: "ქვეკატეგორია",
     makeOffer: "შეთავაზება",
@@ -709,6 +726,7 @@ export const ka: T = {
   listingForm: {
     newTitle: "ახალი ლისტინგი — ჰირა",
     editTitle: "ლისტინგის რედაქტირება — ჰირა",
+    metaDescription: "შექმენი ან შეცვალე შენი სერვისის ლისტინგი ჰირაზე.",
     addNew: "ახალი განცხადების დამატება",
     editListing: "განცხადების რედაქტირება",
     backToDashboard: "უკან მართვის პანელზე",
@@ -756,6 +774,7 @@ export const ka: T = {
   postJob: {
     postTitle: "სამუშაოების განთავსება — ჰირა",
     editTitle: "განცხადების რედაქტირება — ჰირა",
+    metaDescription: "შექმენი ან შეცვალე სამუშაოს განცხადება და იპოვე ფრილანსერები ჰირაზე.",
     postHeading: "სამუშაოს განთავსება",
     preview: "განცხადების პრევიუ",
     step1: "1. სამუშაოს დეტალები",
@@ -844,6 +863,7 @@ export const ka: T = {
   },
   dashboard: {
     title: "მართვის პანელი — ჰირა",
+    metaDescription: "მართე შენი ლისტინგები, სამუშაოები, განმცხადებები და შეტყობინებები ჰირაზე.",
     heading: "მართვის პანელი",
     hello: "გამარჯობა, {name}!",
     completeProfile: "შეავსე პროფილი",
@@ -876,6 +896,7 @@ export const ka: T = {
   },
   profile: {
     title: "პროფილი — ჰირა",
+    metaDescription: "შეცვალე შენი ჰირას პროფილი, უნარები, გამოცდილება და ავატარი.",
     heading: "ჩემი პროფილი",
     emailPassword: "ელფოსტა და პაროლი",
     changeEmail: "ელფოსტის შეცვლა",
@@ -899,6 +920,8 @@ export const ka: T = {
     newEmail: "ახალი ელფოსტა",
     newEmailPlaceholder: "ახალი მისამართი",
     currentPassword: "მიმდინარე პაროლი",
+    passwordPolicyNotice:
+      "თქვენი მიმდინარე პაროლი შესაძლოა არ აკმაყოფილებდეს ახალ უსაფრთხოების მოთხოვნებს. გირჩევთ, განაახლოთ ის პარამეტრებში.",
     updatePassword: "პაროლის განახლება",
     available: "ხელმისაწვდომი",
     unavailable: "ხელმიუწვდომელი",
@@ -915,7 +938,9 @@ export const ka: T = {
   },
   messages: {
     heading: "ჩათი",
+    title: "შეტყობინებები — ჰირა",
     subtitle: "მიმოწერა დამქირავებლებსა და ფრილანსერებთან",
+    metaDescription: "მიმოწერე დამქირავებლებსა და ფრილანსერებთან ჰირაზე.",
     conversations: "საუბრები",
     startConversation: "საუბარი დაიწყეთ",
     selectOrStart: "აირჩიეთ საუბარი ან დაიწყეთ ახალი",
@@ -931,6 +956,7 @@ export const ka: T = {
   },
   saved: {
     title: "შენახული — ჰირა",
+    metaDescription: "შენახული ფრილანსერები, დამქირავებლები, სამუშაოები და სერვისები ჰირაზე.",
     heading: "შენახული",
     description: "ფრილანსერები, დამქირავებლები, სამუშაოები და სერვისები, რომლებსაც მოგვიანებით გადაამოწმებ.",
     typeFreelancer: "ფრილანსერი",
@@ -956,6 +982,8 @@ export const ka: T = {
   cv: {
     generatorTitle: "CV გენერატორი — ჰირა",
     publicTitle: "საჯარო CV — ჰირა",
+    generatorMetaDescription: "შექმენი და ჩამოტვირთე პროფესიული CV შენი ჰირას პროფილიდან.",
+    publicMetaDescription: "ნახე საჯარო CV, რომელიც ჰირიდან გაზიარებულია.",
     loadFailed: "CV-ის ჩატვირთვა ვერ მოხერხდა.",
   },
   vip: {

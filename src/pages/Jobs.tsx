@@ -12,6 +12,7 @@ import { fetchJobsPagePayload } from "../lib/marketplaceEdge.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { isSupabaseConfigured, supabase, formatSupabaseClientError } from "../lib/supabase"
+import { usePageMeta } from "../lib/usePageMeta.ts"
 import { jobVacancyStats } from "../lib/jobVacancies.ts"
 import { formatCityForDisplay, jobMatchesUnifiedLocation } from "../lib/marketplaceFilters.ts"
 import { jobVipIsActive } from "../lib/vipJobTiers.ts"
@@ -578,12 +579,7 @@ export default function JobsPage() {
     </div>
   )
 
-  useEffect(() => {
-    document.title = t("jobs.title")
-    return () => {
-      document.title = t("brand.name")
-    }
-  }, [t])
+  usePageMeta(t("jobs.title"), t("jobs.metaDescription"))
 
   useEffect(() => {
     const query = searchParams.get("q")
@@ -974,6 +970,8 @@ export default function JobsPage() {
                         <img
                           src={avatarImageUrl(supabase, job.companyAvatar) ?? job.companyAvatar}
                           alt={t("common.avatarAlt", { name: job.companyName })}
+                          width={56}
+                          height={56}
                           loading="lazy"
                           className="h-14 w-14 shrink-0 rounded-full object-cover"
                         />

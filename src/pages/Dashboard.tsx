@@ -15,6 +15,7 @@ import { fetchDashboard } from "../lib/queries/fetchDashboard.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { usePageMeta } from "../lib/usePageMeta.ts"
 
 type TranslateFn = (key: string, params?: Record<string, string | number>) => string
 
@@ -598,9 +599,7 @@ export default function DashboardPage() {
   void freelancerCompletedJobsCount
   void freelancerCompletedPlatformJobs
 
-  useEffect(() => {
-    document.title = t("dashboard.title")
-  }, [t])
+  usePageMeta(t("dashboard.title"), t("dashboard.metaDescription"))
 
   useEffect(() => {
     const state = location.state as { successMessage?: string } | null

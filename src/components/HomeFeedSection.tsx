@@ -109,6 +109,8 @@ function FreelancerFeedCard({ item }: { item: HomeFreelancerServiceItem }) {
               <img
                 src={avatarImageUrl(supabase, item.avatarUrl) ?? item.avatarUrl}
                 alt=""
+                width={56}
+                height={56}
                 loading="lazy"
                 className="h-full w-full object-cover"
               />
@@ -187,6 +189,8 @@ function JobListingFeedCard({ item }: { item: HomeJobListingItem }) {
             <img
               src={avatarImageUrl(supabase, item.companyAvatar) ?? item.companyAvatar}
               alt=""
+              width={56}
+              height={56}
               loading="lazy"
               className="h-14 w-14 shrink-0 rounded-full object-cover"
             />

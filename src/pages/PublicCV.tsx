@@ -1,4 +1,3 @@
-import { useEffect } from "react"
 import { useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import Navbar from "../components/Navbar"
@@ -7,6 +6,7 @@ import { fetchPublicCvBySlug } from "../lib/queries/fetchPublicCv.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { usePageMeta } from "../lib/usePageMeta.ts"
 
 export default function PublicCVPage() {
   const { t } = useTranslation()
@@ -23,9 +23,7 @@ export default function PublicCVPage() {
   })
   const error = isError ? queryErrorMessage(queryError, t("common.somethingWrong")) : ""
 
-  useEffect(() => {
-    document.title = t("cv.publicTitle")
-  }, [t])
+  usePageMeta(t("cv.publicTitle"), t("cv.publicMetaDescription"))
 
   return (
     <div className="min-h-screen bg-slate-50">

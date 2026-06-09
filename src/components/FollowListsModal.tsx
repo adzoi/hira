@@ -213,6 +213,8 @@ export default function FollowListsModal({ open, onClose, profileId, initialTab 
                         <img
                           src={avatarImageUrl(supabase, person.avatar_url) ?? person.avatar_url}
                           alt=""
+                          width={40}
+                          height={40}
                           loading="lazy"
                           className="h-full w-full object-cover"
                         />

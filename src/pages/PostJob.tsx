@@ -20,46 +20,11 @@ import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { queryClient } from "../lib/queryClient.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
-import { getCurrentLocale, translate } from "../i18n/translate.ts"
+import { usePageMeta } from "../lib/usePageMeta.ts"
+import { compressImageForUpload } from "../lib/compressImageForUpload.ts"
 
 const MAX_JOB_IMAGES = 3
 const MAX_INPUT_IMAGE_BYTES = 10 * 1024 * 1024
-const MAX_IMAGE_EDGE = 1600
-const TARGET_IMAGE_BYTES = 700 * 1024
-
-async function fileToImageBitmap(file: File): Promise<ImageBitmap> {
-  return await createImageBitmap(file)
-}
-
-async function canvasToJpegBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality))
-  if (!blob) throw new Error(translate(getCurrentLocale(), "postJob.imageProcessFailed"))
-  return blob
-}
-
-async function compressImage(file: File): Promise<Blob> {
-  const bitmap = await fileToImageBitmap(file)
-  try {
-    const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(bitmap.width, bitmap.height))
-    const width = Math.max(1, Math.round(bitmap.width * scale))
-    const height = Math.max(1, Math.round(bitmap.height * scale))
-    const canvas = document.createElement("canvas")
-    canvas.width = width
-    canvas.height = height
-    const ctx = canvas.getContext("2d")
-    if (!ctx) throw new Error(translate(getCurrentLocale(), "postJob.imageProcessFailed"))
-    ctx.drawImage(bitmap, 0, 0, width, height)
-    let quality = 0.86
-    let best = await canvasToJpegBlob(canvas, quality)
-    while (best.size > TARGET_IMAGE_BYTES && quality > 0.45) {
-      quality -= 0.08
-      best = await canvasToJpegBlob(canvas, quality)
-    }
-    return best
-  } finally {
-    bitmap.close()
-  }
-}
 
 const DURATION_TYPE_KEYS = ["one_time", "ongoing"] as const
 const LOCATION_TYPE_KEYS = ["remote", "tbilisi", "hybrid", "anywhere"] as const
@@ -181,9 +146,7 @@ export default function PostJobPage() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [skillFocusCategoryId, setSkillFocusCategoryId] = useState("")
 
-  useEffect(() => {
-    document.title = isEdit ? t("postJob.editTitle") : t("postJob.postTitle")
-  }, [isEdit, t])
+  usePageMeta(isEdit ? t("postJob.editTitle") : t("postJob.postTitle"), t("postJob.metaDescription"))
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return
@@ -530,14 +493,14 @@ export default function PostJobPage() {
       let uploadedImagePaths: string[] = []
       if (newImageFiles.length > 0) {
         const bucket = "job-images"
-        const compressedFiles = await Promise.all(newImageFiles.map((file) => compressImage(file)))
+        const compressedFiles = await Promise.all(newImageFiles.map((file) => compressImageForUpload(file, "portfolio")))
         uploadedImagePaths = []
         for (let i = 0; i < compressedFiles.length; i += 1) {
           const blob = compressedFiles[i]
-          const safeName = `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 8)}.jpg`
+          const safeName = `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 8)}.webp`
           const path = `${hirerProfileId}/${currentJobId}/${safeName}`
           const { error: uploadError } = await supabase.storage.from(bucket).upload(path, blob, {
-            contentType: "image/jpeg",
+            contentType: "image/webp",
             upsert: false,
           })
           if (uploadError) {
@@ -1125,6 +1088,8 @@ export default function PostJobPage() {
                         <img
                           src={supabase ? jobImageThumbnailUrl(supabase, url) : ""}
                           alt=""
+                          width={160}
+                          height={80}
                           className="h-20 w-full object-cover"
                         />
                         <button
@@ -1138,7 +1103,13 @@ export default function PostJobPage() {
                     ))}
                     {newImagePreviews.map((preview, index) => (
                       <div key={`${preview.file.name}-${index}`} className="overflow-hidden rounded-md border border-slate-200 bg-white">
-                        <img src={preview.url} alt="" className="h-20 w-full object-cover" />
+                        <img
+                          src={preview.url}
+                          alt=""
+                          width={160}
+                          height={80}
+                          className="h-20 w-full object-cover"
+                        />
                         <button
                           type="button"
                           onClick={() => removeNewImage(index)}

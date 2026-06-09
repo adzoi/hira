@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { fetchSavedItems, type SavedListEntry } from "../lib/queries/fetchSavedItems.ts"
@@ -7,6 +7,7 @@ import { queryKeys } from "../lib/queryKeys.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase.ts"
 import type { SavedResourceType } from "../lib/savedItems.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { usePageMeta } from "../lib/usePageMeta.ts"
 
 export default function SavedPage() {
   const { t } = useTranslation()
@@ -33,12 +34,7 @@ export default function SavedPage() {
   })
   const error = isError ? queryErrorMessage(queryError, t("saved.loadFailed")) : ""
 
-  useEffect(() => {
-    document.title = t("saved.title")
-    return () => {
-      document.title = t("brand.name")
-    }
-  }, [t])
+  usePageMeta(t("saved.title"), t("saved.metaDescription"))
 
   const remove = async (bookmarkId: string) => {
     if (!supabase || removingId) return

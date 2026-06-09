@@ -1,5 +1,4 @@
-import { PayPalScriptProvider } from "@paypal/react-paypal-js"
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, lazy, useEffect, useRef, useState } from "react"
 import type { FormEvent } from "react"
 import { Link, Outlet, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import Navbar from "./components/Navbar.tsx"
@@ -18,6 +17,7 @@ import {
   validateEmail,
   validateOptionalTextField,
   validatePassword,
+  validatePasswordForLogin,
   validateTextField,
 } from "./lib/validation.ts"
 import ProtectedRoute from "./components/ProtectedRoute.tsx"
@@ -27,7 +27,8 @@ import Footer from "./components/Footer.tsx"
 import HomeFeedSection from "./components/HomeFeedSection.tsx"
 import { useHomeStatsQuery } from "./lib/queries/useHomeStatsQuery.ts"
 import { useTranslation } from "./i18n/LocaleContext.tsx"
-import mainHeroImage from "../images/main.png"
+import { usePageMeta } from "./lib/usePageMeta.ts"
+import mainHeroImage from "../images/main.webp"
 
 const DashboardPage = lazy(() => import("./pages/Dashboard.tsx"))
 const BrowsePage = lazy(() => import("./pages/Browse.tsx"))
@@ -81,9 +82,7 @@ function HomePage() {
   const [searchText, setSearchText] = useState("")
   const [viewerType, setViewerType] = useState<"freelancer" | "hirer" | null>(null)
   const { data: stats = { freelancerCount: 0, jobCount: 0, completedCount: 0 } } = useHomeStatsQuery()
-  useEffect(() => {
-    document.title = t("home.title")
-  }, [t])
+  usePageMeta(t("home.title"), t("home.metaDescription"))
 
   useEffect(() => {
     let cancelled = false
@@ -156,6 +155,10 @@ function HomePage() {
             <img
               src={mainHeroImage}
               alt={`${t("brand.name")} — ${t("brand.taglineShort")}`}
+              width={1024}
+              height={684}
+              loading="eager"
+              fetchPriority="high"
               className="h-auto w-full max-w-lg rounded-2xl object-contain drop-shadow-lg lg:max-w-none"
             />
           </div>
@@ -211,9 +214,7 @@ function LoginPage() {
     location.state !== null &&
     (location.state as { reason?: string }).reason === "password-reset"
 
-  useEffect(() => {
-    document.title = t("auth.loginTitle")
-  }, [t])
+  usePageMeta(t("auth.loginTitle"), t("auth.loginMetaDescription"))
 
   useEffect(() => {
     if (!cooldownUntil) {
@@ -250,7 +251,7 @@ function LoginPage() {
       setError(emailResult.message)
       return
     }
-    const passwordResult = validatePassword(password)
+    const passwordResult = validatePasswordForLogin(password)
     if (passwordResult.ok === false) {
       setError(passwordResult.message)
       return
@@ -435,9 +436,7 @@ function RegisterPage() {
   const [cooldownSeconds, setCooldownSeconds] = useState(0)
   const registerInFlightRef = useRef(false)
 
-  useEffect(() => {
-    document.title = t("auth.registerTitle")
-  }, [t])
+  usePageMeta(t("auth.registerTitle"), t("auth.registerMetaDescription"))
 
   useEffect(() => {
     if (!cooldownUntil) {
@@ -769,10 +768,6 @@ function RegisterPage() {
   )
 }
 
-function OnboardingPage() {
-  return <OnboardingPageStandalone />
-}
-
 function MainLayout() {
   const location = useLocation()
   const isMobileChatThread = /^\/messages\/[^/]+$/.test(location.pathname)
@@ -807,176 +802,152 @@ function ScrollToTopOnRouteChange() {
 }
 
 function App() {
-  const paypalClientId = typeof import.meta.env.VITE_PAYPAL_CLIENT_ID === "string" ? import.meta.env.VITE_PAYPAL_CLIENT_ID.trim() : ""
-  /** Stable object identity — PayPalScriptProvider’s effect keys off `options`; avoid reloading SDK each App re-render. */
-  const paypalProviderOptions = useMemo(
-    () => ({
-      clientId: paypalClientId,
-      currency: "USD",
-      intent: "capture" as const,
-    }),
-    [paypalClientId],
-  )
-  const routes = (
-    <Suspense fallback={<PageLoader />}>
-      <ScrollToTopOnRouteChange />
-      <Routes>
-        <Route element={<MainLayout />}>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/browse" element={<BrowsePage />} />
-          <Route path="/listings" element={<ListingsPage />} />
-          <Route path="/listing/:id" element={<ListingDetailPage />} />
-          <Route path="/cv/:slug" element={<PublicCVPage />} />
-          <Route path="/hirers" element={<HirersPage />} />
-          <Route path="/hirer/:id" element={<HirerPublicPage />} />
-          <Route path="/about" element={<AboutPage />} />
-          <Route path="/terms" element={<TermsPage />} />
-          <Route path="/privacy" element={<PrivacyPage />} />
-          <Route path="/cookies" element={<CookiesPage />} />
-          <Route path="/guide" element={<GuidePage />} />
-          <Route path="/faq" element={<FaqPage />} />
-          <Route path="/freelancer/:slug" element={<FreelancerProfilePage />} />
-          <Route path="/jobs" element={<JobsPage />} />
-          <Route path="/job/:id" element={<JobDetailPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route
-            path="/forgot-password"
-            element={
-              <Suspense fallback={<PageLoader />}>
-                <ForgotPasswordPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/auth/reset-password"
-            element={
-              <Suspense fallback={<PageLoader />}>
-                <ResetPasswordPage />
-              </Suspense>
-            }
-          />
-          <Route path="/register" element={<RegisterPage />} />
-          {(import.meta.env.DEV || import.meta.env.VITE_PAYPAL_E2E_DIAG === "1") ? (
-            <Route path="/checkout" element={<PayPalCheckoutE2EPage />} />
-          ) : null}
-          <Route
-            path="/saved"
-            element={
-              <ProtectedRoute>
-                <SavedPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/messages"
-            element={
-              <ProtectedRoute>
-                <MessagesPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/messages/:conversationId"
-            element={
-              <ProtectedRoute>
-                <MessagesPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/onboarding"
-            element={
-              <ProtectedRoute>
-                <OnboardingPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/cv-generator"
-            element={
-              <ProtectedRoute>
-                <CVGeneratorPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <DashboardPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/settings"
-            element={
-              <ProtectedRoute>
-                <ProfilePage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/profile"
-            element={
-              <ProtectedRoute>
-                <ProfilePage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/post-job/:jobId"
-            element={
-              <ProtectedRoute>
-                <PostJobPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/post-job"
-            element={
-              <ProtectedRoute>
-                <PostJobPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/listing/new"
-            element={
-              <ProtectedRoute>
-                <ListingFormPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/listing/:id/edit"
-            element={
-              <ProtectedRoute>
-                <ListingFormPage />
-              </ProtectedRoute>
-            }
-          />
-        </Route>
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
-    </Suspense>
-  )
-
-  if (!paypalClientId) {
-    return (
-      <>
-        {routes}
-        <Footer />
-        <CookieBanner />
-      </>
-    )
-  }
-
   return (
-    <PayPalScriptProvider options={paypalProviderOptions}>
-      {routes}
+    <>
+      <Suspense fallback={<PageLoader />}>
+        <ScrollToTopOnRouteChange />
+        <Routes>
+          <Route element={<MainLayout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/browse" element={<BrowsePage />} />
+            <Route path="/listings" element={<ListingsPage />} />
+            <Route path="/listing/:id" element={<ListingDetailPage />} />
+            <Route path="/cv/:slug" element={<PublicCVPage />} />
+            <Route path="/hirers" element={<HirersPage />} />
+            <Route path="/hirer/:id" element={<HirerPublicPage />} />
+            <Route path="/about" element={<AboutPage />} />
+            <Route path="/terms" element={<TermsPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/cookies" element={<CookiesPage />} />
+            <Route path="/guide" element={<GuidePage />} />
+            <Route path="/faq" element={<FaqPage />} />
+            <Route path="/freelancer/:slug" element={<FreelancerProfilePage />} />
+            <Route path="/jobs" element={<JobsPage />} />
+            <Route path="/job/:id" element={<JobDetailPage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route
+              path="/forgot-password"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <ForgotPasswordPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/auth/reset-password"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <ResetPasswordPage />
+                </Suspense>
+              }
+            />
+            <Route path="/register" element={<RegisterPage />} />
+            {(import.meta.env.DEV || import.meta.env.VITE_PAYPAL_E2E_DIAG === "1") ? (
+              <Route path="/checkout" element={<PayPalCheckoutE2EPage />} />
+            ) : null}
+            <Route
+              path="/saved"
+              element={
+                <ProtectedRoute>
+                  <SavedPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/messages"
+              element={
+                <ProtectedRoute>
+                  <MessagesPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/messages/:conversationId"
+              element={
+                <ProtectedRoute>
+                  <MessagesPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/onboarding"
+              element={
+                <ProtectedRoute>
+                  <OnboardingPageStandalone />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/cv-generator"
+              element={
+                <ProtectedRoute>
+                  <CVGeneratorPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <DashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <ProfilePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute>
+                  <ProfilePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/post-job/:jobId"
+              element={
+                <ProtectedRoute>
+                  <PostJobPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/post-job"
+              element={
+                <ProtectedRoute>
+                  <PostJobPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/listing/new"
+              element={
+                <ProtectedRoute>
+                  <ListingFormPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/listing/:id/edit"
+              element={
+                <ProtectedRoute>
+                  <ListingFormPage />
+                </ProtectedRoute>
+              }
+            />
+          </Route>
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </Suspense>
       <Footer />
       <CookieBanner />
-    </PayPalScriptProvider>
+    </>
   )
 }
 

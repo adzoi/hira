@@ -6,6 +6,7 @@ import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { AUTH_RECOVERY_HINT_KEY } from "../lib/supabaseAuth.ts"
 import { validatePassword } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { usePageMeta } from "../lib/usePageMeta.ts"
 
 function recoveryHintFromBrowser(): boolean {
   if (typeof window === "undefined") return false
@@ -33,9 +34,7 @@ export default function ResetPasswordPage() {
   const [checking, setChecking] = useState(true)
   const [ready, setReady] = useState(false)
 
-  useEffect(() => {
-    document.title = t("auth.resetTitle")
-  }, [t])
+  usePageMeta(t("auth.resetTitle"), t("auth.resetMetaDescription"))
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {

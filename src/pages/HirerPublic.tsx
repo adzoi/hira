@@ -29,6 +29,7 @@ import {
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { usePageMeta } from "../lib/usePageMeta.ts"
 
 function companyInitials(name: string) {
   const trimmed = name.trim()
@@ -153,12 +154,7 @@ export default function HirerPublicPage() {
     }
   }, [canRespondToListingOffers, hirer?.id, viewerFreelancerProfileId])
 
-  useEffect(() => {
-    document.title = data?.documentTitle ?? t("hirerPublic.title")
-    return () => {
-      document.title = t("brand.name")
-    }
-  }, [data?.documentTitle, t])
+  usePageMeta(data?.documentTitle ?? t("hirerPublic.title"), t("hirerPublic.metaDescription"))
 
   useEffect(() => {
     if (!hirer?.ownerUserId || !isSupabaseConfigured || !supabase) {
@@ -392,6 +388,8 @@ export default function HirerPublicPage() {
                 <img
                   src={avatarImageUrl(supabase, hirer.avatarUrl) ?? hirer.avatarUrl}
                   alt=""
+                  width={64}
+                  height={64}
                   loading="lazy"
                   className="h-full w-full object-cover"
                 />

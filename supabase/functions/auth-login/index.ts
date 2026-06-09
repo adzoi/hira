@@ -1,6 +1,6 @@
 // @ts-ignore: Deno edge runtime resolves URL imports.
 import { enforceAuthRateLimit } from "../_shared/rateLimit.ts"
-import { readJsonBody, validateEmail, validatePassword } from "../_shared/validation.ts"
+import { readJsonBody, validateEmail, validatePasswordForLogin } from "../_shared/validation.ts"
 import { corsHeadersFor } from "../_shared/cors.ts"
 
 declare const Deno: {
@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
   if (!emailResult.ok) {
     return jsonResponse(req, { ok: false, error: emailResult.message }, 400)
   }
-  const passwordResult = validatePassword(typeof body.password === "string" ? body.password : "")
+  const passwordResult = validatePasswordForLogin(typeof body.password === "string" ? body.password : "")
   if (!passwordResult.ok) {
     return jsonResponse(req, { ok: false, error: passwordResult.message }, 400)
   }
