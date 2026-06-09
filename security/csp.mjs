@@ -31,8 +31,8 @@ export function buildContentSecurityPolicy(opts = {}) {
   const directives = [
     "default-src 'self'",
     `script-src ${scriptSrc.join(" ")}`,
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.paypal.com https://*.paypalobjects.com",
-    "font-src 'self' https://fonts.gstatic.com data:",
+    "style-src 'self' 'unsafe-inline' https://*.paypal.com https://*.paypalobjects.com",
+    "font-src 'self' data:",
     "img-src 'self' data: blob: https://*.supabase.co https://*.paypal.com https://*.paypalobjects.com",
     "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.paypal.com https://*.paypalobjects.com",
     "frame-src 'self' https://*.paypal.com https://*.paypalobjects.com",
