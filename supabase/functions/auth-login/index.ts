@@ -83,6 +83,13 @@ Deno.serve(async (req) => {
     return jsonResponse(req, { ok: false, error: "Invalid auth response" }, 502)
   }
 
+  const user = tokenBody.user as Record<string, unknown> | null | undefined
+  const emailConfirmedAt =
+    user && (typeof user.email_confirmed_at === "string" ? user.email_confirmed_at : null)
+  if (!emailConfirmedAt) {
+    return jsonResponse(req, { ok: false, error: "Email not confirmed. Check your inbox." }, 403)
+  }
+
   return jsonResponse(req, {
     ok: true,
     access_token: accessToken,

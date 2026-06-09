@@ -1,37 +1,58 @@
-import { writeFileSync } from 'node:fs'
+import { AsyncLocalStorage } from 'node:async_hooks'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { defineConfig, type ResolvedConfig } from 'vite'
+import { defineConfig, type ViteDevServer } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-// @ts-expect-error Shared JS module used by server.mjs and Vite.
-import { buildContentSecurityPolicy, buildHeadersFile, buildSecurityHeaders } from './security/csp.mjs'
+import {
+  buildHeadersFile,
+  buildSecurityHeaders,
+  generateCspNonce,
+  injectScriptNonces,
+} from './security/csp.mjs'
 
-const isDev = process.env.NODE_ENV !== 'production'
+const cspNonceStorage = new AsyncLocalStorage<string>()
+
+function stripMetaCsp(html: string) {
+  return html.replace(/\s*<meta http-equiv="Content-Security-Policy"[^>]*>\n?/i, '\n')
+}
 
 function securityHeadersPlugin() {
-  let forDev = isDev
   return {
     name: 'hira-security-headers',
-    configResolved(config: ResolvedConfig) {
-      forDev = config.command === 'serve'
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use((_req, res, next) => {
+        const nonce = generateCspNonce()
+        for (const [name, value] of Object.entries(buildSecurityHeaders({ dev: true, nonce }))) {
+          res.setHeader(name, value)
+        }
+        cspNonceStorage.run(nonce, () => next())
+      })
     },
-    transformIndexHtml(html: string) {
-      const csp = buildContentSecurityPolicy({ dev: forDev, forMeta: true })
-      const tag = `    <meta http-equiv="Content-Security-Policy" content="${csp}" />\n`
-      if (html.includes('http-equiv="Content-Security-Policy"')) return html
-      return html.replace('<head>', `<head>\n${tag}`)
+    transformIndexHtml: {
+      order: 'post',
+      handler(html: string) {
+        const nonce = cspNonceStorage.getStore()
+        let out = stripMetaCsp(html)
+        if (nonce) out = injectScriptNonces(out, nonce)
+        return out
+      },
     },
     closeBundle() {
-      writeFileSync(join(process.cwd(), 'dist', '_headers'), buildHeadersFile({ dev: false }))
+      const headersBody = buildHeadersFile({ dev: false })
+      const distDir = join(process.cwd(), 'dist')
+      const publicDir = join(process.cwd(), 'public')
+      writeFileSync(join(distDir, '_headers'), headersBody)
+      writeFileSync(join(publicDir, '_headers'), headersBody)
+
+      const indexPath = join(distDir, 'index.html')
+      writeFileSync(indexPath, stripMetaCsp(readFileSync(indexPath, 'utf8')))
     },
   }
 }
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), securityHeadersPlugin()],
-  server: {
-    headers: buildSecurityHeaders({ dev: true }),
-  },
   preview: {
     headers: buildSecurityHeaders({ dev: false }),
   },

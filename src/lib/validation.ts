@@ -8,7 +8,7 @@ function msg(key: string, params?: Record<string, string | number>): string {
 
 export const LIMITS = {
   email: 254,
-  passwordMin: 6,
+  passwordMin: 8,
   passwordMax: 128,
   fullName: 120,
   fullNameMin: 2,
@@ -93,6 +93,9 @@ export function validatePassword(raw: string): FieldResult<string> {
   if (typeof raw !== "string") return fail(msg("validation.passwordRequired"))
   if (raw.length < LIMITS.passwordMin) return fail(msg("validation.passwordTooShort", { min: LIMITS.passwordMin }))
   if (raw.length > LIMITS.passwordMax) return fail(msg("validation.passwordTooLong"))
+  if (!/[a-zA-Z]/.test(raw) || !/\d/.test(raw)) {
+    return fail(msg("validation.passwordWeak"))
+  }
   return { ok: true, value: raw }
 }
 

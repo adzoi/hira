@@ -573,6 +573,8 @@ export const en: T = {
     emailTooLong: "Email is too long.",
     passwordRequired: "Password is required.",
     passwordTooShort: "Password must be at least {min} characters.",
+    passwordWeak: "Password must include at least one letter and one number.",
+    emailNotConfirmed: "Confirm your email before signing in. Check your inbox for the verification link.",
     passwordTooLong: "Password is too long.",
     passwordsMismatch: "Passwords do not match.",
     loginFailed: "Login failed. Please try again.",

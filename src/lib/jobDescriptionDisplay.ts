@@ -1,5 +1,6 @@
 import type { AppLocale } from "../i18n/types.ts"
 import { pickListingDescription } from "./listingLocale.ts"
+import { sanitizeHtmlForDisplay } from "./sanitizeHtml.ts"
 
 function isSupabaseErrorPayload(text: string): boolean {
   const trimmed = text.trim()
@@ -21,7 +22,7 @@ export function stripSupabaseErrorJson(text: string): string {
 }
 
 function cleanDescriptionField(raw: string | null | undefined): string {
-  const text = String(raw ?? "").trim()
+  const text = sanitizeHtmlForDisplay(String(raw ?? "").trim())
   if (!text) return ""
   if (isSupabaseErrorPayload(text)) return ""
   return stripSupabaseErrorJson(text)

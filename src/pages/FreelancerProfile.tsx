@@ -35,6 +35,7 @@ import {
 } from "../lib/queries/fetchFreelancerProfile.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
+import { validateCvUpload } from "../lib/uploadValidation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { pickListingDescription, pickListingTitle } from "../lib/listingLocale.ts"
 
@@ -529,12 +530,9 @@ export default function FreelancerProfilePage() {
 
   const handleOwnerCvUpload = async (file: File) => {
     if (!viewerIsOwner || !supabase || !profile) return
-    if (file.size > 10 * 1024 * 1024) {
-      pushToast({ type: "error", message: "CV-ს ზომა არ უნდა აღემატებოდეს 10MB-ს." })
-      return
-    }
-    if (file.type !== "application/pdf") {
-      pushToast({ type: "error", message: "მხოლოდ PDF ფორმატი დაიშვება." })
+    const uploadCheck = validateCvUpload(file)
+    if (!uploadCheck.ok) {
+      pushToast({ type: "error", message: uploadCheck.message })
       return
     }
     setCvUploading(true)

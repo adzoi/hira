@@ -1,9 +1,13 @@
-import { useEffect, useState } from "react"
 import type { ReactNode } from "react"
+import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import type { User } from "@supabase/supabase-js"
 import { supabase } from "../lib/supabase"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+
+function isEmailConfirmed(user: User): boolean {
+  return Boolean(user.email_confirmed_at ?? user.confirmed_at)
+}
 
 export default function ProtectedRoute({ children }: { children: ReactNode }) {
   const { t } = useTranslation()
@@ -27,9 +31,21 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
         error,
       } = await supabase.auth.getUser()
       if (!mounted) return
-      setUser(error ? null : currentUser)
+      if (error || !currentUser) {
+        setUser(null)
+        setLoading(false)
+        navigate("/login")
+        return
+      }
+      if (!isEmailConfirmed(currentUser)) {
+        await supabase.auth.signOut({ scope: "local" }).catch(() => {})
+        setUser(null)
+        setLoading(false)
+        navigate("/login?reason=confirm-email")
+        return
+      }
+      setUser(currentUser)
       setLoading(false)
-      if (error || !currentUser) navigate("/login")
     }
 
     checkSession()

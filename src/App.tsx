@@ -271,6 +271,8 @@ function LoginPage() {
       if (isAuthRateLimited(loginError.status, loginError.message)) {
         setCooldownUntil(authCooldownUntil())
         setError(t("validation.rateLimited"))
+      } else if (message.includes("email not confirmed")) {
+        setError(t("validation.emailNotConfirmed"))
       } else if (message.includes("invalid login credentials")) {
         setError(t("validation.invalidCredentials"))
       } else if (message.includes("invalid email")) {
@@ -337,6 +339,12 @@ function LoginPage() {
           {passwordResetDone ? (
             <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
               {t("auth.passwordUpdated")}
+            </div>
+          ) : null}
+
+          {reason === "confirm-email" ? (
+            <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {t("validation.emailNotConfirmed")}
             </div>
           ) : null}
 
@@ -570,6 +578,14 @@ function RegisterPage() {
       }
 
       const newUserId = signUpData.user?.id
+      const session = signUpData.session
+      const emailConfirmed = Boolean(signUpData.user?.email_confirmed_at ?? signUpData.user?.confirmed_at)
+
+      if (!session || !emailConfirmed) {
+        navigate("/login?reason=confirm-email")
+        return
+      }
+
       if (newUserId && (formData.phone || formData.city)) {
         const profilePatch: { phone?: string | null; city?: string | null } = {}
         if (formData.phone) profilePatch.phone = formData.phone

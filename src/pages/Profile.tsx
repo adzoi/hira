@@ -17,6 +17,7 @@ import { parseFreelancerSocialFields } from "../lib/freelancerSocialFields.ts"
 import { avatarImageUrl, avatarPublicUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { isAuthRateLimited, signInWithRateLimit } from "../lib/authRateLimit"
+import { validateAvatarUpload } from "../lib/uploadValidation.ts"
 import { LIMITS, validateOptionalUrl, validateTextField } from "../lib/validation.ts"
 import { fetchProfile, SKILL_PICKER_UNCATEGORIZED } from "../lib/queries/fetchProfile.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
@@ -257,10 +258,8 @@ export default function ProfilePage() {
     if (!file || !supabase) return
     const user = (await supabase.auth.getUser()).data.user
     if (!user) return
-    if (file.size > 5 * 1024 * 1024) return setError("სურათის ზომა არ უნდა აღემატებოდეს 5MB-ს.")
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      return setError("მხოლოდ JPEG, PNG ან WebP ფორმატები დაიშვება.")
-    }
+    const uploadCheck = validateAvatarUpload(file)
+    if (!uploadCheck.ok) return setError(uploadCheck.message)
     setAvatarUploading(true)
     setError("")
     try {

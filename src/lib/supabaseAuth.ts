@@ -1,4 +1,5 @@
 import type { AuthError, Session, SupabaseClient, User } from "@supabase/supabase-js"
+import type { QueryClient } from "@tanstack/react-query"
 
 /** True when the browser holds a session the auth server no longer accepts. */
 export function isStaleAuthSessionError(error: AuthError | null | undefined): boolean {
@@ -58,6 +59,18 @@ export function initSupabaseAuth(client: SupabaseClient): Promise<void> {
   if (authRecoveryStarted) return recoverFromStaleAuthSession(client)
   authRecoveryStarted = true
   return recoverFromStaleAuthSession(client)
+}
+
+/** Clear cached user data when the session ends (sign-out, expiry, or forced logout). */
+export function initAuthStateCleanup(client: SupabaseClient, queryClient: QueryClient): () => void {
+  const {
+    data: { subscription },
+  } = client.auth.onAuthStateChange((event) => {
+    if (event === "SIGNED_OUT") {
+      queryClient.clear()
+    }
+  })
+  return () => subscription.unsubscribe()
 }
 
 /** Validates the user with the auth server, then returns the local session for API calls. */

@@ -2,7 +2,7 @@
 
 export const LIMITS = {
   email: 254,
-  passwordMin: 6,
+  passwordMin: 8,
   passwordMax: 128,
   fullName: 120,
   fullNameMin: 2,
@@ -70,6 +70,9 @@ export function validatePassword(raw: string): FieldResult<string> {
   if (typeof raw !== "string") return fail("Password is required.")
   if (raw.length < LIMITS.passwordMin) return fail(`Password must be at least ${LIMITS.passwordMin} characters.`)
   if (raw.length > LIMITS.passwordMax) return fail("Password is too long.")
+  if (!/[a-zA-Z]/.test(raw) || !/\d/.test(raw)) {
+    return fail("Password must include at least one letter and one number.")
+  }
   return { ok: true, value: raw }
 }
 

@@ -9,6 +9,7 @@ import {
 import OptionalSocialUrlField from "../components/OptionalSocialUrlField.tsx"
 import { parseFreelancerSocialFields } from "../lib/freelancerSocialFields.ts"
 import { avatarPublicUrl } from "../lib/storageImageUrl.ts"
+import { validateAvatarUpload } from "../lib/uploadValidation.ts"
 import { fetchOnboarding } from "../lib/queries/fetchOnboarding.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
@@ -214,12 +215,9 @@ export default function OnboardingPage() {
     const user = (await supabase.auth.getUser()).data.user
     if (!user) return
 
-    if (file.size > 5 * 1024 * 1024) {
-      setError("სურათის ზომა არ უნდა აღემატებოდეს 5MB-ს.")
-      return
-    }
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      setError("მხოლოდ JPEG, PNG ან WebP ფორმატები დაიშვება.")
+    const uploadCheck = validateAvatarUpload(file)
+    if (!uploadCheck.ok) {
+      setError(uploadCheck.message)
       return
     }
 
@@ -518,7 +516,9 @@ export default function OnboardingPage() {
           ) : (
             <div className="mt-6 space-y-4">
               <div className="h-2 rounded-full bg-slate-200">
-                <div className="h-2 rounded-full bg-[#D4A843]" style={{ width: `${(step / 3) * 100}%` }} />
+                <div
+                  className={`h-2 rounded-full bg-[#D4A843] transition-[width] duration-300 ${step === 1 ? "w-1/3" : step === 2 ? "w-2/3" : "w-full"}`}
+                />
               </div>
               <p className="text-xs text-slate-500">{t("common.stepOf", { step, total: 3 })}</p>
 
@@ -916,7 +916,11 @@ export default function OnboardingPage() {
                 <div className="space-y-4">
                   <div>
                     {avatarPreview && (
-                      <img src={avatarPreview} alt="Avatar preview" style={{ width: 100, height: 100, borderRadius: "50%", objectFit: "cover", marginBottom: 12 }} />
+                      <img
+                        src={avatarPreview}
+                        alt="Avatar preview"
+                        className="mb-3 h-[100px] w-[100px] rounded-full object-cover"
+                      />
                     )}
                     <input
                       ref={avatarInputRef}

@@ -1,13 +1,19 @@
 import { createServer } from "node:http"
-import { createReadStream, existsSync, statSync } from "node:fs"
+import { createReadStream, existsSync, readFileSync, statSync } from "node:fs"
 import { join, extname } from "node:path"
 import { fileURLToPath } from "node:url"
-import { buildSecurityHeaders } from "./security/csp.mjs"
+import {
+  buildSecurityHeaders,
+  generateCspNonce,
+  injectScriptNonces,
+} from "./security/csp.mjs"
 
 const root = join(fileURLToPath(new URL(".", import.meta.url)), "dist")
 const host = process.env.HOST ?? "0.0.0.0"
 const port = Number.parseInt(process.env.PORT ?? "3000", 10)
-const securityHeaders = buildSecurityHeaders()
+const staticSecurityHeaders = buildSecurityHeaders()
+const indexPath = join(root, "index.html")
+let indexHtmlTemplate = null
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -23,17 +29,34 @@ const MIME = {
   ".woff2": "font/woff2",
 }
 
-function sendFile(res, filePath) {
+function getIndexHtmlTemplate() {
+  if (indexHtmlTemplate === null) {
+    indexHtmlTemplate = readFileSync(indexPath, "utf8")
+  }
+  return indexHtmlTemplate
+}
+
+function applySecurityHeaders(res, headers) {
+  for (const [name, value] of Object.entries(headers)) {
+    res.setHeader(name, value)
+  }
+}
+
+function sendFile(res, filePath, headers = staticSecurityHeaders) {
+  applySecurityHeaders(res, headers)
   const ext = extname(filePath)
   res.setHeader("Content-Type", MIME[ext] ?? "application/octet-stream")
   createReadStream(filePath).pipe(res)
 }
 
-const server = createServer((req, res) => {
-  for (const [name, value] of Object.entries(securityHeaders)) {
-    res.setHeader(name, value)
-  }
+function sendSpaIndex(res) {
+  const nonce = generateCspNonce()
+  applySecurityHeaders(res, buildSecurityHeaders({ nonce }))
+  res.setHeader("Content-Type", "text/html; charset=utf-8")
+  res.end(injectScriptNonces(getIndexHtmlTemplate(), nonce))
+}
 
+const server = createServer((req, res) => {
   const urlPath = decodeURIComponent((req.url ?? "/").split("?")[0] ?? "/")
   const safePath = urlPath.replace(/\0/g, "")
   const candidate = join(root, safePath)
@@ -43,12 +66,12 @@ const server = createServer((req, res) => {
     return
   }
 
-  const indexPath = join(root, "index.html")
   if (existsSync(indexPath)) {
-    sendFile(res, indexPath)
+    sendSpaIndex(res)
     return
   }
 
+  applySecurityHeaders(res, staticSecurityHeaders)
   res.statusCode = 404
   res.setHeader("Content-Type", "text/plain; charset=utf-8")
   res.end("Not found")
