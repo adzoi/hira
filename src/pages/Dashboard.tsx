@@ -1915,7 +1915,7 @@ export default function DashboardPage() {
               <div className="rounded-xl border border-slate-200 bg-white p-6">
                 <h3 className="text-xl font-bold text-[#1B2B4B]">დამქირავებლის შეფასება</h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  დასრულებულ სამუშაოებზე დააფიქსირე გამოცდილება — ეს ეხმარება სხვა ფრილანსერებს.
+                  დასრულებულ სამუშაოებზე დააფიქსირე გამოცდილება.
                 </p>
                 <ul className="mt-4 space-y-3">
                   {freelancerHirerReviewQueue.map((item) => (
