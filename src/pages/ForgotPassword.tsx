@@ -1,7 +1,6 @@
 import type { FormEvent } from "react"
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
-import Navbar from "../components/Navbar.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import {
   authCooldownUntil,
@@ -95,10 +94,9 @@ export default function ForgotPasswordPage() {
     {usePageMeta(t("auth.forgotTitle"), t("auth.forgotMetaDescription"))}
 
     <div className="min-h-screen bg-[#F8F9FC] page-enter">
-      <Navbar />
       <div className="mx-auto w-full max-w-xl px-4 py-10 md:px-6 md:py-16">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-8">
-          <h1 className="text-[26px] font-bold text-[#1B2B4B] md:text-4xl">{t("auth.forgotHeading")}</h1>
+          <h1 className="text-[28px] font-bold text-[#0088FF] md:text-4xl">{t("auth.forgotHeading")}</h1>
           <p className="mt-2 text-sm text-slate-600">{t("auth.forgotHintLong")}</p>
 
           {sent ? (
@@ -124,7 +122,7 @@ export default function ForgotPasswordPage() {
               <button
                 type="submit"
                 disabled={busy || cooldownSeconds > 0}
-                className="h-11 w-full rounded-lg bg-[#1B2B4B] text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:cursor-not-allowed disabled:opacity-70"
+                className="h-11 w-full rounded-lg bg-[#0088FF] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC] disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {busy
                   ? t("common.inProgress")
