@@ -673,6 +673,14 @@ export default function Navbar() {
             </div>
           )}
           </div>
+          {authStatus === "anon" ? (
+            <Link
+              to="/login"
+              className="inline-flex h-9 shrink-0 items-center whitespace-nowrap px-2 text-sm font-semibold text-[#1B2B4B] transition hover:text-[#D4A843] md:h-10 md:px-3 lg:hidden"
+            >
+              {t("nav.login")}
+            </Link>
+          ) : null}
           <button
             type="button"
             onClick={() => {
