@@ -7,7 +7,7 @@ import { useHomeStatsQuery } from "../lib/queries/useHomeStatsQuery.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { normalizeSearchInput } from "../lib/validation.ts"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
-const mainHeroImage = "/images/main.webp"
+import mainHeroImage from "../../images/main.webp"
 
 function formatNumber(value: number) {
   return value.toLocaleString("en-US").replace(/,/g, " ")

@@ -113,9 +113,18 @@ const server = createServer(async (req, res) => {
   }
 
   const candidate = join(root, safePath)
+  const isStaticAsset = /\.(?:webp|png|jpe?g|gif|svg|ico|js|css|woff2?|ttf|map|xml|txt)$/i.test(safePath)
 
   if (safePath !== "/" && existsSync(candidate) && statSync(candidate).isFile()) {
     sendFile(res, candidate, safePath)
+    return
+  }
+
+  if (isStaticAsset) {
+    applySecurityHeaders(res, staticSecurityHeaders)
+    res.statusCode = 404
+    res.setHeader("Content-Type", "text/plain; charset=utf-8")
+    res.end("Not found")
     return
   }
 
