@@ -1620,7 +1620,7 @@ export default function ProfilePage() {
                     onClick={() => setDeleteStep(2)}
                     className="h-11 w-full rounded-lg bg-[#EF4444] text-sm font-semibold text-white"
                   >
-                    კი, წავშალო
+                    {t("common.delete")}
                   </button>
                 </div>
               </div>
