@@ -1,12 +1,14 @@
 import { Link } from "react-router-dom"
 import Navbar from "../components/Navbar.tsx"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
-import { usePageMeta } from "../lib/usePageMeta.ts"
+import { usePageMeta } from "../lib/usePageMeta.tsx"
 
 export default function NotFoundPage() {
   const { t } = useTranslation()
-  usePageMeta(t("common.pageNotFound"), t("common.notFoundMetaDescription"))
   return (
+    <>
+    {usePageMeta(t("common.pageNotFound"), t("common.notFoundMetaDescription"))}
+
     <div className="min-h-screen bg-[#F8F9FC]">
       <Navbar />
       <main className="mx-auto flex min-h-[70vh] w-full max-w-[1200px] flex-col items-center justify-center px-4 text-center md:px-6">
@@ -20,5 +22,6 @@ export default function NotFoundPage() {
         </Link>
       </main>
     </div>
+  </>
   )
 }

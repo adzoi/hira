@@ -16,7 +16,7 @@ import { avatarImageUrl, serviceImageDetailUrl, serviceImageThumbnailUrl } from 
 import { validateInquiryMessage, validateMoneyAmount } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { pickListingDescription, pickListingTitle } from "../lib/listingLocale.ts"
-import { usePageMeta } from "../lib/usePageMeta.ts"
+import { usePageMeta } from "../lib/usePageMeta.tsx"
 
 type ListingMeta = {
   categoryId: string | null
@@ -244,7 +244,7 @@ export default function ListingDetailPage() {
     return t("listingDetail.metaDescription")
   }, [item, displayDescription, t])
 
-  usePageMeta(pageTitle, pageDescription)
+  const pageMeta = usePageMeta(pageTitle, pageDescription)
 
   useEffect(() => {
     const sid = parsed.meta.subcategoryId?.trim()
@@ -341,6 +341,8 @@ export default function ListingDetailPage() {
   }
 
   return (
+    <>
+      {pageMeta}
     <div className="bg-slate-50 page-enter">
       <main className="mx-auto flex w-full max-w-[1100px] flex-col px-4 py-4 md:px-6 md:py-5 lg:h-[calc(100dvh-11rem)] lg:max-h-[calc(100dvh-11rem)] lg:min-h-0">
         <Link
@@ -549,6 +551,7 @@ export default function ListingDetailPage() {
         )}
       </main>
     </div>
+  </>
   )
 }
 

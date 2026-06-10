@@ -12,7 +12,7 @@ import { fetchJobsPagePayload } from "../lib/marketplaceEdge.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { isSupabaseConfigured, supabase, formatSupabaseClientError } from "../lib/supabase"
-import { usePageMeta } from "../lib/usePageMeta.ts"
+import { usePageMeta } from "../lib/usePageMeta.tsx"
 import { jobVacancyStats } from "../lib/jobVacancies.ts"
 import { formatCityForDisplay, jobMatchesUnifiedLocation } from "../lib/marketplaceFilters.ts"
 import { jobVipIsActive } from "../lib/vipJobTiers.ts"
@@ -578,9 +578,6 @@ export default function JobsPage() {
       </label>
     </div>
   )
-
-  usePageMeta(t("jobs.title"), t("jobs.metaDescription"))
-
   useEffect(() => {
     const query = searchParams.get("q")
     if (query) setSearchText(normalizeSearchInput(query))
@@ -835,6 +832,10 @@ export default function JobsPage() {
   const metaPillClass = tagChipClass
 
   return (
+
+    <>
+    {usePageMeta(t("jobs.title"), t("jobs.metaDescription"))}
+
     <div className="min-h-screen bg-white page-enter">
       <main className="mx-auto w-full max-w-7xl px-6 py-6 font-sans text-slate-600 md:px-8 md:py-8">
         <section className="p-1 md:p-0">
@@ -1076,5 +1077,6 @@ export default function JobsPage() {
         )}
       </main>
     </div>
+  </>
   )
 }

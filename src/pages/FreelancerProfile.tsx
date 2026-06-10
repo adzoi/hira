@@ -37,7 +37,8 @@ import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { validateCvUpload } from "../lib/uploadValidation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
-import { usePageMeta } from "../lib/usePageMeta.ts"
+import { usePageMeta } from "../lib/usePageMeta.tsx"
+import { buildPersonStructuredData, JsonLd } from "../lib/structuredData.tsx"
 import { pickListingDescription, pickListingTitle } from "../lib/listingLocale.ts"
 
 function getInitials(fullName: string) {
@@ -147,9 +148,6 @@ export default function FreelancerProfilePage() {
   const canRespondToApplications = Boolean(
     freelancer?.id && viewerHirerProfileId && viewerUserId && !viewerIsOwner,
   )
-
-  usePageMeta(t("freelancerProfile.title"), t("freelancerProfile.metaDescription"))
-
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return
 
@@ -567,7 +565,22 @@ export default function FreelancerProfilePage() {
   void completedWorkHiddenPublic
   void completedWorkHasRows
 
+  const pageMeta = usePageMeta(t("freelancerProfile.title"), t("freelancerProfile.metaDescription"))
+
+  const personStructuredData = useMemo(() => {
+    if (!profile || !freelancer || error) return null
+    return buildPersonStructuredData({
+      profile,
+      freelancer,
+      skills,
+      avatarUrl: profileAvatarDisplayUrl,
+    })
+  }, [profile, freelancer, skills, profileAvatarDisplayUrl, error])
+
   return (
+    <>
+      {pageMeta}
+      <JsonLd data={personStructuredData} />
     <div className="min-h-screen bg-[#F9FAFB] page-enter">
       <main className="mx-auto w-full min-w-0 max-w-[900px] px-6 py-10">
         {loading ? (
@@ -1156,5 +1169,6 @@ export default function FreelancerProfilePage() {
         </div>
       ) : null}
     </div>
+  </>
   )
 }

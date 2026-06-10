@@ -17,7 +17,7 @@ import { fetchListingsPagePayload } from "../lib/marketplaceEdge.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { isSupabaseConfigured, supabase, formatSupabaseClientError } from "../lib/supabase"
-import { usePageMeta } from "../lib/usePageMeta.ts"
+import { usePageMeta } from "../lib/usePageMeta.tsx"
 import { mergeFreelancerCompletedWorkCounts } from "../lib/freelancerCompletedWorkCounts.ts"
 import { formatCityForDisplay, matchesLocationFilter } from "../lib/marketplaceFilters.ts"
 import {
@@ -606,9 +606,6 @@ export default function ListingsPage() {
       setInquirySubmitting(false)
     }
   }
-
-  usePageMeta(t("listings.title"), t("listings.metaDescription"))
-
   useEffect(() => {
     const query = searchParams.get("q")
     if (query) setSearchText(normalizeSearchInput(query))
@@ -1034,6 +1031,10 @@ export default function ListingsPage() {
   )
 
   return (
+
+    <>
+    {usePageMeta(t("listings.title"), t("listings.metaDescription"))}
+
     <div className="min-h-screen bg-white page-enter">
       <main className="mx-auto w-full max-w-7xl px-6 py-6 font-sans text-slate-600 md:px-8 md:py-8">
         <section className="p-1 md:p-0">
@@ -1351,5 +1352,6 @@ export default function ListingsPage() {
         ) : null}
       </main>
     </div>
+  </>
   )
 }

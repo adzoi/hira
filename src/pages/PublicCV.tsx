@@ -6,7 +6,7 @@ import { fetchPublicCvBySlug } from "../lib/queries/fetchPublicCv.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
-import { usePageMeta } from "../lib/usePageMeta.ts"
+import { usePageMeta } from "../lib/usePageMeta.tsx"
 
 export default function PublicCVPage() {
   const { t } = useTranslation()
@@ -22,10 +22,10 @@ export default function PublicCVPage() {
     enabled: Boolean(slug),
   })
   const error = isError ? queryErrorMessage(queryError, t("common.somethingWrong")) : ""
-
-  usePageMeta(t("cv.publicTitle"), t("cv.publicMetaDescription"))
-
   return (
+    <>
+    {usePageMeta(t("cv.publicTitle"), t("cv.publicMetaDescription"))}
+
     <div className="min-h-screen bg-slate-50">
       <Navbar />
       <main className="mx-auto max-w-5xl px-4 py-8 md:px-6">
@@ -36,5 +36,6 @@ export default function PublicCVPage() {
         {!loading && !error && cv ? <CVPreview cv={cv} readOnly /> : null}
       </main>
     </div>
+  </>
   )
 }

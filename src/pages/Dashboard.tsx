@@ -15,7 +15,7 @@ import { fetchDashboard } from "../lib/queries/fetchDashboard.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
-import { usePageMeta } from "../lib/usePageMeta.ts"
+import { usePageMeta } from "../lib/usePageMeta.tsx"
 
 type TranslateFn = (key: string, params?: Record<string, string | number>) => string
 
@@ -598,9 +598,6 @@ export default function DashboardPage() {
   void hirerCompletedJobsCount
   void freelancerCompletedJobsCount
   void freelancerCompletedPlatformJobs
-
-  usePageMeta(t("dashboard.title"), t("dashboard.metaDescription"))
-
   useEffect(() => {
     const state = location.state as { successMessage?: string } | null
     if (!state?.successMessage) return
@@ -1833,6 +1830,10 @@ export default function DashboardPage() {
   }
 
   return (
+
+    <>
+    {usePageMeta(t("dashboard.title"), t("dashboard.metaDescription"))}
+
     <div className="min-h-screen bg-slate-50">
       <main className="mx-auto max-w-7xl px-6 py-10">
         <div className="mb-8">
@@ -3456,5 +3457,6 @@ export default function DashboardPage() {
         ) : null}
       </main>
     </div>
+  </>
   )
 }

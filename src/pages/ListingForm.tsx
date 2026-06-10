@@ -20,7 +20,7 @@ import { fetchListingForm } from "../lib/queries/fetchListingForm.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
-import { usePageMeta } from "../lib/usePageMeta.ts"
+import { usePageMeta } from "../lib/usePageMeta.tsx"
 import { compressImageForUpload } from "../lib/compressImageForUpload.ts"
 
 type ListingMeta = {
@@ -89,9 +89,6 @@ export default function ListingFormPage() {
   const [existingImageUrls, setExistingImageUrls] = useState<string[]>([])
   const [newImageFiles, setNewImageFiles] = useState<File[]>([])
   const [vipOpen, setVipOpen] = useState(false)
-
-  usePageMeta(isEdit ? t("listingForm.editTitle") : t("listingForm.newTitle"), t("listingForm.metaDescription"))
-
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return
     void supabase.auth.getUser().then(({ data: { user } }) => {
@@ -367,15 +364,25 @@ export default function ListingFormPage() {
     }
   }
 
+  const pageMeta = usePageMeta(
+    isEdit ? t("listingForm.editTitle") : t("listingForm.newTitle"),
+    t("listingForm.metaDescription"),
+  )
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50">
-        <main className="mx-auto max-w-4xl px-6 py-10">{t("common.loading")}</main>
-      </div>
+      <>
+        {pageMeta}
+        <div className="min-h-screen bg-slate-50">
+          <main className="mx-auto max-w-4xl px-6 py-10">{t("common.loading")}</main>
+        </div>
+      </>
     )
   }
 
   return (
+    <>
+      {pageMeta}
     <div className="min-h-screen bg-slate-50">
       <main className="mx-auto max-w-4xl px-6 py-10">
         <div className="rounded-2xl border border-slate-200 bg-white p-6">
@@ -677,5 +684,6 @@ export default function ListingFormPage() {
         />
       ) : null}
     </div>
+  </>
   )
 }

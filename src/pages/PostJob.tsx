@@ -20,7 +20,7 @@ import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { queryClient } from "../lib/queryClient.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
-import { usePageMeta } from "../lib/usePageMeta.ts"
+import { usePageMeta } from "../lib/usePageMeta.tsx"
 import { compressImageForUpload } from "../lib/compressImageForUpload.ts"
 
 const MAX_JOB_IMAGES = 3
@@ -145,9 +145,6 @@ export default function PostJobPage() {
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [skillFocusCategoryId, setSkillFocusCategoryId] = useState("")
-
-  usePageMeta(isEdit ? t("postJob.editTitle") : t("postJob.postTitle"), t("postJob.metaDescription"))
-
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return
     void supabase.auth.getUser().then(({ data: { user } }) => {
@@ -544,17 +541,27 @@ export default function PostJobPage() {
     }
   }
 
+  const pageMeta = usePageMeta(
+    isEdit ? t("postJob.editTitle") : t("postJob.postTitle"),
+    t("postJob.metaDescription"),
+  )
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50">
-        <div className="mx-auto flex max-w-[720px] items-center justify-center px-6 py-20">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-300 border-t-[#0088FF]" />
+      <>
+        {pageMeta}
+        <div className="min-h-screen bg-slate-50">
+          <div className="mx-auto flex max-w-[720px] items-center justify-center px-6 py-20">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-300 border-t-[#0088FF]" />
+          </div>
         </div>
-      </div>
+      </>
     )
   }
 
   return (
+    <>
+      {pageMeta}
     <div className="page-enter min-h-screen bg-[#F8F9FC]">
       <main className="mx-auto max-w-[720px] px-4 py-8 md:px-6 md:py-10">
         <h1 className={`text-[28px] font-bold md:text-5xl ${isEdit ? "text-[#1B2B4B]" : "text-[#0088FF]"}`}>
@@ -1148,5 +1155,6 @@ export default function PostJobPage() {
         )}
       </main>
     </div>
+  </>
   )
 }

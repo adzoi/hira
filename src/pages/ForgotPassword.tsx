@@ -10,7 +10,7 @@ import {
 } from "../lib/authRateLimit"
 import { validateEmail } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
-import { usePageMeta } from "../lib/usePageMeta.ts"
+import { usePageMeta } from "../lib/usePageMeta.tsx"
 
 export default function ForgotPasswordPage() {
   const { t } = useTranslation()
@@ -20,9 +20,6 @@ export default function ForgotPasswordPage() {
   const [sent, setSent] = useState(false)
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null)
   const [cooldownSeconds, setCooldownSeconds] = useState(0)
-
-  usePageMeta(t("auth.forgotTitle"), t("auth.forgotMetaDescription"))
-
   useEffect(() => {
     if (!cooldownUntil) {
       setCooldownSeconds(0)
@@ -93,6 +90,10 @@ export default function ForgotPasswordPage() {
   }
 
   return (
+
+    <>
+    {usePageMeta(t("auth.forgotTitle"), t("auth.forgotMetaDescription"))}
+
     <div className="min-h-screen bg-[#F8F9FC] page-enter">
       <Navbar />
       <div className="mx-auto w-full max-w-xl px-4 py-10 md:px-6 md:py-16">
@@ -142,5 +143,6 @@ export default function ForgotPasswordPage() {
         </div>
       </div>
     </div>
+  </>
   )
 }

@@ -11,7 +11,7 @@ import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
-import { usePageMeta } from "../lib/usePageMeta.ts"
+import { usePageMeta } from "../lib/usePageMeta.tsx"
 import { formatCityForDisplay, formatIndustryForDisplay, matchesLocationFilter } from "../lib/marketplaceFilters.ts"
 import { normalizeSearchInput, safeExternalHref } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
@@ -334,9 +334,6 @@ export default function HirersPage() {
   const [locationFilter, setLocationFilter] = useState("")
   const [draftLocationFilter, setDraftLocationFilter] = useState("")
   const [avatarPreview, setAvatarPreview] = useState<{ companyName: string; avatarUrl: string | null } | null>(null)
-
-  usePageMeta(t("hirers.title"), t("hirers.metaDescription"))
-
   useEffect(() => {
     if (!advancedDropdownOpen) return
     const onKey = (event: KeyboardEvent) => {
@@ -417,6 +414,8 @@ export default function HirersPage() {
     return list.sort((a, b) => b.jobsPosted - a.jobsPosted)
   }, [filtered, sortBy])
 
+  const pageMeta = usePageMeta(t("hirers.title"), t("hirers.metaDescription"))
+
   if (loading) {
     return (
       <div className="min-h-screen bg-white page-enter">
@@ -469,6 +468,8 @@ export default function HirersPage() {
   )
 
   return (
+    <>
+      {pageMeta}
     <div className="min-h-screen bg-white page-enter">
       <main className="mx-auto w-full max-w-7xl px-6 py-6 font-sans text-slate-600 md:px-8 md:py-8">
         <section className="p-1 md:p-0">
@@ -669,5 +670,6 @@ export default function HirersPage() {
         </div>
       ) : null}
     </div>
+  </>
   )
 }

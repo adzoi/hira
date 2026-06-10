@@ -27,7 +27,7 @@ import Footer from "./components/Footer.tsx"
 import HomeFeedSection from "./components/HomeFeedSection.tsx"
 import { useHomeStatsQuery } from "./lib/queries/useHomeStatsQuery.ts"
 import { useTranslation } from "./i18n/LocaleContext.tsx"
-import { usePageMeta } from "./lib/usePageMeta.ts"
+import { usePageMeta } from "./lib/usePageMeta.tsx"
 import mainHeroImage from "../images/main.webp"
 
 const DashboardPage = lazy(() => import("./pages/Dashboard.tsx"))
@@ -82,7 +82,7 @@ function HomePage() {
   const [searchText, setSearchText] = useState("")
   const [viewerType, setViewerType] = useState<"freelancer" | "hirer" | null>(null)
   const { data: stats = { freelancerCount: 0, jobCount: 0, completedCount: 0 } } = useHomeStatsQuery()
-  usePageMeta(t("home.title"), t("home.metaDescription"))
+  const pageMeta = usePageMeta(t("home.title"), t("home.metaDescription"))
 
   useEffect(() => {
     let cancelled = false
@@ -116,6 +116,8 @@ function HomePage() {
   }
 
   return (
+    <>
+      {pageMeta}
     <main className="page-enter">
       <section className="bg-[#0088FF]">
         <div className="mx-auto grid w-full max-w-[1200px] items-stretch gap-8 px-4 py-10 md:px-6 lg:grid-cols-2 lg:py-16">
@@ -192,6 +194,7 @@ function HomePage() {
         </section>
       ) : null}
     </main>
+    </>
   )
 }
 
@@ -214,7 +217,7 @@ function LoginPage() {
     location.state !== null &&
     (location.state as { reason?: string }).reason === "password-reset"
 
-  usePageMeta(t("auth.loginTitle"), t("auth.loginMetaDescription"))
+  const pageMeta = usePageMeta(t("auth.loginTitle"), t("auth.loginMetaDescription"))
 
   useEffect(() => {
     if (!cooldownUntil) {
@@ -306,6 +309,8 @@ function LoginPage() {
   }
 
   return (
+    <>
+      {pageMeta}
     <div className="min-h-screen bg-[#F8F9FC] page-enter">
       <div className="mx-auto w-full max-w-xl px-4 py-10 md:px-6 md:py-16">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-8">
@@ -414,6 +419,7 @@ function LoginPage() {
         </div>
       </div>
     </div>
+    </>
   )
 }
 
@@ -436,7 +442,7 @@ function RegisterPage() {
   const [cooldownSeconds, setCooldownSeconds] = useState(0)
   const registerInFlightRef = useRef(false)
 
-  usePageMeta(t("auth.registerTitle"), t("auth.registerMetaDescription"))
+  const pageMeta = usePageMeta(t("auth.registerTitle"), t("auth.registerMetaDescription"))
 
   useEffect(() => {
     if (!cooldownUntil) {
@@ -606,6 +612,8 @@ function RegisterPage() {
   }
 
   return (
+    <>
+      {pageMeta}
     <div className="min-h-screen bg-[#F8F9FC] page-enter">
       <div className="mx-auto w-full max-w-3xl px-4 py-10 md:px-6 md:py-14">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-8">
@@ -765,6 +773,7 @@ function RegisterPage() {
         </div>
       </div>
     </div>
+    </>
   )
 }
 

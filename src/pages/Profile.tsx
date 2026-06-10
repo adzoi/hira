@@ -24,7 +24,7 @@ import { fetchProfile, SKILL_PICKER_UNCATEGORIZED } from "../lib/queries/fetchPr
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
-import { usePageMeta } from "../lib/usePageMeta.ts"
+import { usePageMeta } from "../lib/usePageMeta.tsx"
 
 type SkillCategoryRow = { id: string; name_ka: string; parent_id: string | null }
 
@@ -188,9 +188,6 @@ export default function ProfilePage() {
     for (const s of skillsCatalog) m.set(s.id, s.name)
     return m
   }, [skillsCatalog])
-
-  usePageMeta(t("profile.title"), t("profile.metaDescription"))
-
   useEffect(() => {
     if (!langDropdownOpen) return
     const onPointerDown = (event: PointerEvent) => {
@@ -806,6 +803,10 @@ export default function ProfilePage() {
   if (loading) return <div className="p-6">{t("common.loading")}</div>
 
   return (
+
+    <>
+    {usePageMeta(t("profile.title"), t("profile.metaDescription"))}
+
     <div className="min-h-screen bg-slate-50">
       <main className="mx-auto max-w-3xl px-6 py-10">
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
@@ -1664,5 +1665,6 @@ export default function ProfilePage() {
         </div>
       ) : null}
     </div>
+  </>
   )
 }

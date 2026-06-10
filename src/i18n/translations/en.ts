@@ -98,6 +98,8 @@ export const en: T = {
   },
   terms: {
     pageTitle: "Terms of use — Hira",
+    metaDescription:
+      "Hira terms of use — rules for freelancers, hirers, and marketplace users in Georgia.",
     heroHeading: "Terms of use",
     heroSubtitle: "Please read these terms carefully before using Hira.",
     lastUpdated: "Last updated: 7 June 2026",
@@ -162,6 +164,8 @@ export const en: T = {
   },
   privacy: {
     pageTitle: "Privacy — Hira",
+    metaDescription:
+      "Hira privacy policy — how we collect, use, and protect your personal data.",
     heroHeading: "Privacy policy",
     heroSubtitle: "How Hira collects, uses, and protects your personal data.",
     lastUpdated: "Last updated: 7 June 2026",
@@ -230,6 +234,8 @@ export const en: T = {
     bannerAcceptAll: "Accept all",
     bannerEssentialOnly: "Essential only",
     pageTitle: "Cookies — Hira",
+    metaDescription:
+      "How Hira uses cookies and local storage for sign-in, preferences, and site functionality.",
     heroHeading: "Cookies",
     heroSubtitle: "How we use cookies on Hira.",
     lastUpdated: "Last updated: 7 June 2026",
@@ -268,6 +274,8 @@ export const en: T = {
   },
   guide: {
     pageTitle: "Guide — Hira",
+    metaDescription:
+      "Step-by-step guide to registering, posting listings, finding jobs, and messaging on Hira.",
     heroHeading: "Guide",
     heroSubtitle: "Step-by-step instructions for using Hira.",
     section1Heading: "1. Getting started",
@@ -302,6 +310,8 @@ export const en: T = {
   },
   faq: {
     pageTitle: "FAQ — Hira",
+    metaDescription:
+      "Answers to frequently asked questions about Hira — registration, listings, jobs, and payments.",
     heroHeading: "FAQ",
     heroSubtitle: "Frequently asked questions about Hira.",
     q1: "What is Hira?",
@@ -401,7 +411,7 @@ export const en: T = {
     proposedAmount: "Proposed: {amount} ₾",
     areYouSure: "Are you sure?",
     dontHaveOne: "I don't have one",
-    pageNotFound: "Page not found",
+    pageNotFound: "Page not found — Hira",
     notFoundMetaDescription: "The page you requested was not found on Hira.",
     goHome: "Go to home",
     stepOf: "Step {step}/{total}",
@@ -973,6 +983,9 @@ export const en: T = {
     loadFailed: "Could not load saved items.",
   },
   onboarding: {
+    title: "Onboarding — Hira",
+    metaDescription:
+      "Complete your Hira profile — skills, experience, and languages for freelancers and hirers.",
     heading: "Onboarding",
     languagesMin: "Languages (min. 1)",
     experienceMax: "Experience (max. 10)",
@@ -985,6 +998,8 @@ export const en: T = {
   cv: {
     generatorTitle: "CV generator — Hira",
     publicTitle: "Public CV — Hira",
+    checkoutE2eTitle: "PayPal checkout (E2E) — Hira",
+    checkoutE2eMetaDescription: "Internal PayPal checkout test page for Hira.",
     generatorMetaDescription: "Build and download a professional CV from your Hira profile.",
     publicMetaDescription: "View a public CV shared from Hira.",
     loadFailed: "Could not load CV.",

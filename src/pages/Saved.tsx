@@ -7,7 +7,7 @@ import { queryKeys } from "../lib/queryKeys.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase.ts"
 import type { SavedResourceType } from "../lib/savedItems.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
-import { usePageMeta } from "../lib/usePageMeta.ts"
+import { usePageMeta } from "../lib/usePageMeta.tsx"
 
 export default function SavedPage() {
   const { t } = useTranslation()
@@ -33,9 +33,6 @@ export default function SavedPage() {
     enabled: isSupabaseConfigured,
   })
   const error = isError ? queryErrorMessage(queryError, t("saved.loadFailed")) : ""
-
-  usePageMeta(t("saved.title"), t("saved.metaDescription"))
-
   const remove = async (bookmarkId: string) => {
     if (!supabase || removingId) return
     setRemovingId(bookmarkId)
@@ -53,6 +50,10 @@ export default function SavedPage() {
   }
 
   return (
+
+    <>
+    {usePageMeta(t("saved.title"), t("saved.metaDescription"))}
+
     <div className="min-h-screen bg-[#F8F9FC]">
       <main className="mx-auto max-w-3xl px-4 py-8 md:px-6 md:py-10">
         <h1 className="text-2xl font-extrabold text-[#1B2B4B]">{t("saved.heading")}</h1>
@@ -124,5 +125,6 @@ export default function SavedPage() {
         )}
       </main>
     </div>
+  </>
   )
 }

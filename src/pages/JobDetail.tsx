@@ -17,7 +17,8 @@ import { formatJobBudget, jobApplicationRateLabel } from "../lib/listingPrice.ts
 import { formatHirerContactForApplicant, hirerContactCopyText } from "../lib/jobContactPreference.ts"
 import { validateCoverLetter, validateMoneyAmount } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
-import { usePageMeta } from "../lib/usePageMeta.ts"
+import { usePageMeta } from "../lib/usePageMeta.tsx"
+import { buildJobPostingStructuredData, JsonLd } from "../lib/structuredData.tsx"
 import { pickListingTitle } from "../lib/listingLocale.ts"
 import { displayJobDescription } from "../lib/jobDescriptionDisplay.ts"
 
@@ -63,6 +64,7 @@ const sidebarCardClass = `${detailCardClass} flex min-h-[580px] flex-col md:min-
 
 export default function JobDetailPage() {
   const { t, locale } = useTranslation()
+  const pageMeta = usePageMeta(t("jobDetail.title"), t("jobDetail.metaDescription"))
   const { pushToast } = useToast()
   const queryClient = useQueryClient()
   const { id } = useParams()
@@ -112,9 +114,6 @@ export default function JobDetailPage() {
     setViewerUserId(data.viewerUserId)
     setHirerContact(data.hirerContact)
   }, [data])
-
-  usePageMeta(t("jobDetail.title"), t("jobDetail.metaDescription"))
-
   useEffect(() => {
     if (!supabase || !job?.id) return
     if (trackedJobViewRef.current === job.id) return
@@ -161,6 +160,15 @@ export default function JobDetailPage() {
     if (!job) return ""
     return displayJobDescription(job, locale)
   }, [job, locale])
+
+  const jobStructuredData = useMemo(() => {
+    if (!job || vacancySnap?.isFull) return null
+    return buildJobPostingStructuredData({
+      job,
+      title: displayTitle,
+      description: displayDescription,
+    })
+  }, [job, displayTitle, displayDescription, vacancySnap?.isFull])
 
   const imagePublicUrls = useMemo(() => {
     if (!job) return []
@@ -255,6 +263,8 @@ export default function JobDetailPage() {
 
   if (loading) {
     return (
+      <>
+        {pageMeta}
       <div className="bg-slate-50 page-enter">
         <main className="mx-auto flex w-full max-w-[1100px] flex-col px-4 py-4 md:px-6 md:py-5">
           <div className="grid min-h-[420px] flex-1 grid-cols-1 gap-4 md:grid-cols-2">
@@ -263,12 +273,15 @@ export default function JobDetailPage() {
           </div>
         </main>
       </div>
+      </>
     )
   }
 
   if (!job) {
     const headline = error.trim().length > 0 ? error : t("jobDetail.notFound")
     return (
+      <>
+        {pageMeta}
       <div className="bg-slate-50 page-enter">
         <main className="mx-auto flex w-full max-w-[1100px] flex-col px-4 py-4 md:px-6 md:py-5">
           <div className={`${detailCardClass} items-center justify-center p-8 text-center`}>
@@ -286,10 +299,14 @@ export default function JobDetailPage() {
           </div>
         </main>
       </div>
+      </>
     )
   }
 
   return (
+    <>
+      {pageMeta}
+      <JsonLd data={jobStructuredData} />
     <div className="bg-slate-50 page-enter">
       <main className="mx-auto flex w-full max-w-[1100px] flex-col px-4 py-4 md:px-6 md:py-5">
         <Link
@@ -599,5 +616,6 @@ export default function JobDetailPage() {
         />
       ) : null}
     </div>
+  </>
   )
 }

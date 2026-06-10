@@ -6,7 +6,7 @@ import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { AUTH_RECOVERY_HINT_KEY } from "../lib/supabaseAuth.ts"
 import { validatePassword } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
-import { usePageMeta } from "../lib/usePageMeta.ts"
+import { usePageMeta } from "../lib/usePageMeta.tsx"
 
 function recoveryHintFromBrowser(): boolean {
   if (typeof window === "undefined") return false
@@ -33,9 +33,6 @@ export default function ResetPasswordPage() {
   const [busy, setBusy] = useState(false)
   const [checking, setChecking] = useState(true)
   const [ready, setReady] = useState(false)
-
-  usePageMeta(t("auth.resetTitle"), t("auth.resetMetaDescription"))
-
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
       setChecking(false)
@@ -122,21 +119,28 @@ export default function ResetPasswordPage() {
     }
   }
 
+  const pageMeta = usePageMeta(t("auth.resetTitle"), t("auth.resetMetaDescription"))
+
   if (!isSupabaseConfigured || !supabase) {
     return (
-      <div className="min-h-screen bg-[#F8F9FC] page-enter">
-        <Navbar />
-        <div className="mx-auto w-full max-w-xl px-4 py-16 text-center text-sm text-slate-700">
-          {t("auth.supabaseNotConfigured")}
-          <Link to="/login" className="mt-4 block font-semibold text-[#D4A843] hover:underline">
-            {t("nav.login")}
-          </Link>
+      <>
+        {pageMeta}
+        <div className="min-h-screen bg-[#F8F9FC] page-enter">
+          <Navbar />
+          <div className="mx-auto w-full max-w-xl px-4 py-16 text-center text-sm text-slate-700">
+            {t("auth.supabaseNotConfigured")}
+            <Link to="/login" className="mt-4 block font-semibold text-[#D4A843] hover:underline">
+              {t("nav.login")}
+            </Link>
+          </div>
         </div>
-      </div>
+      </>
     )
   }
 
   return (
+    <>
+      {pageMeta}
     <div className="min-h-screen bg-[#F8F9FC] page-enter">
       <Navbar />
       <div className="mx-auto w-full max-w-xl px-4 py-10 md:px-6 md:py-16">
@@ -204,5 +208,6 @@ export default function ResetPasswordPage() {
         </div>
       </div>
     </div>
+  </>
   )
 }

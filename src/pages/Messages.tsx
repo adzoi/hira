@@ -31,7 +31,7 @@ import { unreadCountsQueryKey } from "../lib/unreadCountsCache.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase.ts"
 import { LIMITS, validateUuid } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
-import { usePageMeta } from "../lib/usePageMeta.ts"
+import { usePageMeta } from "../lib/usePageMeta.tsx"
 
 function formatRelativeTime(iso: string | null, t: (key: string, params?: Record<string, string | number>) => string): string {
   if (!iso) return ""
@@ -108,7 +108,7 @@ function ProfileLink({
 
 export default function MessagesPage() {
   const { t } = useTranslation()
-  usePageMeta(t("messages.title"), t("messages.metaDescription"))
+  const pageMeta = usePageMeta(t("messages.title"), t("messages.metaDescription"))
   const { conversationId: routeConversationId } = useParams<{ conversationId?: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -511,17 +511,22 @@ export default function MessagesPage() {
 
   if (!isSupabaseConfigured) {
     return (
-      <div className="page-enter min-h-screen bg-[#f8f9fc]">
+      <>
+        {pageMeta}
+        <div className="page-enter min-h-screen bg-[#f8f9fc]">
         <main className="mx-auto max-w-[1200px] px-4 py-8">
           <ErrorState message={t("validation.supabaseMissing")} />
         </main>
       </div>
+      </>
     )
   }
 
   const mobileThreadFullscreen = mobileThreadActive && isMobileViewport
 
   return (
+    <>
+      {pageMeta}
     <div
       className={`page-enter bg-[#f8f9fc] ${
         mobileThreadFullscreen
@@ -764,5 +769,6 @@ export default function MessagesPage() {
         </div>
       </main>
     </div>
+  </>
   )
 }

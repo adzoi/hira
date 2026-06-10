@@ -384,16 +384,16 @@ export default function Navbar() {
             alt={t("brand.name")}
             width={280}
             height={105}
-            className="h-[52px] w-auto object-contain"
+            className="h-10 w-auto object-contain lg:h-11 xl:h-[52px]"
           />
         </Link>
 
-        <nav className="hidden min-w-0 items-center justify-center gap-1.5 text-sm font-medium md:flex lg:gap-2">
+        <nav className="hidden min-w-0 items-center justify-center gap-1.5 text-sm font-medium lg:flex xl:gap-2">
           {navLinks.map((link) => (
             <Link
               key={link.label}
               to={link.to}
-              className={`inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-full border px-3 transition lg:h-10 lg:px-4 ${
+              className={`inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-full border px-2.5 text-xs transition xl:h-10 xl:px-4 xl:text-sm ${
                 navLinkUnderlineActive(location.pathname, link.to)
                   ? "border-transparent bg-[#0088FF] text-white"
                   : "border-slate-300 bg-white text-slate-500 hover:border-slate-400 hover:text-slate-700"
@@ -407,7 +407,7 @@ export default function Navbar() {
         <div className="flex shrink-0 items-center justify-end gap-1.5 md:gap-2 lg:gap-3">
           {isAuthed ? (
             <>
-              <div className="hidden items-center gap-2 md:flex lg:gap-3">
+              <div className="hidden items-center gap-2 lg:flex xl:gap-3">
                 <Link
                   to="/dashboard"
                   className={`inline-flex h-10 items-center rounded-full border px-4 text-sm font-medium transition ${
@@ -531,7 +531,7 @@ export default function Navbar() {
                   </div>
                 ) : null}
               </div>
-              <div className="relative md:hidden">
+              <div className="relative lg:hidden">
                 <button
                   type="button"
                   onClick={() => {
@@ -590,7 +590,7 @@ export default function Navbar() {
             </>
           ) : null}
 
-          <div className="hidden items-center gap-2 md:flex lg:gap-3">
+          <div className="hidden min-w-0 items-center gap-2 lg:flex xl:gap-3">
           {isAuthed ? (
             <div className="relative">
               <button
@@ -644,13 +644,13 @@ export default function Navbar() {
             <>
               <Link
                 to="/login"
-                className="inline-flex h-11 items-center text-sm font-semibold text-[#1B2B4B] transition hover:text-[#D4A843]"
+                className="inline-flex h-11 shrink-0 items-center whitespace-nowrap text-sm font-semibold text-[#1B2B4B] transition hover:text-[#D4A843]"
               >
                 {t("nav.login")}
               </Link>
               <Link
                 to="/register"
-                className="inline-flex h-10 items-center rounded-md border border-slate-300 px-3 text-sm font-semibold text-[#1B2B4B] transition hover:border-[#D4A843] hover:text-[#D4A843] lg:h-11 lg:px-4"
+                className="inline-flex h-10 shrink-0 items-center whitespace-nowrap rounded-md border border-slate-300 px-3 text-sm font-semibold text-[#1B2B4B] transition hover:border-[#D4A843] hover:text-[#D4A843] xl:h-11 xl:px-4"
               >
                 {t("nav.register")}
               </Link>
@@ -660,7 +660,7 @@ export default function Navbar() {
                   event.preventDefault()
                   handlePostJob()
                 }}
-                className="inline-flex h-10 items-center rounded-md bg-[#0088FF] px-3 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC] lg:h-11 lg:px-4"
+                className="inline-flex h-10 shrink-0 items-center whitespace-nowrap rounded-md bg-[#0088FF] px-3 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC] xl:h-11 xl:px-4"
               >
                 {t("nav.postJob")}
               </Link>
@@ -678,7 +678,7 @@ export default function Navbar() {
               setMenuOpen(false)
               setMobileMenuOpen((v) => !v)
             }}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-slate-300 bg-white md:hidden"
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-white lg:hidden"
           >
             <span className="text-lg">{mobileMenuOpen ? "✕" : "☰"}</span>
           </button>
@@ -689,7 +689,7 @@ export default function Navbar() {
       </div>
 
       <div
-        className={`overflow-hidden border-t border-slate-100 bg-white transition-all md:hidden ${
+        className={`overflow-hidden border-t border-slate-100 bg-white transition-all lg:hidden ${
           mobileMenuOpen ? "max-h-[420px] opacity-100" : "max-h-0 opacity-0"
         }`}
       >

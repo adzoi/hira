@@ -55,6 +55,7 @@ export default function TermsPage() {
   return (
     <InfoPageLayout
       pageTitle="terms.pageTitle"
+      metaDescription="terms.metaDescription"
       heroHeading="terms.heroHeading"
       heroSubtitle="terms.heroSubtitle"
       lastUpdated="terms.lastUpdated"

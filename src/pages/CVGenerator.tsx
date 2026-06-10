@@ -10,7 +10,7 @@ import { useToast } from "../components/ui/ToastProvider.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { getAuthenticatedSession } from "../lib/supabaseAuth.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
-import { usePageMeta } from "../lib/usePageMeta.ts"
+import { usePageMeta } from "../lib/usePageMeta.tsx"
 
 export default function CVGeneratorPage() {
   const { t } = useTranslation()
@@ -40,9 +40,6 @@ export default function CVGeneratorPage() {
       pushToast({ type: toastType, message: evt.message })
     }
   }, [pushToast])
-
-  usePageMeta(t("cv.generatorTitle"), t("cv.generatorMetaDescription"))
-
   useEffect(() => {
     let cancelled = false
     void (async () => {
@@ -61,6 +58,10 @@ export default function CVGeneratorPage() {
   }, [navigate])
 
   return (
+
+    <>
+    {usePageMeta(t("cv.generatorTitle"), t("cv.generatorMetaDescription"))}
+
     <div className="min-h-screen bg-slate-50">
       <Navbar />
       <main className="mx-auto max-w-5xl px-4 py-8 md:px-6">
@@ -72,5 +73,6 @@ export default function CVGeneratorPage() {
         {!loading && !error ? <CVPreview cv={cv} onNotify={notifyCv} /> : null}
       </main>
     </div>
+  </>
   )
 }

@@ -31,6 +31,7 @@ export default function CookiesPage() {
   return (
     <InfoPageLayout
       pageTitle="cookies.pageTitle"
+      metaDescription="cookies.metaDescription"
       heroHeading="cookies.heroHeading"
       heroSubtitle="cookies.heroSubtitle"
       lastUpdated="cookies.lastUpdated"

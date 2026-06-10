@@ -39,6 +39,7 @@ export default function FaqPage() {
   return (
     <InfoPageLayout
       pageTitle="faq.pageTitle"
+      metaDescription="faq.metaDescription"
       heroHeading="faq.heroHeading"
       heroSubtitle="faq.heroSubtitle"
       sections={sections}

@@ -29,7 +29,7 @@ import {
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
-import { usePageMeta } from "../lib/usePageMeta.ts"
+import { usePageMeta } from "../lib/usePageMeta.tsx"
 
 function companyInitials(name: string) {
   const trimmed = name.trim()
@@ -153,9 +153,6 @@ export default function HirerPublicPage() {
       cancelled = true
     }
   }, [canRespondToListingOffers, hirer?.id, viewerFreelancerProfileId])
-
-  usePageMeta(data?.documentTitle ?? t("hirerPublic.title"), t("hirerPublic.metaDescription"))
-
   useEffect(() => {
     if (!hirer?.ownerUserId || !isSupabaseConfigured || !supabase) {
       setOwnerVisitCount(null)
@@ -322,20 +319,27 @@ export default function HirerPublicPage() {
     }
   }
 
+  const pageMeta = usePageMeta(data?.documentTitle ?? t("hirerPublic.title"), t("hirerPublic.metaDescription"))
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F8F9FC]">
-        <main className="mx-auto w-full max-w-[720px] px-4 py-8 md:px-6">
-          <SkeletonCard />
-          <SkeletonCard />
-        </main>
-      </div>
+      <>
+        {pageMeta}
+        <div className="min-h-screen bg-[#F8F9FC]">
+          <main className="mx-auto w-full max-w-[720px] px-4 py-8 md:px-6">
+            <SkeletonCard />
+            <SkeletonCard />
+          </main>
+        </div>
+      </>
     )
   }
 
   if (UUID_RE.test(id ?? "") && !hirer && !error) {
     return (
-      <div className="min-h-screen bg-[#F8F9FC]">
+      <>
+        {pageMeta}
+        <div className="min-h-screen bg-[#F8F9FC]">
         <main className="mx-auto w-full max-w-[720px] px-4 py-16 text-center md:px-6">
           <p className="text-xl font-bold text-[#1B2B4B]">{t("hirerPublic.notFound")}</p>
           <Link to="/hirers" className="mt-6 inline-flex h-11 items-center rounded-lg bg-[#1B2B4B] px-5 text-sm font-semibold text-white">
@@ -343,12 +347,15 @@ export default function HirerPublicPage() {
           </Link>
         </main>
       </div>
+      </>
     )
   }
 
   if ((error || invalidId || !hirer) && !UUID_RE.test(id ?? "")) {
     return (
-      <div className="min-h-screen bg-[#F8F9FC]">
+      <>
+        {pageMeta}
+        <div className="min-h-screen bg-[#F8F9FC]">
         <main className="mx-auto w-full max-w-[720px] px-4 py-8 md:px-6">
           {error || invalidId ? <ErrorState message={error || "არასწორი იდენტიფიკატორი."} /> : <ErrorState message="არასწორი ბმული." />}
           <Link to="/hirers" className="mt-6 inline-block text-sm font-semibold text-[#1B2B4B] hover:text-[#D4A843]">
@@ -356,20 +363,26 @@ export default function HirerPublicPage() {
           </Link>
         </main>
       </div>
+      </>
     )
   }
 
   if (!hirer) {
     return (
-      <div className="min-h-screen bg-[#F8F9FC]">
-        <main className="mx-auto w-full max-w-[720px] px-4 py-8 md:px-6">
-          <ErrorState message={error || "არ ხელმისაწვდომია."} />
-        </main>
-      </div>
+      <>
+        {pageMeta}
+        <div className="min-h-screen bg-[#F8F9FC]">
+          <main className="mx-auto w-full max-w-[720px] px-4 py-8 md:px-6">
+            <ErrorState message={error || "არ ხელმისაწვდომია."} />
+          </main>
+        </div>
+      </>
     )
   }
 
   return (
+    <>
+      {pageMeta}
     <div className="min-h-screen bg-[#F8F9FC] page-enter">
       <main className="mx-auto w-full max-w-[720px] px-4 py-6 md:px-6 md:py-10">
         <Link to="/hirers" className="mb-6 inline-block text-sm font-semibold text-[#1B2B4B] hover:text-[#D4A843]">
@@ -597,5 +610,6 @@ export default function HirerPublicPage() {
         ) : null}
       </main>
     </div>
+  </>
   )
 }

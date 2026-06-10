@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom"
 import I18nText from "../i18n/I18nText.tsx"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
-import { usePageMeta } from "../lib/usePageMeta.ts"
+import { usePageMeta } from "../lib/usePageMeta.tsx"
 
 const valueCards = [
   { titleKey: "about.qualityTitle", descKey: "about.qualityDesc" },
@@ -11,10 +11,10 @@ const valueCards = [
 
 export default function AboutPage() {
   const { t } = useTranslation()
-
-  usePageMeta(t("about.pageTitle"), t("about.metaDescription"))
-
   return (
+    <>
+    {usePageMeta(t("about.pageTitle"), t("about.metaDescription"))}
+
     <main className="page-enter bg-slate-50">
       <section className="bg-brand">
         <div className="mx-auto w-full max-w-[1200px] px-4 py-14 md:px-6 md:py-20">
@@ -85,5 +85,6 @@ export default function AboutPage() {
         </div>
       </section>
     </main>
+  </>
   )
 }

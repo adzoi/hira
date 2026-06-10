@@ -1,2 +1,5 @@
 User-agent: *
 Allow: /
+
+Sitemap: https://hira.ge/sitemap.xml
+Sitemap: https://hira.ge/sitemap-dynamic.xml

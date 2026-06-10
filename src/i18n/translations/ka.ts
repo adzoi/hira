@@ -94,6 +94,8 @@ export const ka: T = {
   },
   terms: {
     pageTitle: "გამოყენების პირობები — ჰირა",
+    metaDescription:
+      "ჰირას გამოყენების პირობები — წესები ფრილანსერებისთვის, დამქირავებლებისთვის და მარკეტპლეისის მომხმარებლებისთვის.",
     heroHeading: "გამოყენების პირობები",
     heroSubtitle: "გთხოვთ, ყურადღებით გაეცნოთ ჰირას გამოყენების წესებს.",
     lastUpdated: "ბოლო განახლება: 2026 წლის 7 ივნისი",
@@ -158,6 +160,8 @@ export const ka: T = {
   },
   privacy: {
     pageTitle: "კონფიდენციალურობა — ჰირა",
+    metaDescription:
+      "ჰირას კონფიდენციალურობის პოლიტიკა — როგორ ვაგროვებთ, ვიყენებთ და ვიცავთ თქვენს პირად მონაცემებს.",
     heroHeading: "კონფიდენციალურობის პოლიტიკა",
     heroSubtitle: "როგორ აგროვებს, იყენებს და იცავს ჰირა თქვენს პირად მონაცემებს.",
     lastUpdated: "ბოლო განახლება: 2026 წლის 7 ივნისი",
@@ -226,6 +230,8 @@ export const ka: T = {
     bannerAcceptAll: "ყველას მიღება",
     bannerEssentialOnly: "მხოლოდ აუცილებელი",
     pageTitle: "Cookies — ჰირა",
+    metaDescription:
+      "როგორ იყენებს ჰირა cookies-ს და local storage-ს შესვლის, პარამეტრებისა და საიტის ფუნქციებისთვის.",
     heroHeading: "Cookies",
     heroSubtitle: "როგორ ვიყენებთ cookies-ს ჰირაზე.",
     lastUpdated: "ბოლო განახლება: 2026 წლის 7 ივნისი",
@@ -264,6 +270,8 @@ export const ka: T = {
   },
   guide: {
     pageTitle: "გზამკვლევი — ჰირა",
+    metaDescription:
+      "ნაბიჯ-ნაბიჯ ინსტრუქცია რეგისტრაციის, განცხადების განთავსების, სამუშაოს პოვნისა და შეტყობინებებისთვის ჰირაზე.",
     heroHeading: "გზამკვლევი",
     heroSubtitle: "ჰირას გამოყენების ინსტრუქცია.",
     section1Heading: "1. დაწყება",
@@ -298,6 +306,8 @@ export const ka: T = {
   },
   faq: {
     pageTitle: "FAQ — ჰირა",
+    metaDescription:
+      "პასუხები ხშირად დასმულ კითხვებზე ჰირას შესახებ — რეგისტრაცია, განცხადებები, სამუშაოები და გადახდები.",
     heroHeading: "FAQ",
     heroSubtitle: "ხშირად დასმული კითხვები ჰირას შესახებ.",
     q1: "რა არის ჰირა?",
@@ -397,7 +407,7 @@ export const ka: T = {
     proposedAmount: "შემოთავაზებული: {amount} ₾",
     areYouSure: "დარწმუნებული ხარ?",
     dontHaveOne: "არ მაქვს",
-    pageNotFound: "გვერდი ვერ მოიძებნა",
+    pageNotFound: "გვერდი ვერ მოიძებნა — ჰირა",
     notFoundMetaDescription: "მოთხოვნილი გვერდი ჰირაზე ვერ მოიძებნა.",
     goHome: "მთავარ გვერდზე",
     stepOf: "ნაბიჯი {step}/{total}",
@@ -969,6 +979,9 @@ export const ka: T = {
     loadFailed: "ჩატვირთვა ვერ მოხერხდა.",
   },
   onboarding: {
+    title: "ონბორდინგი — ჰირა",
+    metaDescription:
+      "დაასრულე შენი ჰირას პროფილი — უნარები, გამოცდილება და ენები ფრილანსერებისა და დამქირავებლებისთვის.",
     heading: "ონბორდინგი",
     languagesMin: "ენები (მინ. 1)",
     experienceMax: "გამოცდილება (მაქს. 10)",
@@ -982,6 +995,8 @@ export const ka: T = {
   cv: {
     generatorTitle: "CV გენერატორი — ჰირა",
     publicTitle: "საჯარო CV — ჰირა",
+    checkoutE2eTitle: "PayPal checkout (E2E) — ჰირა",
+    checkoutE2eMetaDescription: "ჰირას შიდა PayPal checkout-ის ტესტის გვერდი.",
     generatorMetaDescription: "შექმენი და ჩამოტვირთე პროფესიული CV შენი ჰირას პროფილიდან.",
     publicMetaDescription: "ნახე საჯარო CV, რომელიც ჰირიდან გაზიარებულია.",
     loadFailed: "CV-ის ჩატვირთვა ვერ მოხერხდა.",

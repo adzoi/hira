@@ -16,6 +16,14 @@ const staticSecurityHeaders = buildSecurityHeaders()
 const indexPath = join(root, "index.html")
 let indexHtmlTemplate = null
 
+const supabaseFunctionsBase = (
+  process.env.SUPABASE_FUNCTIONS_URL ??
+  (process.env.VITE_SUPABASE_URL
+    ? `${process.env.VITE_SUPABASE_URL.replace(/\/$/, "")}/functions/v1`
+    : "")
+).replace(/\/$/, "")
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY ?? ""
+
 const MIME = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -59,9 +67,50 @@ function sendSpaIndex(res) {
   res.end(injectScriptNonces(getIndexHtmlTemplate(), nonce))
 }
 
-const server = createServer((req, res) => {
+async function proxySitemapDynamic(res) {
+  if (!supabaseFunctionsBase || !supabaseAnonKey) {
+    applySecurityHeaders(res, staticSecurityHeaders)
+    res.statusCode = 503
+    res.setHeader("Content-Type", "text/plain; charset=utf-8")
+    res.end("Sitemap unavailable: configure SUPABASE_FUNCTIONS_URL and SUPABASE_ANON_KEY")
+    return
+  }
+
+  try {
+    const upstream = await fetch(`${supabaseFunctionsBase}/sitemap`, {
+      headers: {
+        apikey: supabaseAnonKey,
+        Authorization: `Bearer ${supabaseAnonKey}`,
+      },
+    })
+    const body = await upstream.text()
+    applySecurityHeaders(res, staticSecurityHeaders)
+    res.statusCode = upstream.status
+    res.setHeader(
+      "Content-Type",
+      upstream.headers.get("content-type") ?? "application/xml; charset=utf-8",
+    )
+    const cacheControl = upstream.headers.get("cache-control")
+    if (cacheControl) res.setHeader("Cache-Control", cacheControl)
+    res.end(body)
+  } catch (error) {
+    console.error("[sitemap-dynamic]", error)
+    applySecurityHeaders(res, staticSecurityHeaders)
+    res.statusCode = 502
+    res.setHeader("Content-Type", "text/plain; charset=utf-8")
+    res.end("Failed to fetch dynamic sitemap")
+  }
+}
+
+const server = createServer(async (req, res) => {
   const urlPath = decodeURIComponent((req.url ?? "/").split("?")[0] ?? "/")
   const safePath = urlPath.replace(/\0/g, "")
+
+  if (safePath === "/sitemap-dynamic.xml") {
+    await proxySitemapDynamic(res)
+    return
+  }
+
   const candidate = join(root, safePath)
 
   if (safePath !== "/" && existsSync(candidate) && statSync(candidate).isFile()) {

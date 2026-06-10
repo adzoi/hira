@@ -47,6 +47,7 @@ export default function PrivacyPage() {
   return (
     <InfoPageLayout
       pageTitle="privacy.pageTitle"
+      metaDescription="privacy.metaDescription"
       heroHeading="privacy.heroHeading"
       heroSubtitle="privacy.heroSubtitle"
       lastUpdated="privacy.lastUpdated"

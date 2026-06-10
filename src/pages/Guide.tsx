@@ -27,6 +27,7 @@ export default function GuidePage() {
   return (
     <InfoPageLayout
       pageTitle="guide.pageTitle"
+      metaDescription="guide.metaDescription"
       heroHeading="guide.heroHeading"
       heroSubtitle="guide.heroSubtitle"
       sections={sections}

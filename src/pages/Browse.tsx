@@ -11,7 +11,7 @@ import { fetchAllRowsByRange } from "../lib/supabaseFetchPaged.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
-import { usePageMeta } from "../lib/usePageMeta.ts"
+import { usePageMeta } from "../lib/usePageMeta.tsx"
 import { matchesLocationFilter } from "../lib/marketplaceFilters.ts"
 import {
   catalogSelectionMatchesEntity,
@@ -381,9 +381,6 @@ export default function BrowsePage() {
     () => effectiveCatalogFilterId(filterRootCategoryId, filterMidCategoryId, ""),
     [filterRootCategoryId, filterMidCategoryId],
   )
-
-  usePageMeta(t("browse.title"), t("browse.metaDescription"))
-
   useEffect(() => {
     const query = searchParams.get("q")
     const category = searchParams.get("category")
@@ -749,6 +746,10 @@ export default function BrowsePage() {
   )
 
   return (
+
+    <>
+    {usePageMeta(t("browse.title"), t("browse.metaDescription"))}
+
     <div className="min-h-screen bg-white page-enter">
       <main className="mx-auto w-full max-w-7xl px-6 py-6 font-sans text-slate-600 md:px-8 md:py-8">
         <section className="p-1 md:p-0">
@@ -920,5 +921,6 @@ export default function BrowsePage() {
         </section>
       </main>
     </div>
+  </>
   )
 }

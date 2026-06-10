@@ -15,6 +15,7 @@ import { fetchOnboarding } from "../lib/queries/fetchOnboarding.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { usePageMeta } from "../lib/usePageMeta.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { LIMITS, validateOptionalUrl, validateTextField } from "../lib/validation.ts"
 
@@ -491,15 +492,20 @@ export default function OnboardingPage() {
 
   if (loading || !authReady || onboardingData?.redirect) {
     return (
-      <div className="min-h-screen bg-slate-50">
-        <div className="mx-auto flex max-w-3xl items-center justify-center py-20">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-300 border-t-[#D4A843]" />
+      <>
+        {usePageMeta(t("onboarding.title"), t("onboarding.metaDescription"))}
+        <div className="min-h-screen bg-slate-50">
+          <div className="mx-auto flex max-w-3xl items-center justify-center py-20">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-300 border-t-[#D4A843]" />
+          </div>
         </div>
-      </div>
+      </>
     )
   }
 
   return (
+    <>
+      {usePageMeta(t("onboarding.title"), t("onboarding.metaDescription"))}
     <div className="min-h-screen bg-slate-50">
       <main className="mx-auto max-w-3xl px-6 py-10">
         <div className="mx-auto max-w-[640px] rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
@@ -1052,5 +1058,6 @@ export default function OnboardingPage() {
         </div>
       </main>
     </div>
+    </>
   )
 }
