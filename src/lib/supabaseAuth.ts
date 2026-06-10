@@ -1,5 +1,6 @@
 import type { AuthError, Session, SupabaseClient, User } from "@supabase/supabase-js"
 import type { QueryClient } from "@tanstack/react-query"
+import { SITE_BASE_URL } from "./usePageMeta.tsx"
 
 /** True when the browser holds a session the auth server no longer accepts. */
 export function isStaleAuthSessionError(error: AuthError | null | undefined): boolean {
@@ -57,6 +58,19 @@ let authRecoveryStarted = false
 const AUTH_HASH_PARAM_KEYS = ["access_token", "refresh_token", "type", "error", "error_description"] as const
 
 export const AUTH_RECOVERY_HINT_KEY = "hira-auth-recovery"
+export const AUTH_ONBOARDING_PATH = "/onboarding"
+export const AUTH_ONBOARDING_URL = `${SITE_BASE_URL}${AUTH_ONBOARDING_PATH}`
+
+const EMAIL_CONFIRMATION_TYPES = new Set(["signup", "email", "email_change", "invite"])
+
+/** Redirect target for Supabase email confirmation links (`signUp` / resend). */
+export function authEmailConfirmRedirectUrl(): string {
+  return AUTH_ONBOARDING_URL
+}
+
+function isEmailConfirmationType(type: string | null): boolean {
+  return type != null && EMAIL_CONFIRMATION_TYPES.has(type)
+}
 
 /** True when the URL hash looks like a Supabase auth redirect (implicit / recovery flow). */
 export function urlHasAuthHash(): boolean {
@@ -72,7 +86,10 @@ export function stripAuthHashFromUrl(): void {
   if (typeof window === "undefined" || !urlHasAuthHash()) return
 
   const hash = window.location.hash
-  if (/\btype=recovery\b/.test(hash)) {
+  const params = new URLSearchParams(hash.replace(/^#/, ""))
+  const type = params.get("type")
+
+  if (type === "recovery") {
     try {
       sessionStorage.setItem(AUTH_RECOVERY_HINT_KEY, "1")
     } catch {
@@ -80,7 +97,12 @@ export function stripAuthHashFromUrl(): void {
     }
   }
 
-  window.history.replaceState(null, "", window.location.pathname)
+  const pathname =
+    isEmailConfirmationType(type) && window.location.pathname !== AUTH_ONBOARDING_PATH
+      ? AUTH_ONBOARDING_PATH
+      : window.location.pathname
+
+  window.history.replaceState(null, "", pathname)
 }
 
 /** Parse hash tokens once on load, then strip them from the address bar. */

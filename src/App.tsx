@@ -33,6 +33,7 @@ const GuidePage = lazy(() => import("./pages/Guide.tsx"))
 const FaqPage = lazy(() => import("./pages/Faq.tsx"))
 const ForgotPasswordPage = lazy(() => import("./pages/ForgotPassword.tsx"))
 const ResetPasswordPage = lazy(() => import("./pages/ResetPassword.tsx"))
+const AuthConfirmPage = lazy(() => import("./pages/AuthConfirm.tsx"))
 const PayPalCheckoutE2EPage = lazy(() => import("./pages/PayPalCheckoutE2E.tsx"))
 const SavedPage = lazy(() => import("./pages/Saved.tsx"))
 const MessagesPage = lazy(() => import("./pages/Messages.tsx"))
@@ -96,6 +97,7 @@ function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/auth/confirm" element={<AuthConfirmPage />} />
             <Route path="/register" element={<RegisterPage />} />
             {(import.meta.env.DEV || import.meta.env.VITE_PAYPAL_E2E_DIAG === "1") ? (
               <Route path="/checkout" element={<PayPalCheckoutE2EPage />} />

@@ -8,6 +8,7 @@ import {
   isAuthRateLimited,
 } from "../lib/authRateLimit"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
+import { authEmailConfirmRedirectUrl } from "../lib/supabaseAuth.ts"
 import {
   LIMITS,
   validateEmail,
@@ -131,6 +132,7 @@ export default function RegisterPage() {
       email: formData.email,
       password: formData.password,
       options: {
+        emailRedirectTo: authEmailConfirmRedirectUrl(),
         data: {
           full_name: formData.full_name,
           user_type: formData.user_type,
