@@ -5,6 +5,7 @@ import PageLoader from "./components/ui/PageLoader.tsx"
 import ProtectedRoute from "./components/ProtectedRoute.tsx"
 import CookieBanner from "./components/CookieBanner.tsx"
 import Footer from "./components/Footer.tsx"
+import { buildSiteOrganizationSchema, JsonLd } from "./lib/structuredData.tsx"
 
 const HomePage = lazy(() => import("./pages/Home.tsx"))
 const LoginPage = lazy(() => import("./pages/Login.tsx"))
@@ -74,6 +75,7 @@ function ScrollToTopOnRouteChange() {
 function App() {
   return (
     <>
+      <JsonLd data={buildSiteOrganizationSchema()} />
       <Suspense fallback={<PageLoader />}>
         <ScrollToTopOnRouteChange />
         <Routes>

@@ -3,7 +3,18 @@ import type { FreelancerData, ProfileData, SkillData } from "./queries/fetchFree
 import type { JobData } from "./queries/fetchJobDetail.ts"
 import { formatCityForDisplay } from "./marketplaceFilters.ts"
 import { normalizeListingPriceType } from "./listingPrice.ts"
-import { SITE_BASE_URL } from "./usePageMeta.tsx"
+import { SITE_BASE_URL, SITE_OG_IMAGE } from "./usePageMeta.tsx"
+
+export function buildSiteOrganizationSchema(): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "ჰირა",
+    url: SITE_BASE_URL,
+    logo: `${SITE_BASE_URL}/icon-512.png`,
+    image: SITE_OG_IMAGE,
+  }
+}
 
 type JsonLdValue = Record<string, unknown> | Record<string, unknown>[]
 

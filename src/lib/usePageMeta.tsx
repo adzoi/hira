@@ -2,6 +2,7 @@ import { Helmet } from "react-helmet-async"
 import { useLocation } from "react-router-dom"
 
 export const SITE_BASE_URL = "https://hira.ge"
+export const SITE_OG_IMAGE = `${SITE_BASE_URL}/og-image.png`
 
 export type PageMetaProps = {
   title: string
@@ -21,6 +22,11 @@ export function PageMeta({ title, description, url }: PageMetaProps) {
       <meta property="og:title" content={title} />
       {description ? <meta property="og:description" content={description} /> : null}
       <meta property="og:url" content={pageUrl} />
+      <meta property="og:image" content={SITE_OG_IMAGE} />
+      <meta property="og:type" content="website" />
+      <meta property="og:site_name" content="ჰირა" />
+      <meta name="twitter:card" content="summary" />
+      <meta name="twitter:image" content={SITE_OG_IMAGE} />
     </Helmet>
   )
 }
