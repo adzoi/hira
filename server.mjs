@@ -112,6 +112,14 @@ const server = createServer(async (req, res) => {
     return
   }
 
+  if (safePath === "/favicon.ico") {
+    const icoPath = join(root, "icons", "hira-32.png")
+    if (existsSync(icoPath)) {
+      sendFile(res, icoPath, safePath)
+      return
+    }
+  }
+
   const candidate = join(root, safePath)
   const isStaticAsset = /\.(?:webp|png|jpe?g|gif|svg|ico|js|css|woff2?|ttf|map|xml|txt)$/i.test(safePath)
 

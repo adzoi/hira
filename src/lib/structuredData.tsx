@@ -11,7 +11,7 @@ export function buildSiteOrganizationSchema(): Record<string, unknown> {
     "@type": "Organization",
     name: "ჰირა",
     url: SITE_BASE_URL,
-    logo: `${SITE_BASE_URL}/icon-512.png`,
+    logo: `${SITE_BASE_URL}/icons/hira-512.png`,
     image: SITE_OG_IMAGE,
   }
 }
