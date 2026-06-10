@@ -72,6 +72,93 @@ function isEmailConfirmationType(type: string | null): boolean {
   return type != null && EMAIL_CONFIRMATION_TYPES.has(type)
 }
 
+function allowedRedirectOrigin(origin: string): boolean {
+  if (typeof window === "undefined") return origin === SITE_BASE_URL
+  return origin === SITE_BASE_URL || origin === window.location.origin
+}
+
+/** Parse Supabase `redirect_to` query param into a same-site path (and optional search). */
+export function parseSupabaseRedirectTo(raw: string | null | undefined): string | null {
+  if (!raw || typeof raw !== "string") return null
+  let decoded = raw.trim()
+  try {
+    decoded = decodeURIComponent(decoded)
+  } catch {
+    return null
+  }
+  // Ignore accidental hash fragments (e.g. trailing `#` from implicit-flow cleanup).
+  decoded = decoded.replace(/#.*$/, "")
+
+  if (decoded.startsWith("/") && !decoded.startsWith("//")) {
+    return decoded
+  }
+
+  try {
+    const url = new URL(decoded)
+    if (!allowedRedirectOrigin(url.origin)) return null
+    return `${url.pathname}${url.search}`
+  } catch {
+    return null
+  }
+}
+
+function resolvePostAuthPathname(type: string | null): string {
+  if (!isEmailConfirmationType(type) || window.location.pathname === AUTH_ONBOARDING_PATH) {
+    return window.location.pathname
+  }
+
+  const redirectTo = new URLSearchParams(window.location.search).get("redirect_to")
+  const parsed = parseSupabaseRedirectTo(redirectTo)
+  if (parsed) return parsed.split("?")[0] || AUTH_ONBOARDING_PATH
+
+  return AUTH_ONBOARDING_PATH
+}
+
+function stripBareHashFromUrl(): void {
+  if (typeof window === "undefined" || window.location.hash !== "#") return
+  window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`)
+}
+
+/** After Supabase auth, follow `redirect_to` when the SDK routed through Site URL. */
+export async function consumeSupabaseAuthRedirect(client: SupabaseClient): Promise<void> {
+  if (typeof window === "undefined") return
+
+  stripBareHashFromUrl()
+
+  const searchParams = new URLSearchParams(window.location.search)
+  const redirectToRaw = searchParams.get("redirect_to")
+  if (!redirectToRaw) return
+
+  const destination = parseSupabaseRedirectTo(redirectToRaw)
+  if (!destination) {
+    searchParams.delete("redirect_to")
+    const cleanedSearch = searchParams.toString()
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${cleanedSearch ? `?${cleanedSearch}` : ""}`,
+    )
+    return
+  }
+
+  const {
+    data: { session },
+  } = await client.auth.getSession()
+  if (!session) return
+
+  const current = `${window.location.pathname}${window.location.search}`
+  if (current === destination) {
+    window.history.replaceState(null, "", destination)
+    return
+  }
+
+  const destUrl = destination.startsWith("http")
+    ? destination
+    : `${window.location.origin}${destination}`
+
+  window.location.replace(destUrl)
+}
+
 /** True when the URL hash looks like a Supabase auth redirect (implicit / recovery flow). */
 export function urlHasAuthHash(): boolean {
   if (typeof window === "undefined") return false
@@ -83,7 +170,12 @@ export function urlHasAuthHash(): boolean {
 
 /** Remove auth tokens from the URL and browser history after Supabase has consumed them. */
 export function stripAuthHashFromUrl(): void {
-  if (typeof window === "undefined" || !urlHasAuthHash()) return
+  if (typeof window === "undefined") return
+
+  if (!urlHasAuthHash()) {
+    stripBareHashFromUrl()
+    return
+  }
 
   const hash = window.location.hash
   const params = new URLSearchParams(hash.replace(/^#/, ""))
@@ -97,19 +189,7 @@ export function stripAuthHashFromUrl(): void {
     }
   }
 
-  const pathname =
-    isEmailConfirmationType(type) && window.location.pathname !== AUTH_ONBOARDING_PATH
-      ? AUTH_ONBOARDING_PATH
-      : window.location.pathname
-
-  window.history.replaceState(null, "", pathname)
-}
-
-/** Parse hash tokens once on load, then strip them from the address bar. */
-async function consumeAuthHashFromUrl(client: SupabaseClient): Promise<void> {
-  if (!urlHasAuthHash()) return
-  await client.auth.getSession()
-  stripAuthHashFromUrl()
+  window.history.replaceState(null, "", resolvePostAuthPathname(type))
 }
 
 /** Strip hash tokens if Supabase finishes parsing after the initial getSession. */
@@ -119,6 +199,7 @@ export function initAuthHashCleanup(client: SupabaseClient): () => void {
   } = client.auth.onAuthStateChange((event) => {
     if (event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "PASSWORD_RECOVERY") {
       stripAuthHashFromUrl()
+      void consumeSupabaseAuthRedirect(client)
     }
   })
   return () => subscription.unsubscribe()
@@ -126,10 +207,17 @@ export function initAuthHashCleanup(client: SupabaseClient): () => void {
 
 /** Run once before the app mounts so public pages never send a rejected JWT. */
 export async function initSupabaseAuth(client: SupabaseClient): Promise<void> {
-  if (authRecoveryStarted) return recoverFromStaleAuthSession(client)
+  if (authRecoveryStarted) {
+    await recoverFromStaleAuthSession(client)
+    await consumeSupabaseAuthRedirect(client)
+    return
+  }
   authRecoveryStarted = true
-  await consumeAuthHashFromUrl(client)
-  return recoverFromStaleAuthSession(client)
+  // Parse tokens from URL before cleanup (SDK may already have consumed the hash).
+  await client.auth.getSession()
+  stripAuthHashFromUrl()
+  await recoverFromStaleAuthSession(client)
+  await consumeSupabaseAuthRedirect(client)
 }
 
 /** Clear cached user data when the session ends (sign-out, expiry, or forced logout). */

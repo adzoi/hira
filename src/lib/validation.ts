@@ -99,9 +99,13 @@ export function validatePasswordForLogin(raw: string): FieldResult<string> {
 /** Registration, password change, and password reset — full policy. */
 export function validatePassword(raw: string): FieldResult<string> {
   if (typeof raw !== "string") return fail(msg("validation.passwordRequired"))
-  if (raw.length < LIMITS.passwordMin) return fail(msg("validation.passwordTooShort", { min: LIMITS.passwordMin }))
   if (raw.length > LIMITS.passwordMax) return fail(msg("validation.passwordTooLong"))
-  if (!/[a-zA-Z]/.test(raw) || !/\d/.test(raw)) {
+  if (
+    raw.length < LIMITS.passwordMin ||
+    !/[a-zA-Z]/.test(raw) ||
+    !/[A-Z]/.test(raw) ||
+    !/\d/.test(raw)
+  ) {
     return fail(msg("validation.passwordWeak"))
   }
   return { ok: true, value: raw }
