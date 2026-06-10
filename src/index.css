@@ -1,5 +1,6 @@
 @import "tailwindcss";
 
+/* Self-hosted Noto Sans Georgian (Google font family) — font-display: swap on every weight. */
 @font-face {
   font-family: "Noto Sans Georgian";
   font-style: normal;

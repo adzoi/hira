@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useInfiniteQuery } from "@tanstack/react-query"
 import { Link, useSearchParams } from "react-router-dom"
+import { OptimizedImage } from "../components/OptimizedImage.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import EmptyState from "../components/ui/EmptyState.tsx"
 import ErrorState from "../components/ui/ErrorState.tsx"
@@ -968,12 +969,11 @@ export default function JobsPage() {
                   >
                     <div className="flex items-start gap-3">
                       {job.companyAvatar ? (
-                        <img
+                        <OptimizedImage
                           src={avatarImageUrl(supabase, job.companyAvatar) ?? job.companyAvatar}
                           alt={t("common.avatarAlt", { name: job.companyName })}
                           width={56}
                           height={56}
-                          loading="lazy"
                           className="h-14 w-14 shrink-0 rounded-full object-cover"
                         />
                       ) : (

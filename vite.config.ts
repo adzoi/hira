@@ -17,7 +17,7 @@ const LONG_CACHE = 'public, max-age=31536000, immutable'
 function assetCacheControl(urlPath: string): string | null {
   const path = urlPath.split('?')[0] ?? urlPath
   if (path.startsWith('/assets/')) return LONG_CACHE
-  if (/\.(?:js|css|webp|png|jpe?g|svg|woff2)$/i.test(path)) return LONG_CACHE
+  if (/\.(?:js|css|webp|png|jpe?g|svg|woff2|ttf)$/i.test(path)) return LONG_CACHE
   return null
 }
 

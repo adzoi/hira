@@ -10,6 +10,7 @@ import { LocaleProvider } from "./i18n/LocaleContext.tsx"
 import { queryClient } from "./lib/queryClient.ts"
 import { isSupabaseConfigured, supabase } from "./lib/supabase.ts"
 import { initAuthHashCleanup, initSupabaseAuth, initAuthStateCleanup } from "./lib/supabaseAuth.ts"
+import { initGoogleAnalytics } from "./lib/loadGoogleAnalytics.ts"
 import { initRealtimeAuth } from "./lib/realtimeAuth.ts"
 
 async function bootstrap() {
@@ -19,6 +20,8 @@ async function bootstrap() {
     initAuthStateCleanup(supabase, queryClient)
     initRealtimeAuth(supabase)
   }
+
+  initGoogleAnalytics()
 
   createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>

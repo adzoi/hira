@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query"
 import { Link } from "react-router-dom"
+import { OptimizedImage } from "../components/OptimizedImage.tsx"
 import EmptyState from "../components/ui/EmptyState.tsx"
 import ErrorState from "../components/ui/ErrorState.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
@@ -542,12 +543,11 @@ export default function HirersPage() {
                             aria-label={t("common.logoEnlarge")}
                           >
                             {h.avatarUrl ? (
-                              <img
+                              <OptimizedImage
                                 src={avatarImageUrl(supabase, h.avatarUrl) ?? h.avatarUrl}
                                 alt=""
                                 width={56}
                                 height={56}
-                                loading="lazy"
                                 className="h-full w-full object-cover"
                               />
                             ) : (
@@ -647,7 +647,7 @@ export default function HirersPage() {
             onClick={(e) => e.stopPropagation()}
           >
             {avatarPreview.avatarUrl ? (
-              <img
+              <OptimizedImage
                 src={avatarImageUrl(supabase, avatarPreview.avatarUrl) ?? avatarPreview.avatarUrl}
                 alt={`${avatarPreview.companyName} ${t("common.logo")}`}
                 width={900}

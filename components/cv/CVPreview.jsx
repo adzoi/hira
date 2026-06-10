@@ -9,6 +9,7 @@ import {
   initialsFromName,
   stripUrlForDisplay,
 } from "../../src/lib/cvFromProfile.ts"
+import { OptimizedImage } from "../../src/components/OptimizedImage.tsx"
 import { compressImageForUpload } from "../../src/lib/compressImageForUpload.ts"
 
 const A4_WIDTH = 794
@@ -137,7 +138,7 @@ function AvatarEditor({ fullName, avatarUrl, onChangeUrl, onRemove, onPickFile, 
     <div className="rounded border border-white/20 bg-white/[0.06] p-2">
       <div className="mb-2 flex items-center gap-2">
         {truthyHttpUrl(avatarUrl) ? (
-          <img
+          <OptimizedImage
             src={avatarImageUrl(supabase, avatarUrl) ?? avatarUrl}
             alt=""
             width={48}
@@ -487,7 +488,7 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
         >
           <aside className="sidebar-dark w-[260px] shrink-0 overflow-hidden bg-[#1a1a2e] p-6 text-white [&_*]:break-words">
             {truthyHttpUrl(localCV.avatar_url) ? (
-              <img
+              <OptimizedImage
                 src={avatarImageUrl(supabase, localCV.avatar_url) ?? localCV.avatar_url}
                 alt=""
                 width={96}

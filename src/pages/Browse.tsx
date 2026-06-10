@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query"
 import { Link, useSearchParams } from "react-router-dom"
+import { OptimizedImage } from "../components/OptimizedImage.tsx"
 import EmptyState from "../components/ui/EmptyState.tsx"
 import ErrorState from "../components/ui/ErrorState.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
@@ -830,12 +831,11 @@ export default function BrowsePage() {
                           >
                             {freelancer.avatarUrl ? (
                               <div className="relative h-16 w-16">
-                                <img
+                                <OptimizedImage
                                   src={avatarImageUrl(supabase, freelancer.avatarUrl) ?? freelancer.avatarUrl}
                                   alt={t("common.avatarAlt", { name: freelancer.fullName })}
                                   width={64}
                                   height={64}
-                                  loading="lazy"
                                   onError={(e) => {
                                     e.currentTarget.style.display = "none"
                                     e.currentTarget.parentElement?.querySelector(".avatar-fallback")?.classList.remove("hidden")

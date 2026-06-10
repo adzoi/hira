@@ -12,6 +12,7 @@ import {
   PRICE_TYPE_LABELS,
   type ListingPriceType,
 } from "../lib/listingPrice.ts"
+import { OptimizedImage } from "../components/OptimizedImage.tsx"
 import OptionalSocialUrlField from "../components/OptionalSocialUrlField.tsx"
 import { parseFreelancerSocialFields } from "../lib/freelancerSocialFields.ts"
 import { avatarImageUrl, avatarPublicUrl } from "../lib/storageImageUrl.ts"
@@ -831,7 +832,7 @@ export default function ProfilePage() {
           <div className="mb-8 flex items-center gap-5">
             <div className="relative">
               {avatarUrl ? (
-                <img
+                <OptimizedImage
                   src={avatarImageUrl(supabase, avatarUrl) ?? avatarUrl}
                   alt={t("profile.avatarAlt")}
                   width={100}

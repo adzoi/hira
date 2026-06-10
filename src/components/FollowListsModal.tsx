@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
+import { OptimizedImage } from "./OptimizedImage.tsx"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import type { FollowListProfile } from "../lib/follows.ts"
 import { getFollowers, getFollowing, resolveProfilePublicHrefByIds } from "../lib/follows.ts"
@@ -210,12 +211,11 @@ export default function FollowListsModal({ open, onClose, profileId, initialTab 
                   <li key={person.id} className="flex items-center gap-3 px-3 py-2.5">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-xs font-bold text-[#1B2B4B]">
                       {person.avatar_url ? (
-                        <img
+                        <OptimizedImage
                           src={avatarImageUrl(supabase, person.avatar_url) ?? person.avatar_url}
                           alt=""
                           width={40}
                           height={40}
-                          loading="lazy"
                           className="h-full w-full object-cover"
                         />
                       ) : (

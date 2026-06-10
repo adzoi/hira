@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useInfiniteQuery } from "@tanstack/react-query"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
+import { OptimizedImage } from "../components/OptimizedImage.tsx"
 import EmptyState from "../components/ui/EmptyState.tsx"
 import ErrorState from "../components/ui/ErrorState.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
@@ -1137,12 +1138,11 @@ export default function ListingsPage() {
                                 labelWhenUnavailable={t("listings.freelancerUnavailable")}
                               >
                                 {item.avatarUrl ? (
-                                  <img
+                                  <OptimizedImage
                                     src={avatarImageUrl(supabase, item.avatarUrl) ?? item.avatarUrl}
                                     alt=""
                                     width={64}
                                     height={64}
-                                    loading="lazy"
                                     className="h-16 w-16 rounded-full object-cover"
                                   />
                                 ) : (

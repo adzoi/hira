@@ -21,6 +21,7 @@ import { queryKeys } from "../lib/queryKeys.ts"
 import { queryClient } from "../lib/queryClient.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
+import { OptimizedImage } from "../components/OptimizedImage.tsx"
 import { compressImageForUpload } from "../lib/compressImageForUpload.ts"
 
 const MAX_JOB_IMAGES = 3
@@ -1092,7 +1093,7 @@ export default function PostJobPage() {
                   <div className="mt-3 grid grid-cols-3 gap-2">
                     {existingImageUrls.map((url) => (
                       <div key={url} className="overflow-hidden rounded-md border border-slate-200 bg-white">
-                        <img
+                        <OptimizedImage
                           src={supabase ? jobImageThumbnailUrl(supabase, url) : ""}
                           alt=""
                           width={160}
@@ -1110,7 +1111,7 @@ export default function PostJobPage() {
                     ))}
                     {newImagePreviews.map((preview, index) => (
                       <div key={`${preview.file.name}-${index}`} className="overflow-hidden rounded-md border border-slate-200 bg-white">
-                        <img
+                        <OptimizedImage
                           src={preview.url}
                           alt=""
                           width={160}

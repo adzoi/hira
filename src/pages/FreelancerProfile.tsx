@@ -7,6 +7,7 @@ import { formatFreelancerEducationDegreeLevel } from "../lib/freelancerEducation
 import { formatListingPrice } from "../lib/listingPrice.ts"
 import { formatCityForDisplay } from "../lib/marketplaceFilters.ts"
 import FollowListsModal, { type FollowModalTab } from "../components/FollowListsModal.tsx"
+import { OptimizedImage } from "../components/OptimizedImage.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import { ViewCountEyeIcon } from "../components/ViewCountEyeIcon.tsx"
 import { countFollowers, countFollowing, followUser, isFollowing, unfollowUser } from "../lib/follows.ts"
@@ -608,12 +609,11 @@ export default function FreelancerProfilePage() {
                   aria-label={t("common.enlargeAvatar")}
                 >
                   {profile.avatar_url ? (
-                    <img
+                    <OptimizedImage
                       src={profileAvatarDisplayUrl ?? profile.avatar_url}
                       alt={t("common.avatarAlt", { name: profile.full_name })}
                       width={88}
                       height={88}
-                      loading="lazy"
                       className="h-full w-full rounded-full object-cover"
                     />
                   ) : (
@@ -1023,12 +1023,11 @@ export default function FreelancerProfilePage() {
                       onClick={() => setSelectedImageUrl(item.image_url)}
                       className="overflow-hidden rounded-[14px] border border-[#E5E7EB] bg-white text-left shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition hover:border-[#0088FF]/40"
                     >
-                      <img
+                      <OptimizedImage
                         src={jobOrServiceImageDisplayUrl(supabase, item.image_url, "thumbnail") ?? item.image_url}
                         alt={t("common.portfolioImageAlt", { title: item.title })}
                         width={400}
                         height={144}
-                        loading="lazy"
                         className="h-36 w-full object-cover"
                       />
                       <div className="p-3">
@@ -1114,7 +1113,7 @@ export default function FreelancerProfilePage() {
           onClick={() => setSelectedImageUrl(null)}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6"
         >
-          <img
+          <OptimizedImage
             src={jobOrServiceImageDisplayUrl(supabase, selectedImageUrl, "detail") ?? selectedImageUrl}
             alt={t("common.portfolioFullSize")}
             width={900}
@@ -1146,7 +1145,7 @@ export default function FreelancerProfilePage() {
             onClick={(e) => e.stopPropagation()}
           >
             {profile.avatar_url ? (
-              <img
+              <OptimizedImage
                 src={profileAvatarDisplayUrl ?? profile.avatar_url}
                 alt={t("common.fullscreenAvatarAlt", { name: profile.full_name })}
                 width={900}

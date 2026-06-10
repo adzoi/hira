@@ -6,6 +6,7 @@ import {
   FREELANCER_EDUCATION_DEGREE_OPTIONS,
   type FreelancerEducationDegreeLevel,
 } from "../lib/freelancerEducation.ts"
+import { OptimizedImage } from "../components/OptimizedImage.tsx"
 import OptionalSocialUrlField from "../components/OptionalSocialUrlField.tsx"
 import { parseFreelancerSocialFields } from "../lib/freelancerSocialFields.ts"
 import { avatarPublicUrl } from "../lib/storageImageUrl.ts"
@@ -926,7 +927,7 @@ export default function OnboardingPage() {
                 <div className="space-y-4">
                   <div>
                     {avatarPreview && (
-                      <img
+                      <OptimizedImage
                         src={avatarPreview}
                         alt="Avatar preview"
                         width={100}

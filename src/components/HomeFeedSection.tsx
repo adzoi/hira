@@ -4,6 +4,7 @@ import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { type HomeFreelancerServiceItem, type HomeJobListingItem } from "../lib/homeFeed.ts"
 import { useHomeFeedQuery } from "../lib/queries/useHomeFeedQuery.ts"
 import { formatJobBudget, formatListingPrice } from "../lib/listingPrice.ts"
+import { OptimizedImage } from "./OptimizedImage.tsx"
 import { ViewCountEyeIcon } from "./ViewCountEyeIcon.tsx"
 import VipBadge from "./VipBadge.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
@@ -106,12 +107,11 @@ function FreelancerFeedCard({ item }: { item: HomeFreelancerServiceItem }) {
         >
           <span className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-sm font-bold text-[#1B2B4B]">
             {item.avatarUrl ? (
-              <img
+              <OptimizedImage
                 src={avatarImageUrl(supabase, item.avatarUrl) ?? item.avatarUrl}
                 alt=""
                 width={56}
                 height={56}
-                loading="lazy"
                 className="h-full w-full object-cover"
               />
             ) : (
@@ -186,12 +186,11 @@ function JobListingFeedCard({ item }: { item: HomeJobListingItem }) {
 
         <div className="mt-3 flex items-start gap-3">
           {item.companyAvatar ? (
-            <img
+            <OptimizedImage
               src={avatarImageUrl(supabase, item.companyAvatar) ?? item.companyAvatar}
               alt=""
               width={56}
               height={56}
-              loading="lazy"
               className="h-14 w-14 shrink-0 rounded-full object-cover"
             />
           ) : (

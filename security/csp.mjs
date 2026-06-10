@@ -25,7 +25,11 @@ export function buildContentSecurityPolicy(opts = {}) {
   if (nonce) {
     scriptSrc.push(`'nonce-${nonce}'`)
   }
-  scriptSrc.push("https://*.paypal.com", "https://*.paypalobjects.com")
+  scriptSrc.push(
+    "https://*.paypal.com",
+    "https://*.paypalobjects.com",
+    "https://www.googletagmanager.com",
+  )
   if (dev) scriptSrc.push("'unsafe-eval'")
 
   const directives = [
@@ -34,7 +38,7 @@ export function buildContentSecurityPolicy(opts = {}) {
     "style-src 'self' 'unsafe-inline' https://*.paypal.com https://*.paypalobjects.com",
     "font-src 'self' data:",
     "img-src 'self' data: blob: https://*.supabase.co https://*.paypal.com https://*.paypalobjects.com",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.paypal.com https://*.paypalobjects.com",
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.paypal.com https://*.paypalobjects.com https://www.google-analytics.com https://analytics.google.com https://*.google-analytics.com",
     "frame-src 'self' https://*.paypal.com https://*.paypalobjects.com",
     "child-src 'self' https://*.paypal.com https://*.paypalobjects.com",
     "object-src 'none'",
@@ -86,6 +90,8 @@ const LONG_CACHE_PATHS = [
   "/*.jpeg",
   "/*.svg",
   "/*.woff2",
+  "/*.ttf",
+  "/fonts/*",
 ]
 
 /** Netlify / Cloudflare Pages `_headers` file body (no per-request nonce; prod build has no inline scripts). */
@@ -105,6 +111,6 @@ export function buildHeadersFile(opts = {}) {
 /** @param {string} pathname */
 export function longCacheControlForPath(pathname) {
   if (pathname.startsWith("/assets/")) return LONG_CACHE
-  if (/\.(?:js|css|webp|png|jpe?g|svg|woff2)$/i.test(pathname)) return LONG_CACHE
+  if (/\.(?:js|css|webp|png|jpe?g|svg|woff2|ttf)$/i.test(pathname)) return LONG_CACHE
   return null
 }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import FreelancerAvailabilityIndicator from "../components/FreelancerAvailabilityIndicator.tsx"
+import { OptimizedImage } from "../components/OptimizedImage.tsx"
 import { ViewCountEyeIcon } from "../components/ViewCountEyeIcon.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import StartConversationButton from "../components/StartConversationButton.tsx"
@@ -395,11 +396,12 @@ export default function ListingDetailPage() {
               {imagePublicUrls.length > 0 ? (
                 <div className="mt-3 shrink-0">
                   <div className="overflow-hidden rounded-xl bg-slate-100">
-                    <img
+                    <OptimizedImage
                       src={imagePublicUrls[Math.min(selectedImage, imagePublicUrls.length - 1)].detail}
                       alt=""
                       width={800}
                       height={450}
+                      loading="eager"
                       className="h-36 w-full object-cover md:h-44"
                     />
                   </div>
@@ -414,12 +416,11 @@ export default function ListingDetailPage() {
                             selectedImage === index ? "border-[#0088FF]" : "border-slate-200"
                           }`}
                         >
-                          <img
+                          <OptimizedImage
                             src={urls.thumb}
                             alt=""
                             width={80}
                             height={80}
-                            loading="lazy"
                             className="h-full w-full object-cover"
                           />
                         </button>
@@ -448,12 +449,11 @@ export default function ListingDetailPage() {
                     className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-sm font-bold text-[#1B2B4B]"
                   >
                     {item.avatarUrl ? (
-                      <img
+                      <OptimizedImage
                         src={avatarImageUrl(supabase, item.avatarUrl) ?? item.avatarUrl}
                         alt=""
                         width={56}
                         height={56}
-                        loading="lazy"
                         className="h-full w-full object-cover"
                       />
                     ) : (

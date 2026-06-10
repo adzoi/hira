@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { OptimizedImage } from "../components/OptimizedImage.tsx"
 import ChatIcon from "../components/ui/ChatIcon.tsx"
 import EmptyState from "../components/ui/EmptyState.tsx"
 import ErrorState from "../components/ui/ErrorState.tsx"
@@ -68,12 +69,11 @@ function Avatar({
       className={`flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#E8F4FF] font-bold text-[#1B2B4B] ${dim}`}
     >
       {avatarUrl ? (
-        <img
+        <OptimizedImage
           src={avatarUrl}
           alt=""
           width={size === "sm" ? 36 : 44}
           height={size === "sm" ? 36 : 44}
-          loading="lazy"
           className="h-full w-full object-cover"
         />
       ) : (

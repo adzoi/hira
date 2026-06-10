@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
+import { OptimizedImage } from "../components/OptimizedImage.tsx"
 import { useToast } from "../components/ui/ToastProvider.tsx"
 import ErrorState from "../components/ui/ErrorState.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
@@ -398,12 +399,11 @@ export default function HirerPublicPage() {
           <div className={`flex min-w-0 flex-wrap items-start gap-4 ${!viewerOwnsHirer ? "pr-10" : ""}`}>
             <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#1B2B4B]/5 text-lg font-black text-[#1B2B4B]">
               {hirer.avatarUrl ? (
-                <img
+                <OptimizedImage
                   src={avatarImageUrl(supabase, hirer.avatarUrl) ?? hirer.avatarUrl}
                   alt=""
                   width={64}
                   height={64}
-                  loading="lazy"
                   className="h-full w-full object-cover"
                 />
               ) : (
