@@ -27,9 +27,15 @@ import {
   type CategoryBranchRow,
 } from "../lib/marketplaceCategoryTree.ts"
 import { formatJobBudget, PRICE_TYPE_LABELS } from "../lib/listingPrice.ts"
+import {
+  localizedNameFromMap,
+  pickCategoryName,
+  type LocalizedNameEntry,
+} from "../lib/categoryLocale.ts"
 import { pickListingDescription, pickListingTitle } from "../lib/listingLocale.ts"
 import { normalizeSearchInput } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+import type { AppLocale } from "../i18n/types.ts"
 
 type SortOption = "newest" | "budget_high" | "budget_low" | "applicants" | "deadline"
 type BudgetType = "fixed" | "hourly" | "monthly"
@@ -68,7 +74,24 @@ type JobItem = {
   vacancyFull: boolean
 }
 
-type CategoryItem = { id: string; name_ka: string; parent_id: string | null }
+type CategoryItem = { id: string; name_ka: string; name_en?: string | null; parent_id: string | null }
+
+function jobCategoryLabel(job: JobItem, categories: CategoryItem[], locale: AppLocale): string {
+  const cat = categories.find((c) => c.id === job.categoryId)
+  if (cat) return pickCategoryName(cat, locale)
+  return job.categoryName
+}
+
+function jobSubcategoryLabel(
+  job: JobItem,
+  subcategoryNamesById: Map<string, LocalizedNameEntry>,
+  locale: AppLocale,
+): string | null {
+  if (job.subcategoryId) {
+    return localizedNameFromMap(subcategoryNamesById, job.subcategoryId, locale) ?? job.subcategoryName
+  }
+  return job.subcategoryName
+}
 
 const mockJobs: JobItem[] = [
   {
@@ -309,7 +332,7 @@ type JobsCatalogPage = {
   jobs: JobItem[]
   categories: CategoryItem[]
   subcategoryParentById: Map<string, string>
-  subcategoryNamesById: Map<string, string>
+  subcategoryNamesById: Map<string, LocalizedNameEntry>
   total: number
 }
 
@@ -340,11 +363,12 @@ async function loadJobsCatalogPage(category: string, page: number): Promise<Jobs
     return {
       id: String(row.id ?? ""),
       name_ka: String(row.name_ka ?? ""),
+      name_en: (row.name_en as string | null | undefined) ?? null,
       parent_id: (row.parent_id as string | null | undefined) ?? null,
     }
   }) as CategoryItem[]
 
-  let subcategoryNamesById = new Map<string, string>()
+  let subcategoryNamesById = new Map<string, LocalizedNameEntry>()
   let subcategoryParentById = new Map<string, string>()
   if (page === 1) {
     try {
@@ -352,7 +376,7 @@ async function loadJobsCatalogPage(category: string, page: number): Promise<Jobs
         (from, to) =>
           client
             .from("subcategories")
-            .select("id,name_ka,category_id")
+            .select("id,name_ka,name_en,category_id")
             .eq("is_active", true)
             .order("name_ka")
             .range(from, to),
@@ -361,8 +385,11 @@ async function loadJobsCatalogPage(category: string, page: number): Promise<Jobs
       )
       subcategoryNamesById = new Map(
         subRows.map((r) => {
-          const row = r as { id?: string; name_ka?: string }
-          return [String(row.id ?? ""), String(row.name_ka ?? "")] as const
+          const row = r as { id?: string; name_ka?: string; name_en?: string | null }
+          return [
+            String(row.id ?? ""),
+            { name_ka: String(row.name_ka ?? ""), name_en: String(row.name_en ?? "") },
+          ] as const
         }),
       )
       subcategoryParentById = new Map(
@@ -409,7 +436,7 @@ export default function JobsPage() {
 
   const [sortBy, setSortBy] = useState<SortOption>("newest")
   const [subcategoryParentById, setSubcategoryParentById] = useState<Map<string, string>>(() => new Map())
-  const [subcategoryNamesById, setSubcategoryNamesById] = useState<Map<string, string>>(() => new Map())
+  const [subcategoryNamesById, setSubcategoryNamesById] = useState<Map<string, LocalizedNameEntry>>(() => new Map())
 
   const serverCategoryForFetch = useMemo(() => {
     const spec = filterSpecializationId.trim()
@@ -486,12 +513,15 @@ export default function JobsPage() {
 
   const specializationOptions = useMemo(() => {
     const parent = specializationParentCategoryId
-    if (!parent) return [] as { id: string; name_ka: string }[]
-    const out: { id: string; name_ka: string }[] = []
+    if (!parent) return [] as { id: string; name_ka: string; name_en: string }[]
+    const out: { id: string; name_ka: string; name_en: string }[] = []
     for (const [subId, catId] of subcategoryParentById) {
       if (catId === parent) {
-        const name = (subcategoryNamesById.get(subId) ?? "").trim()
-        if (subId && name) out.push({ id: subId, name_ka: name })
+        const entry = subcategoryNamesById.get(subId)
+        const nameKa = (entry?.name_ka ?? "").trim()
+        if (subId && nameKa) {
+          out.push({ id: subId, name_ka: nameKa, name_en: entry?.name_en ?? "" })
+        }
       }
     }
     return out.sort((a, b) => a.name_ka.localeCompare(b.name_ka, "ka"))
@@ -521,7 +551,7 @@ export default function JobsPage() {
           <option value="">{t("common.all")}</option>
           {categoryRootsList.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name_ka}
+              {pickCategoryName(c, locale)}
             </option>
           ))}
         </select>
@@ -548,7 +578,7 @@ export default function JobsPage() {
           </option>
           {categoryMidsList.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name_ka}
+              {pickCategoryName(c, locale)}
             </option>
           ))}
         </select>
@@ -572,7 +602,7 @@ export default function JobsPage() {
           </option>
           {specializationOptions.map((s) => (
             <option key={s.id} value={s.id}>
-              {s.name_ka}
+              {pickCategoryName(s, locale)}
             </option>
           ))}
         </select>
@@ -725,7 +755,16 @@ export default function JobsPage() {
 
     return jobs.filter((job) => {
       const skillsBlob = job.skills.map((s) => s.name).join(" ").toLowerCase()
-      const taxonomyBlob = `${job.categoryName} ${job.subcategoryName ?? ""}`.toLowerCase()
+      const taxonomyBlob = [
+        jobCategoryLabel(job, categories, locale),
+        jobSubcategoryLabel(job, subcategoryNamesById, locale) ?? "",
+        job.categoryName,
+        job.subcategoryName ?? "",
+        categories.find((c) => c.id === job.categoryId)?.name_en ?? "",
+        job.subcategoryId ? (subcategoryNamesById.get(job.subcategoryId)?.name_en ?? "") : "",
+      ]
+        .join(" ")
+        .toLowerCase()
       const cityBlob = (job.city ?? "").toLowerCase()
       const matchesSearch =
         search.length === 0 ||
@@ -784,7 +823,9 @@ export default function JobsPage() {
     searchText,
     catalogFilterEffectiveId,
     categories,
+    subcategoryNamesById,
     subcategoryParentById,
+    locale,
     appliedBudgetTypes,
     appliedBudgetMin,
     appliedBudgetMax,
@@ -1010,8 +1051,14 @@ export default function JobsPage() {
                     </Link>
 
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <span className={tagChipClass}>{job.categoryName}</span>
-                      {job.subcategoryName ? <span className={tagChipClass}>{job.subcategoryName}</span> : null}
+                      <span className={tagChipClass}>
+                        {jobCategoryLabel(job, categories, locale)}
+                      </span>
+                      {jobSubcategoryLabel(job, subcategoryNamesById, locale) ? (
+                        <span className={tagChipClass}>
+                          {jobSubcategoryLabel(job, subcategoryNamesById, locale)}
+                        </span>
+                      ) : null}
                     </div>
 
                     <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-slate-600">

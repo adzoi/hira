@@ -15,6 +15,7 @@ import { queryKeys } from "../lib/queryKeys.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { avatarImageUrl, serviceImageDetailUrl, serviceImageThumbnailUrl } from "../lib/storageImageUrl.ts"
 import { validateInquiryMessage, validateMoneyAmount } from "../lib/validation.ts"
+import { pickCategoryName } from "../lib/categoryLocale.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { pickListingDescription, pickListingTitle } from "../lib/listingLocale.ts"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
@@ -118,7 +119,7 @@ export default function ListingDetailPage() {
   const [offerBudget, setOfferBudget] = useState("")
   const [offerError, setOfferError] = useState("")
   const [offerSubmitting, setOfferSubmitting] = useState(false)
-  const [subcategoryLabel, setSubcategoryLabel] = useState<string | null>(null)
+  const [subcategoryLabel, setSubcategoryLabel] = useState<{ name_ka: string; name_en: string | null } | null>(null)
   const trackedListingViewRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -255,8 +256,12 @@ export default function ListingDetailPage() {
     }
     let cancelled = false
     void (async () => {
-      const { data } = await supabase.from("subcategories").select("name_ka").eq("id", sid).maybeSingle()
-      if (!cancelled) setSubcategoryLabel(data?.name_ka?.trim() ? String(data.name_ka) : null)
+      const { data } = await supabase.from("subcategories").select("name_ka,name_en").eq("id", sid).maybeSingle()
+      if (!cancelled) {
+        const nameKa = data?.name_ka?.trim() ? String(data.name_ka) : ""
+        const nameEn = data?.name_en?.trim() ? String(data.name_en) : null
+        setSubcategoryLabel(nameKa ? { name_ka: nameKa, name_en: nameEn } : null)
+      }
     })()
     return () => {
       cancelled = true
@@ -492,7 +497,8 @@ export default function ListingDetailPage() {
 
               {subcategoryLabel ? (
                 <p className="mt-3 shrink-0 text-xs text-slate-600">
-                  <span className="font-semibold text-[#1B2B4B]">{t("listingDetail.subcategory")}:</span> {subcategoryLabel}
+                  <span className="font-semibold text-[#1B2B4B]">{t("listingDetail.subcategory")}:</span>{" "}
+                  {pickCategoryName(subcategoryLabel, locale)}
                 </p>
               ) : null}
 

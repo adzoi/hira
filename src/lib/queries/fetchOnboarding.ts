@@ -2,7 +2,7 @@ import type { FreelancerEducationDegreeLevel } from "../freelancerEducation.ts"
 import { socialFormFromDbRow } from "../freelancerSocialFields.ts"
 import { isSupabaseConfigured, supabase } from "../supabase.ts"
 
-type SkillCategoryRow = { id: string; name_ka: string; parent_id: string | null }
+type SkillCategoryRow = { id: string; name_ka: string; name_en?: string | null; parent_id: string | null }
 
 type ExperienceForm = {
   title: string
@@ -110,7 +110,7 @@ export async function fetchOnboarding(userId: string): Promise<OnboardingQueryDa
       supabase.from("skills").select("id,name,category_id").eq("is_approved", true).order("name"),
       supabase
         .from("categories")
-        .select("id,name_ka,parent_id")
+        .select("id,name_ka,name_en,parent_id")
         .eq("is_active", true)
         .order("sort_order", { ascending: true }),
     ])

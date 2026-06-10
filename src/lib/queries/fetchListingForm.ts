@@ -91,17 +91,20 @@ export async function fetchListingForm(listingId?: string): Promise<ListingFormQ
 
   const [{ data: fp, error: fpError }, { data: categoryRows, error: categoryError }] = await Promise.all([
     supabase.from("freelancer_profiles").select("id").eq("user_id", user.id).maybeSingle(),
-    supabase.from("categories").select("id,name_ka,parent_id").eq("is_active", true).order("sort_order"),
+    supabase.from("categories").select("id,name_ka,name_en,parent_id").eq("is_active", true).order("sort_order"),
   ])
 
   if (fpError || !fp) throw new Error("ფრილანსერის პროფილი ვერ მოიძებნა.")
   if (categoryError) throw categoryError
 
-  const fullCats = (categoryRows ?? []).map((row: { id?: string; name_ka?: string; parent_id?: string | null }) => ({
-    id: String(row.id ?? ""),
-    name_ka: String(row.name_ka ?? ""),
-    parent_id: row.parent_id ?? null,
-  })) as CategoryBranchRow[]
+  const fullCats = (categoryRows ?? []).map(
+    (row: { id?: string; name_ka?: string; name_en?: string | null; parent_id?: string | null }) => ({
+      id: String(row.id ?? ""),
+      name_ka: String(row.name_ka ?? ""),
+      name_en: row.name_en ?? null,
+      parent_id: row.parent_id ?? null,
+    }),
+  ) as CategoryBranchRow[]
 
   const { data: skillRows, error: skillError } = await supabase
     .from("skills")

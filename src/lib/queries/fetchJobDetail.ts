@@ -20,8 +20,10 @@ export type JobData = {
   duration_type: string
   location_type: string
   application_deadline: string | null
-  category_name: string
-  subcategory_name: string | null
+  category_name_ka: string
+  category_name_en: string | null
+  subcategory_name_ka: string | null
+  subcategory_name_en: string | null
   skills: Array<{ id: string; name: string }>
   image_urls: string[]
   hirer_profile_id: string
@@ -120,8 +122,8 @@ export async function fetchJobDetail(id: string): Promise<JobDetailQueryResult> 
             vip_expires_at,
             hirer_profile_id,
             subcategory_id,
-            categories (name_ka),
-            subcategories (name_ka),
+            categories (name_ka, name_en),
+            subcategories (name_ka, name_en),
             hirer_profiles (
               id,
               user_id,
@@ -187,8 +189,14 @@ export async function fetchJobDetail(id: string): Promise<JobDetailQueryResult> 
       rowUnknown.application_deadline === null || rowUnknown.application_deadline === undefined
         ? null
         : String(rowUnknown.application_deadline),
-    category_name: normalizeSingleRelation<{ name_ka?: string }>(rowUnknown.categories)?.name_ka?.trim() || "კატეგორია",
-    subcategory_name: normalizeSingleRelation<{ name_ka?: string }>(rowUnknown.subcategories)?.name_ka?.trim() ?? null,
+    category_name_ka:
+      normalizeSingleRelation<{ name_ka?: string }>(rowUnknown.categories)?.name_ka?.trim() || "კატეგორია",
+    category_name_en:
+      normalizeSingleRelation<{ name_en?: string | null }>(rowUnknown.categories)?.name_en?.trim() || null,
+    subcategory_name_ka:
+      normalizeSingleRelation<{ name_ka?: string }>(rowUnknown.subcategories)?.name_ka?.trim() ?? null,
+    subcategory_name_en:
+      normalizeSingleRelation<{ name_en?: string | null }>(rowUnknown.subcategories)?.name_en?.trim() ?? null,
     skills: jobSkillsRows
       .map((item) => normalizeSingleRelation<{ id?: unknown; name?: unknown }>((item as { skills?: unknown }).skills ?? null))
       .filter(

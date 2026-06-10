@@ -20,6 +20,7 @@ import { validateCoverLetter, validateMoneyAmount } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
 import { buildJobPostingStructuredData, JsonLd } from "../lib/structuredData.tsx"
+import { pickCategoryName } from "../lib/categoryLocale.ts"
 import { pickListingTitle } from "../lib/listingLocale.ts"
 import { displayJobDescription } from "../lib/jobDescriptionDisplay.ts"
 
@@ -160,6 +161,14 @@ export default function JobDetailPage() {
   const displayDescription = useMemo(() => {
     if (!job) return ""
     return displayJobDescription(job, locale)
+  }, [job, locale])
+
+  const displayCategoryName = useMemo(() => {
+    if (!job) return ""
+    return pickCategoryName(
+      { name_ka: job.category_name_ka, name_en: job.category_name_en },
+      locale,
+    )
   }, [job, locale])
 
   const jobStructuredData = useMemo(() => {
@@ -456,7 +465,7 @@ export default function JobDetailPage() {
                     value: job.duration_type === "one_time" ? t("jobDetail.oneTime") : t("jobDetail.ongoing"),
                   }),
                   t("common.locationLabel", { value: job.location_type }),
-                  t("common.categoryLabel", { value: job.category_name }),
+                  t("common.categoryLabel", { value: displayCategoryName }),
                   t("common.deadlineLabel", {
                     date: job.application_deadline ? formatDate(job.application_deadline) : t("common.notSpecified"),
                   }),

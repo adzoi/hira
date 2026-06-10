@@ -11,6 +11,7 @@ import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { formatCityForDisplay } from "../lib/marketplaceFilters.ts"
 import type { AppLocale } from "../i18n/types.ts"
+import { pickCategoryName } from "../lib/categoryLocale.ts"
 import { pickListingDescription, pickListingTitle } from "../lib/listingLocale.ts"
 
 function getInitials(fullName: string) {
@@ -174,6 +175,17 @@ function JobListingFeedCard({ item }: { item: HomeJobListingItem }) {
     { description: item.descriptionPreview, descriptionEn: item.descriptionEnPreview },
     locale,
   )
+  const categoryLabel = pickCategoryName(
+    { name_ka: item.categoryNameKa, name_en: item.categoryNameEn },
+    locale,
+  )
+  const subcategoryLabel =
+    item.subcategoryNameKa != null
+      ? pickCategoryName(
+          { name_ka: item.subcategoryNameKa, name_en: item.subcategoryNameEn },
+          locale,
+        )
+      : null
   return (
     <li className="flex h-full min-h-0 max-w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 border-l-[3px] border-l-transparent bg-white p-4 shadow-sm transition-[border-left-color,box-shadow] duration-200 ease-out hover:border-l-[#0088FF] hover:shadow-[-4px_0_12px_rgba(0,136,255,0.25)]">
       <div className="flex min-h-0 flex-1 flex-col">
@@ -225,8 +237,8 @@ function JobListingFeedCard({ item }: { item: HomeJobListingItem }) {
         </Link>
 
         <div className="mt-2 flex flex-wrap gap-2">
-          <span className={tagChipClass}>{item.categoryName}</span>
-          {item.subcategoryName ? <span className={tagChipClass}>{item.subcategoryName}</span> : null}
+          <span className={tagChipClass}>{categoryLabel}</span>
+          {subcategoryLabel ? <span className={tagChipClass}>{subcategoryLabel}</span> : null}
         </div>
 
         <p className={`mt-3 line-clamp-2 text-sm leading-relaxed text-slate-600 ${wrapText}`}>{displayDescription}</p>

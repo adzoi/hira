@@ -24,10 +24,11 @@ import { LIMITS, validateOptionalUrl, validatePassword, validateTextField } from
 import { fetchProfile, SKILL_PICKER_UNCATEGORIZED } from "../lib/queries/fetchProfile.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
+import { pickCategoryName } from "../lib/categoryLocale.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
 
-type SkillCategoryRow = { id: string; name_ka: string; parent_id: string | null }
+type SkillCategoryRow = { id: string; name_ka: string; name_en?: string | null; parent_id: string | null }
 
 function formatSaveError(err: unknown): string {
   if (err instanceof Error) return err.message
@@ -67,7 +68,7 @@ type EducationForm = {
 }
 
 export default function ProfilePage() {
-  const { t } = useTranslation()
+  const { t, locale } = useTranslation()
   const navigate = useNavigate()
   const [profileUserId, setProfileUserId] = useState("")
   const {
@@ -181,8 +182,9 @@ export default function ProfilePage() {
   const skillFocusCategoryLabel = useMemo(() => {
     if (!skillFocusCategoryId) return ""
     if (skillFocusCategoryId === SKILL_PICKER_UNCATEGORIZED) return "სხვა"
-    return skillCategories.find((c) => c.id === skillFocusCategoryId)?.name_ka ?? "კატეგორია"
-  }, [skillFocusCategoryId, skillCategories])
+    const cat = skillCategories.find((c) => c.id === skillFocusCategoryId)
+    return cat ? pickCategoryName(cat, locale) : t("common.category")
+  }, [skillFocusCategoryId, skillCategories, locale, t])
 
   const skillNameById = useMemo(() => {
     const m = new Map<string, string>()
@@ -1204,11 +1206,11 @@ export default function ProfilePage() {
                     onChange={(e) => setSkillFocusCategoryId(e.target.value)}
                   >
                     <option value="">{t("profile.selectCategory")}</option>
-                    {skillPickerMidCategories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name_ka}
-                      </option>
-                    ))}
+                        {skillPickerMidCategories.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {pickCategoryName(c, locale)}
+                          </option>
+                        ))}
                     {uncategorizedSkillCount > 0 ? (
                       <option value={SKILL_PICKER_UNCATEGORIZED}>სხვა</option>
                     ) : null}

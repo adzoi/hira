@@ -39,8 +39,10 @@ export type HomeJobListingItem = {
   companyName: string
   companyAvatar: string | null
   city: string | null
-  categoryName: string
-  subcategoryName: string | null
+  categoryNameKa: string
+  categoryNameEn: string | null
+  subcategoryNameKa: string | null
+  subcategoryNameEn: string | null
   budgetType: string
   budgetMin: number | null
   budgetMax: number | null
@@ -122,8 +124,10 @@ const MOCK_JOB_LISTINGS: HomeJobListingItem[] = [
     companyName: "TechStart Georgia",
     companyAvatar: null,
     city: "თბილისი",
-    categoryName: "პროგრამირება",
-    subcategoryName: null,
+    categoryNameKa: "პროგრამირება",
+    categoryNameEn: "Programming",
+    subcategoryNameKa: null,
+    subcategoryNameEn: null,
     budgetType: "fixed",
     budgetMin: 800,
     budgetMax: 1200,
@@ -151,8 +155,10 @@ const MOCK_JOB_LISTINGS: HomeJobListingItem[] = [
     companyName: "Café Leila",
     companyAvatar: null,
     city: "ბათუმი",
-    categoryName: "მარკეტინგი",
-    subcategoryName: null,
+    categoryNameKa: "მარკეტინგი",
+    categoryNameEn: "Marketing",
+    subcategoryNameKa: null,
+    subcategoryNameEn: null,
     budgetType: "monthly",
     budgetMin: 400,
     budgetMax: null,
@@ -281,8 +287,18 @@ export async function loadHomeFeed(): Promise<HomeFeedItem[]> {
       companyName,
       companyAvatar: row.avatar_url != null ? String(row.avatar_url) : null,
       city: row.city != null ? String(row.city) : null,
-      categoryName: String(row.category_name ?? "").trim() || "კატეგორია",
-      subcategoryName: row.subcategory_name != null ? String(row.subcategory_name) : null,
+      categoryNameKa:
+        String(row.category_name_ka ?? row.category_name ?? "").trim() || "კატეგორია",
+      categoryNameEn:
+        row.category_name_en != null ? String(row.category_name_en).trim() || null : null,
+      subcategoryNameKa:
+        row.subcategory_name_ka != null
+          ? String(row.subcategory_name_ka).trim() || null
+          : row.subcategory_name != null
+            ? String(row.subcategory_name).trim() || null
+            : null,
+      subcategoryNameEn:
+        row.subcategory_name_en != null ? String(row.subcategory_name_en).trim() || null : null,
       budgetType: String(row.budget_type ?? "fixed"),
       budgetMin: row.budget_min != null ? Number(row.budget_min) : null,
       budgetMax: row.budget_max != null ? Number(row.budget_max) : null,

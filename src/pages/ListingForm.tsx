@@ -19,6 +19,7 @@ import { META_PREFIX, META_SUFFIX } from "../lib/listingDescription.ts"
 import { fetchListingForm } from "../lib/queries/fetchListingForm.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
+import { pickCategoryName } from "../lib/categoryLocale.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
 import { OptimizedImage } from "../components/OptimizedImage.tsx"
@@ -30,7 +31,13 @@ type ListingMeta = {
   tags: string[]
 }
 
-type SubcategoryRow = { id: string; name_ka: string; category_id: string; is_active: boolean | null }
+type SubcategoryRow = {
+  id: string
+  name_ka: string
+  name_en?: string | null
+  category_id: string
+  is_active: boolean | null
+}
 
 type TagOption = {
   name: string
@@ -50,7 +57,7 @@ function buildListingDescription(description: string, meta: ListingMeta) {
 }
 
 export default function ListingFormPage() {
-  const { t } = useTranslation()
+  const { t, locale } = useTranslation()
   const navigate = useNavigate()
   const { id } = useParams()
   const isEdit = Boolean(id)
@@ -158,7 +165,7 @@ export default function ListingFormPage() {
       }
       const { data, error: subErr } = await supabase
         .from("subcategories")
-        .select("id,name_ka,category_id,is_active")
+        .select("id,name_ka,name_en,category_id,is_active")
         .eq("category_id", specializationParentCategoryId)
         .eq("is_active", true)
         .order("name_ka")
@@ -439,7 +446,7 @@ export default function ListingFormPage() {
                 <option value="">{t("listingForm.selectCategory")}</option>
                 {categoryRootsList.map((category) => (
                   <option key={category.id} value={category.id}>
-                    {category.name_ka}
+                    {pickCategoryName(category, locale)}
                   </option>
                 ))}
               </select>
@@ -465,7 +472,7 @@ export default function ListingFormPage() {
                 </option>
                 {categoryMidsList.map((category) => (
                   <option key={category.id} value={category.id}>
-                    {category.name_ka}
+                    {pickCategoryName(category, locale)}
                   </option>
                 ))}
               </select>
@@ -486,7 +493,7 @@ export default function ListingFormPage() {
                 </option>
                 {subcategories.map((sub) => (
                   <option key={sub.id} value={sub.id}>
-                    {sub.name_ka}
+                    {pickCategoryName(sub, locale)}
                   </option>
                 ))}
               </select>

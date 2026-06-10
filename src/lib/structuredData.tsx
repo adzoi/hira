@@ -129,7 +129,7 @@ export function buildJobPostingStructuredData({
     structured.jobLocationType = "TELECOMMUTE"
   }
 
-  const category = job.subcategory_name ?? job.category_name
+  const category = job.subcategory_name_en ?? job.subcategory_name_ka ?? job.category_name_en ?? job.category_name_ka
   if (category) structured.occupationalCategory = plainText(category, 200)
 
   if (job.skills.length > 0) {

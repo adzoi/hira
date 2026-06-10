@@ -11,13 +11,20 @@ const MAX_JOB_IMAGES = 3
 export type CategoryRow = {
   id: string
   name_ka: string
+  name_en?: string | null
   is_active: boolean | null
   sort_order: number | null
   parent_id: string | null
 }
 
 export type SkillRow = { id: string; name: string; category_id: string | null; is_approved: boolean | null }
-export type SubcategoryRow = { id: string; name_ka: string; category_id: string; is_active: boolean | null }
+export type SubcategoryRow = {
+  id: string
+  name_ka: string
+  name_en?: string | null
+  category_id: string
+  is_active: boolean | null
+}
 
 export type PostJobEditData = {
   rootCategoryId: string
@@ -72,7 +79,7 @@ export async function fetchPostJob(jobId?: string): Promise<PostJobQueryData> {
 
   const [{ data: hirerRow, error: hirerErr }, { data: catRows, error: catErr }] = await Promise.all([
     supabase.from("hirer_profiles").select("id").eq("user_id", user.id).maybeSingle(),
-    supabase.from("categories").select("id,name_ka,is_active,sort_order,parent_id").eq("is_active", true).order("sort_order", { ascending: true }),
+    supabase.from("categories").select("id,name_ka,name_en,is_active,sort_order,parent_id").eq("is_active", true).order("sort_order", { ascending: true }),
   ])
 
   if (hirerErr) throw hirerErr
@@ -85,6 +92,7 @@ export async function fetchPostJob(jobId?: string): Promise<PostJobQueryData> {
   const fullCats: CategoryRow[] = (catRows ?? []).map((row: Record<string, unknown>) => ({
     id: String(row.id ?? ""),
     name_ka: String(row.name_ka ?? ""),
+    name_en: (row.name_en as string | null | undefined) ?? null,
     is_active: (row.is_active as boolean | null | undefined) ?? null,
     sort_order: (row.sort_order as number | null | undefined) ?? null,
     parent_id: (row.parent_id as string | null | undefined) ?? null,
@@ -150,7 +158,7 @@ export async function fetchPostJob(jobId?: string): Promise<PostJobQueryData> {
   if (midForQuery) {
     const { data, error: subErr } = await supabase
       .from("subcategories")
-      .select("id,name_ka,category_id,is_active")
+      .select("id,name_ka,name_en,category_id,is_active")
       .eq("category_id", midForQuery)
       .eq("is_active", true)
       .order("name_ka", { ascending: true })

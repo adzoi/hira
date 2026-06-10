@@ -19,6 +19,7 @@ import { fetchPostJob } from "../lib/queries/fetchPostJob.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { queryClient } from "../lib/queryClient.ts"
+import { pickCategoryName } from "../lib/categoryLocale.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
 import { OptimizedImage } from "../components/OptimizedImage.tsx"
@@ -33,12 +34,19 @@ const LOCATION_TYPE_KEYS = ["remote", "tbilisi", "hybrid", "anywhere"] as const
 type CategoryRow = {
   id: string
   name_ka: string
+  name_en?: string | null
   is_active: boolean | null
   sort_order: number | null
   parent_id: string | null
 }
 type SkillRow = { id: string; name: string; category_id: string | null; is_approved: boolean | null }
-type SubcategoryRow = { id: string; name_ka: string; category_id: string; is_active: boolean | null }
+type SubcategoryRow = {
+  id: string
+  name_ka: string
+  name_en?: string | null
+  category_id: string
+  is_active: boolean | null
+}
 
 type FieldErrors = {
   title?: string
@@ -78,7 +86,7 @@ function scrollToFirstPublishError(errors: FieldErrors) {
 }
 
 export default function PostJobPage() {
-  const { t } = useTranslation()
+  const { t, locale } = useTranslation()
   const navigate = useNavigate()
   const { jobId } = useParams<{ jobId: string }>()
   const isEdit = Boolean(jobId)
@@ -213,7 +221,7 @@ export default function PostJobPage() {
       }
       const { data, error } = await supabase
         .from("subcategories")
-        .select("id,name_ka,category_id,is_active")
+        .select("id,name_ka,name_en,category_id,is_active")
         .eq("category_id", parentId)
         .eq("is_active", true)
         .order("name_ka", { ascending: true })
@@ -234,19 +242,20 @@ export default function PostJobPage() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
   }, [])
 
-  const rootCategoryNameKa = useMemo(
-    () => categories.find((c) => c.id === rootCategoryId)?.name_ka ?? t("postJob.notSelected"),
-    [categories, rootCategoryId],
-  )
-  const midCategoryNameKa = useMemo(() => {
+  const rootCategoryLabel = useMemo(() => {
+    const cat = categories.find((c) => c.id === rootCategoryId)
+    return cat ? pickCategoryName(cat, locale) : t("postJob.notSelected")
+  }, [categories, rootCategoryId, locale, t])
+  const midCategoryLabel = useMemo(() => {
     if (categoryMidsList.length === 0) return "—"
-    return categories.find((c) => c.id === categoryId)?.name_ka ?? t("postJob.notSelected")
-  }, [categories, categoryId, categoryMidsList.length])
+    const cat = categories.find((c) => c.id === categoryId)
+    return cat ? pickCategoryName(cat, locale) : t("postJob.notSelected")
+  }, [categories, categoryId, categoryMidsList.length, locale, t])
 
-  const subcategoryNameKa = useMemo(
-    () => subcategories.find((s) => s.id === subcategoryId)?.name_ka ?? t("postJob.notSelected"),
-    [subcategories, subcategoryId],
-  )
+  const subcategoryLabel = useMemo(() => {
+    const sub = subcategories.find((s) => s.id === subcategoryId)
+    return sub ? pickCategoryName(sub, locale) : t("postJob.notSelected")
+  }, [subcategories, subcategoryId, locale, t])
 
   const selectedSkillsForPreview = useMemo(
     () => allSkills.filter((s) => selectedSkillIds.includes(s.id)),
@@ -591,10 +600,10 @@ export default function PostJobPage() {
               ) : null}
 
               <div className="flex flex-wrap gap-2 text-xs">
-                <span className="rounded-full bg-white px-3 py-1 text-slate-700">{t("common.category")}: {rootCategoryNameKa}</span>
-                <span className="rounded-full bg-white px-3 py-1 text-slate-700">{t("common.subcategory")}: {midCategoryNameKa}</span>
+                <span className="rounded-full bg-white px-3 py-1 text-slate-700">{t("common.category")}: {rootCategoryLabel}</span>
+                <span className="rounded-full bg-white px-3 py-1 text-slate-700">{t("common.subcategory")}: {midCategoryLabel}</span>
                 {subcategoryId ? (
-                  <span className="rounded-full bg-white px-3 py-1 text-slate-700">{t("postJob.specialization")}: {subcategoryNameKa}</span>
+                  <span className="rounded-full bg-white px-3 py-1 text-slate-700">{t("postJob.specialization")}: {subcategoryLabel}</span>
                 ) : null}
                 <span className="rounded-full bg-white px-3 py-1 text-slate-700">
                   {t("postJob.previewBudget")}{" "}
@@ -718,7 +727,7 @@ export default function PostJobPage() {
                       <option value="">{t("postJob.selectCategory")}</option>
                       {categoryRootsList.map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.name_ka}
+                          {pickCategoryName(c, locale)}
                         </option>
                       ))}
                     </select>
@@ -746,7 +755,7 @@ export default function PostJobPage() {
                       </option>
                       {categoryMidsList.map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.name_ka}
+                          {pickCategoryName(c, locale)}
                         </option>
                       ))}
                     </select>
@@ -767,7 +776,7 @@ export default function PostJobPage() {
                     </option>
                     {subcategories.map((s) => (
                       <option key={s.id} value={s.id}>
-                        {s.name_ka}
+                        {pickCategoryName(s, locale)}
                       </option>
                     ))}
                   </select>
@@ -908,7 +917,7 @@ export default function PostJobPage() {
                   <option value="">აირჩიე კატეგორია…</option>
                   {categories.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name_ka}
+                      {pickCategoryName(c, locale)}
                     </option>
                   ))}
                 </select>
@@ -917,7 +926,10 @@ export default function PostJobPage() {
               {skillFocusCategoryId && (skillsByCategoryId.get(skillFocusCategoryId) ?? []).length > 0 ? (
                 <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/40 p-3">
                   <p className="mb-2 text-sm font-semibold text-[#0088FF]">
-                    {categories.find((c) => c.id === skillFocusCategoryId)?.name_ka ?? "კატეგორია"}
+                    {(() => {
+                      const cat = categories.find((c) => c.id === skillFocusCategoryId)
+                      return cat ? pickCategoryName(cat, locale) : t("common.category")
+                    })()}
                   </p>
                   {(() => {
                     const list = skillsByCategoryId.get(skillFocusCategoryId) ?? []
