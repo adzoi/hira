@@ -676,7 +676,7 @@ export default function Navbar() {
           {authStatus === "anon" ? (
             <Link
               to="/login"
-              className="inline-flex h-9 shrink-0 items-center whitespace-nowrap px-2 text-sm font-semibold text-[#1B2B4B] transition hover:text-[#D4A843] md:h-10 md:px-3 lg:hidden"
+              className="inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-md border border-slate-300 px-3 text-sm font-semibold text-[#1B2B4B] transition hover:border-[#D4A843] hover:text-[#D4A843] md:h-10 lg:hidden"
             >
               {t("nav.login")}
             </Link>
@@ -723,9 +723,6 @@ export default function Navbar() {
             </>
           ) : authStatus === "anon" ? (
             <div className="grid gap-2 pt-2">
-              <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="inline-flex h-11 items-center justify-center rounded-md border border-slate-300 text-sm font-semibold text-[#1B2B4B]">
-                {t("nav.login")}
-              </Link>
               <Link to="/register" onClick={() => setMobileMenuOpen(false)} className="inline-flex h-11 items-center justify-center rounded-md bg-[#1B2B4B] text-sm font-semibold text-white">
                 {t("nav.register")}
               </Link>
