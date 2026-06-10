@@ -4,6 +4,8 @@ declare const Deno: {
 
 const FALLBACK_ORIGINS = [
   "https://hira.up.railway.app",
+  "https://hira.ge",
+  "https://www.hira.ge",
   "https://gigori-production.up.railway.app",
   "http://localhost:5173",
   "http://localhost:3000",
