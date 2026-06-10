@@ -1,11 +1,7 @@
 /**
- * storageImageUrl.ts
- *
- * NOTE: Supabase image transformation (/render/image/public/) requires Pro plan.
- * This file serves plain public URLs only — no transforms applied.
- *
- * If a URL was previously saved to the DB as a /render/image/public/ URL,
- * it is converted back to the plain /storage/v1/object/public/ equivalent.
+ * Supabase Storage image URLs for display.
+ * Plain /object/public/ URLs are converted to /render/image/public/ with transforms.
+ * DB storage should keep plain paths/URLs via avatarPublicUrl (no transform).
  */
 
 export type AppSupabaseClient = {
@@ -16,30 +12,44 @@ export type AppSupabaseClient = {
   }
 }
 
-/**
- * If a URL was saved as a Supabase render/transform URL, convert it back to
- * a plain object URL so it actually loads on the free tier.
- * e.g. /storage/v1/render/image/public/avatars/x.jpg?width=80...
- *   → /storage/v1/object/public/avatars/x.jpg
- */
-function normalizeSupabaseUrl(url: string): string {
-  if (!url.includes("/storage/v1/render/image/public/")) return url
-  const withoutQuery = url.split("?")[0]!
-  return withoutQuery.replace("/storage/v1/render/image/public/", "/storage/v1/object/public/")
+const IMAGE_TRANSFORM_QUERY = "width=800&quality=75&format=webp"
+
+function isSupabaseStorageUrl(url: string): boolean {
+  return (
+    url.includes("/storage/v1/object/public/") ||
+    url.includes("/storage/v1/render/image/public/")
+  )
 }
 
-/** Extract object path from a Supabase Storage public object URL for `bucket`. */
+/** Convert a Supabase object or render URL into a transformed render URL. */
+export function applyImageTransform(url: string): string {
+  const trimmed = url.trim()
+  if (!trimmed || !isSupabaseStorageUrl(trimmed)) return trimmed
+
+  const base = trimmed
+    .split("?")[0]!
+    .replace("/storage/v1/object/public/", "/storage/v1/render/image/public/")
+
+  return `${base}?${IMAGE_TRANSFORM_QUERY}`
+}
+
+/** Extract object path from a Supabase Storage public object or render URL for `bucket`. */
 export function storageObjectPathFromPublicUrl(publicUrl: string, bucket: string): string | null {
-  const needle = `/storage/v1/object/public/${bucket}/`
-  const i = publicUrl.indexOf(needle)
-  if (i === -1) return null
-  const raw = publicUrl.slice(i + needle.length).split(/[?#]/)[0] ?? ""
-  if (!raw) return null
-  try {
-    return decodeURIComponent(raw)
-  } catch {
-    return raw
+  for (const prefix of [
+    `/storage/v1/object/public/${bucket}/`,
+    `/storage/v1/render/image/public/${bucket}/`,
+  ]) {
+    const i = publicUrl.indexOf(prefix)
+    if (i === -1) continue
+    const raw = publicUrl.slice(i + prefix.length).split(/[?#]/)[0] ?? ""
+    if (!raw) return null
+    try {
+      return decodeURIComponent(raw)
+    } catch {
+      return raw
+    }
   }
+  return null
 }
 
 function stripLeadingAvatarsSegment(path: string): string {
@@ -59,6 +69,15 @@ function safeGetPublicUrl(
   }
 }
 
+function displayPublicUrl(
+  client: AppSupabaseClient,
+  bucket: string,
+  path: string,
+): string | null {
+  const plain = safeGetPublicUrl(client, bucket, path)
+  return plain ? applyImageTransform(plain) : null
+}
+
 /** Storage path → plain public URL (avatars bucket, no transform). */
 export function avatarPublicUrl(client: AppSupabaseClient, storagePath: string): string {
   let path = storagePath.trim()
@@ -70,9 +89,7 @@ export function avatarPublicUrl(client: AppSupabaseClient, storagePath: string):
 
 /**
  * Returns a displayable URL for a profile avatar.
- * - /render/ URLs saved in DB are converted to plain /object/ URLs
- * - External URLs (Gravatar, Twitter, etc.) pass through unchanged
- * - blob:/data: URLs pass through unchanged
+ * External URLs (Gravatar, Twitter, etc.) pass through unchanged.
  */
 export function avatarImageUrl(
   client: AppSupabaseClient | null | undefined,
@@ -85,52 +102,46 @@ export function avatarImageUrl(
   const lower = s.toLowerCase()
   if (lower.startsWith("blob:") || lower.startsWith("data:")) return s
 
-  // Fix render URLs saved in DB → convert to plain object URL
-  if (s.includes("/storage/v1/render/image/public/")) return normalizeSupabaseUrl(s)
+  if (/^https?:\/\//i.test(s) && !isSupabaseStorageUrl(s)) return s
 
-  // External non-Supabase URL → pass through
-  if (/^https?:\/\//i.test(s) && !s.includes("/storage/v1/object/public/avatars/")) return s
+  if (!client) {
+    return isSupabaseStorageUrl(s) ? applyImageTransform(s) : s
+  }
 
-  // No client → return as-is
-  if (!client) return s
-
-  // Full plain Supabase storage URL → extract path and get clean public URL
   const extractedFromPublicUrl = storageObjectPathFromPublicUrl(s, "avatars")
   if (extractedFromPublicUrl != null) {
     const path = stripLeadingAvatarsSegment(extractedFromPublicUrl)
-    if (!path) return s
-    return safeGetPublicUrl(client, "avatars", path) ?? s
+    if (!path) return applyImageTransform(s)
+    return displayPublicUrl(client, "avatars", path) ?? applyImageTransform(s)
   }
 
-  // Raw in-bucket object path saved in DB (e.g. `${userId}/avatar.jpg`)
   if (!/^https?:\/\//i.test(s)) {
     const path = stripLeadingAvatarsSegment(s)
     if (!path) return s
-    return safeGetPublicUrl(client, "avatars", path) ?? s
+    return displayPublicUrl(client, "avatars", path) ?? s
   }
 
-  return s
+  return applyImageTransform(s)
 }
 
 export function jobImageThumbnailUrl(client: AppSupabaseClient, storagePath: string): string {
-  return safeGetPublicUrl(client, "job-images", storagePath) ?? storagePath
+  return displayPublicUrl(client, "job-images", storagePath) ?? storagePath
 }
 
 export function jobImageDetailUrl(client: AppSupabaseClient, storagePath: string): string {
-  return safeGetPublicUrl(client, "job-images", storagePath) ?? storagePath
+  return displayPublicUrl(client, "job-images", storagePath) ?? storagePath
 }
 
 export function serviceImageThumbnailUrl(client: AppSupabaseClient, storagePath: string): string {
-  return safeGetPublicUrl(client, "service-images", storagePath) ?? storagePath
+  return displayPublicUrl(client, "service-images", storagePath) ?? storagePath
 }
 
 export function serviceImageDetailUrl(client: AppSupabaseClient, storagePath: string): string {
-  return safeGetPublicUrl(client, "service-images", storagePath) ?? storagePath
+  return displayPublicUrl(client, "service-images", storagePath) ?? storagePath
 }
 
 /**
- * Returns a displayable URL for job or service images.
- * No transforms applied — plain public URLs only.
+ * Returns a displayable URL for job, service, or other Supabase storage images.
  */
 export function jobOrServiceImageDisplayUrl(
   client: AppSupabaseClient | null | undefined,
@@ -144,25 +155,19 @@ export function jobOrServiceImageDisplayUrl(
   const lower = s.toLowerCase()
   if (lower.startsWith("blob:") || lower.startsWith("data:")) return s
 
-  // Fix render URLs saved in DB
-  if (s.includes("/storage/v1/render/image/public/")) return normalizeSupabaseUrl(s)
+  if (/^https?:\/\//i.test(s) && !isSupabaseStorageUrl(s)) return s
 
-  // External non-Supabase URL
-  if (
-    /^https?:\/\//i.test(s) &&
-    !s.includes("/storage/v1/object/public/job-images/") &&
-    !s.includes("/storage/v1/object/public/service-images/")
-  ) {
-    return s
+  if (!client) {
+    return isSupabaseStorageUrl(s) ? applyImageTransform(s) : s
   }
 
-  if (!client) return s
-
   const jobPath = storageObjectPathFromPublicUrl(s, "job-images")
-  if (jobPath) return jobImageThumbnailUrl(client, jobPath)
+  if (jobPath) return displayPublicUrl(client, "job-images", jobPath) ?? applyImageTransform(s)
 
   const servicePath = storageObjectPathFromPublicUrl(s, "service-images")
-  if (servicePath) return serviceImageThumbnailUrl(client, servicePath)
+  if (servicePath) return displayPublicUrl(client, "service-images", servicePath) ?? applyImageTransform(s)
+
+  if (isSupabaseStorageUrl(s)) return applyImageTransform(s)
 
   return s
 }
