@@ -7,38 +7,63 @@ import tailwindcss from '@tailwindcss/vite'
 import {
   buildHeadersFile,
   buildSecurityHeaders,
+  cacheControlForPath,
   generateCspNonce,
+  HTML_CACHE_CONTROL,
   injectScriptNonces,
+  longCacheControlForPath,
 } from './security/csp.mjs'
 
 const cspNonceStorage = new AsyncLocalStorage<string>()
-const LONG_CACHE = 'public, max-age=31536000, immutable'
+const PREVIEW_STATIC_RE = /\.(?:webp|png|jpe?g|gif|svg|ico|js|css|woff2?|ttf|map|xml|txt)$/i
 
-function assetCacheControl(urlPath: string): string | null {
-  const path = urlPath.split('?')[0] ?? urlPath
-  if (path.startsWith('/assets/')) return LONG_CACHE
-  if (/\.(?:js|css|webp|png|jpe?g|svg|woff2|ttf)$/i.test(path)) return LONG_CACHE
-  return null
+function urlPathname(url: string | undefined): string {
+  return (url ?? '/').split('?')[0] ?? '/'
 }
 
 function stripMetaCsp(html: string) {
   return html.replace(/\s*<meta http-equiv="Content-Security-Policy"[^>]*>\n?/i, '\n')
 }
 
-function applyAssetCacheHeader(urlPath: string, res: { setHeader: (name: string, value: string) => void }) {
-  const cacheControl = assetCacheControl(urlPath)
-  if (cacheControl) res.setHeader('Cache-Control', cacheControl)
+function applyDevCacheHeader(
+  req: { headers: { accept?: string | string[] | undefined } },
+  urlPath: string,
+  res: { setHeader: (name: string, value: string) => void },
+) {
+  const assetCache = longCacheControlForPath(urlPath)
+  if (assetCache) {
+    res.setHeader('Cache-Control', assetCache)
+    return
+  }
+  const accept = req.headers.accept
+  const acceptsHtml =
+    typeof accept === 'string'
+      ? accept.includes('text/html')
+      : Array.isArray(accept) && accept.some((value) => value.includes('text/html'))
+  if (acceptsHtml) res.setHeader('Cache-Control', HTML_CACHE_CONTROL)
+}
+
+function applyPreviewCacheHeader(urlPath: string, res: { setHeader: (name: string, value: string) => void }) {
+  const cacheControl = cacheControlForPath(urlPath)
+  if (cacheControl) {
+    res.setHeader('Cache-Control', cacheControl)
+    return
+  }
+  if (urlPath === '/' || !PREVIEW_STATIC_RE.test(urlPath)) {
+    res.setHeader('Cache-Control', HTML_CACHE_CONTROL)
+  }
 }
 
 function securityHeadersPlugin() {
   return {
     name: 'hira-security-headers',
     configureServer(server: ViteDevServer) {
-      server.middlewares.use((_req, res, next) => {
+      server.middlewares.use((req, res, next) => {
         const nonce = generateCspNonce()
         for (const [name, value] of Object.entries(buildSecurityHeaders({ dev: true, nonce }))) {
           res.setHeader(name, value)
         }
+        applyDevCacheHeader(req, urlPathname(req.url), res)
         cspNonceStorage.run(nonce, () => next())
       })
     },
@@ -47,7 +72,7 @@ function securityHeadersPlugin() {
         for (const [name, value] of Object.entries(buildSecurityHeaders({ dev: false }))) {
           res.setHeader(name, value)
         }
-        applyAssetCacheHeader(req.url ?? '/', res)
+        applyPreviewCacheHeader(urlPathname(req.url), res)
         next()
       })
     },

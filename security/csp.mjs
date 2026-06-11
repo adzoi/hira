@@ -88,6 +88,7 @@ export function buildSecurityHeaders(opts = {}) {
 }
 
 const LONG_CACHE = "public, max-age=31536000, immutable"
+export const HTML_CACHE_CONTROL = "no-store, no-cache"
 
 const LONG_CACHE_PATHS = [
   "/assets/*",
@@ -110,6 +111,7 @@ export function buildHeadersFile(opts = {}) {
   for (const [name, value] of Object.entries(headers)) {
     lines.push(`  ${name}: ${value}`)
   }
+  lines.push("", "/*", `  Cache-Control: ${HTML_CACHE_CONTROL}`)
   for (const path of LONG_CACHE_PATHS) {
     lines.push("", `${path}`, `  Cache-Control: ${LONG_CACHE}`)
   }
@@ -121,5 +123,13 @@ export function buildHeadersFile(opts = {}) {
 export function longCacheControlForPath(pathname) {
   if (pathname.startsWith("/assets/")) return LONG_CACHE
   if (/\.(?:js|css|webp|png|jpe?g|svg|woff2|ttf)$/i.test(pathname)) return LONG_CACHE
+  return null
+}
+
+/** @param {string} pathname */
+export function cacheControlForPath(pathname) {
+  const long = longCacheControlForPath(pathname)
+  if (long) return long
+  if (/\.html$/i.test(pathname)) return HTML_CACHE_CONTROL
   return null
 }

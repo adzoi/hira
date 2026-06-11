@@ -4,9 +4,10 @@ import { join, extname } from "node:path"
 import { fileURLToPath } from "node:url"
 import {
   buildSecurityHeaders,
+  cacheControlForPath,
   generateCspNonce,
+  HTML_CACHE_CONTROL,
   injectScriptNonces,
-  longCacheControlForPath,
 } from "./security/csp.mjs"
 
 const root = join(fileURLToPath(new URL(".", import.meta.url)), "dist")
@@ -56,7 +57,7 @@ function sendFile(res, filePath, urlPath, headers = staticSecurityHeaders) {
   applySecurityHeaders(res, headers)
   const ext = extname(filePath)
   res.setHeader("Content-Type", MIME[ext] ?? "application/octet-stream")
-  const cacheControl = longCacheControlForPath(urlPath)
+  const cacheControl = cacheControlForPath(urlPath)
   if (cacheControl) res.setHeader("Cache-Control", cacheControl)
   createReadStream(filePath).pipe(res)
 }
@@ -65,6 +66,7 @@ function sendSpaIndex(res) {
   const nonce = generateCspNonce()
   applySecurityHeaders(res, buildSecurityHeaders({ nonce }))
   res.setHeader("Content-Type", "text/html; charset=utf-8")
+  res.setHeader("Cache-Control", HTML_CACHE_CONTROL)
   res.end(injectScriptNonces(getIndexHtmlTemplate(), nonce))
 }
 
