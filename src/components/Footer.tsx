@@ -78,9 +78,10 @@ export default function Footer() {
     {
       heading: "footer.platform",
       links: [
-        { labelKey: "footer.services", to: "/listings" },
-        { labelKey: "footer.categories", to: "/listings" },
-        { labelKey: "footer.freelancers", to: "/browse" },
+        { labelKey: "nav.freelancers", to: "/browse" },
+        { labelKey: "nav.listings", to: "/listings" },
+        { labelKey: "nav.jobs", to: "/jobs" },
+        { labelKey: "nav.hirers", to: "/hirers" },
       ],
     },
     {
