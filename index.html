@@ -1,6 +1,10 @@
 <!doctype html>
 <html lang="ka">
   <head>
+    <!-- Fonts FIRST — before stylesheets or scripts -->
+    <link rel="preload" href="/fonts/noto-sans-georgian-400.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/noto-sans-georgian-600.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/noto-sans-georgian-700.woff2" as="font" type="font/woff2" crossorigin />
     <meta charset="UTF-8" />
     <link rel="icon" href="/favicon.ico?v=4" sizes="48x48" />
     <link rel="icon" type="image/png" sizes="48x48" href="/icons/hira-48.png?v=4" />
@@ -20,12 +24,70 @@
     <meta property="og:image" content="https://hira.ge/og-image.png" />
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:image" content="https://hira.ge/og-image.png" />
-    <link rel="preload" href="/fonts/noto-sans-georgian-400.ttf" as="font" type="font/ttf" crossorigin />
+    <link rel="stylesheet" href="/critical.css" />
+    <link rel="preload" href="/logo.webp" as="image" type="image/webp" fetchpriority="high" />
+    <link rel="preload" href="/images/main.webp" as="image" type="image/webp" fetchpriority="high" />
     <link rel="preconnect" href="https://sumwawnbeltxoppjdcjs.supabase.co" crossorigin />
     <title>ჰირა - ქართული freelance პლატფორმა</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="static-lcp-shell">
+        <header class="static-header">
+          <img
+            src="/logo.webp"
+            width="226"
+            height="140"
+            fetchpriority="high"
+            alt="ჰირა"
+            decoding="async"
+            class="static-logo"
+          />
+        </header>
+        <main>
+          <section class="static-hero">
+            <h1 class="static-hero-title">
+              <span class="static-hero-brand">ᲰᲘᲠᲐ</span>
+              <span class="static-hero-tagline">ᲥᲐᲠᲗᲣᲚᲘ ᲤᲠᲘᲚᲐᲜᲡ ᲞᲚᲐᲢᲤᲝᲠᲛᲐ</span>
+            </h1>
+            <img
+              src="/images/main.webp"
+              width="1024"
+              height="684"
+              fetchpriority="high"
+              alt="ჰირა — ქართული freelance პლატფორმა"
+              decoding="async"
+              class="static-hero-img"
+            />
+          </section>
+        </main>
+      </div>
+    </div>
+    <div
+      id="cookie-banner-static"
+      role="dialog"
+      aria-labelledby="cookie-banner-heading"
+      aria-describedby="cookie-banner-message"
+    >
+      <div class="cookie-banner-inner">
+        <div class="cookie-banner-text">
+          <p id="cookie-banner-heading" class="cookie-banner-heading">ჩვენ ვიყენებთ cookies-ს</p>
+          <p id="cookie-banner-message" class="cookie-banner-message">
+            ჰირა cookies-სა და მსგავს ტექნოლოგიებს იყენებს შესვლის, ენის პარამეტრებისა და საიტის ფუნქციონალობისთვის.
+            <a id="cookie-banner-learn-more" href="/cookies">გაიგეთ მეტი</a>
+          </p>
+        </div>
+        <div class="cookie-banner-actions">
+          <button type="button" id="cookie-banner-essential" class="cookie-banner-btn cookie-banner-btn-essential">
+            მხოლოდ აუცილებელი
+          </button>
+          <button type="button" id="cookie-banner-accept-all" class="cookie-banner-btn cookie-banner-btn-accept">
+            ყველას მიღება
+          </button>
+        </div>
+      </div>
+    </div>
+    <script src="/cookie-banner.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
