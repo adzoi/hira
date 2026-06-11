@@ -837,7 +837,7 @@ export default function BrowsePage() {
                                   width={64}
                                   height={64}
                                   onError={(e) => {
-                                    e.currentTarget.style.display = "none"
+                                    e.currentTarget.classList.add("hidden")
                                     e.currentTarget.parentElement?.querySelector(".avatar-fallback")?.classList.remove("hidden")
                                   }}
                                   className="h-16 w-16 rounded-full object-cover"

@@ -5,14 +5,29 @@ import { formatCityForDisplay } from "./marketplaceFilters.ts"
 import { normalizeListingPriceType } from "./listingPrice.ts"
 import { SITE_BASE_URL, SITE_OG_IMAGE } from "./usePageMeta.tsx"
 
+const SITE_DESCRIPTION_KA =
+  "ქართული freelance ბაზარი: იპოვე სერვისები, დაიქირავე პროფესიონალები და აღმოაჩინე სამუშაოები ერთ ადგილას."
+
 export function buildSiteOrganizationSchema(): Record<string, unknown> {
   return {
     "@context": "https://schema.org",
     "@type": "Organization",
     name: "ჰირა",
     url: SITE_BASE_URL,
-    logo: `${SITE_BASE_URL}/icons/hira-512.png`,
+    description: SITE_DESCRIPTION_KA,
+    logo: `${SITE_BASE_URL}/icons/hira-512.png?v=4`,
     image: SITE_OG_IMAGE,
+  }
+}
+
+export function buildSiteWebSiteSchema(): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "ჰირა",
+    url: SITE_BASE_URL,
+    description: SITE_DESCRIPTION_KA,
+    inLanguage: "ka",
   }
 }
 

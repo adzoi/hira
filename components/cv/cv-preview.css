@@ -1,0 +1,15 @@
+.cv-preview-viewport {
+  max-width: 1000px;
+  margin-inline: auto;
+  overflow-x: auto;
+}
+
+.cv-preview-sheet {
+  width: 794px;
+  min-height: 1123px;
+}
+
+.sidebar-dark ::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+  opacity: 1;
+}

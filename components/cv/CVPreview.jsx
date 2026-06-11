@@ -11,6 +11,8 @@ import {
 } from "../../src/lib/cvFromProfile.ts"
 import { OptimizedImage } from "../../src/components/OptimizedImage.tsx"
 import { compressImageForUpload } from "../../src/lib/compressImageForUpload.ts"
+import "./cv-preview.css"
+import cvPrintCss from "./cv-print.css?raw"
 
 const A4_WIDTH = 794
 const A4_HEIGHT = 1123
@@ -196,7 +198,6 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
   const [localCV, setLocalCV] = useState(() => normalizeCV(cv))
   const [isPrinting, setIsPrinting] = useState(false)
   const [isAvatarUploading, setIsAvatarUploading] = useState(false)
-  const [scale, setScale] = useState(1)
 
   const [editingHeader, setEditingHeader] = useState(false)
   const [editingSummary, setEditingSummary] = useState(false)
@@ -206,18 +207,6 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
   useEffect(() => {
     setLocalCV(normalizeCV(cv))
   }, [cv])
-
-  useEffect(() => {
-    const recalc = () => {
-      const available = Math.max(320, window.innerWidth - 40)
-      setScale(Math.min(1, available / A4_WIDTH))
-    }
-    recalc()
-    window.addEventListener("resize", recalc)
-    return () => window.removeEventListener("resize", recalc)
-  }, [])
-
-  const scaledHeight = Math.max(500, Math.round(A4_HEIGHT * scale))
 
   function notify(type, message) {
     if (typeof onNotify === "function") {
@@ -356,7 +345,7 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
       .join("")
 
     const summaryBlock = truthyStr(localCV.professional_summary)
-      ? `<section class="sec" style="border-top:none;margin-top:0;padding-top:0">
+      ? `<section class="sec sec--first">
            <h3 class="sec-title">პროფესიული რეზიუმე</h3>
            <p class="summary">${esc(localCV.professional_summary)}</p>
          </section>`
@@ -378,47 +367,15 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
         <head>
           <meta charset="utf-8" />
           <title>CV</title>
-          <style>
-            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            @page { margin: 0; size: A4; }
-            body { margin: 1.6cm; background: #f3f4f6; font-family: "Arial", "Helvetica", sans-serif; }
-            .cv-shell { width: 794px; min-height: 1123px; margin: 0 auto; display: grid; grid-template-columns: 260px 1fr; border: 1px solid #e5e7eb; }
-            .sidebar { width: 260px; overflow: hidden; flex-shrink: 0; background: #1a1a2e; color: #fff; padding: 24px; }
-            .sidebar * { word-break: break-word; overflow-wrap: break-word; }
-            .main { background: #fff; color: #111827; padding: 32px; }
-            .avatar { display:block; width:96px; height:96px; margin:0 auto 14px; border-radius:9999px; object-fit:cover; border:2px solid rgba(255,255,255,.3); }
-            .avatar-fallback { width:96px; height:96px; margin:0 auto 14px; border-radius:9999px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.15); color:#fff; font-weight:700; font-size:22px; }
-            .name { font-size: ${longName ? "20px" : "32px"}; font-weight: 700; margin: 0 0 12px; word-break: break-word; hyphens: auto; }
-            .contact p { margin: 0 0 4px; font-size: 14px; color: #cbd5e1; }
-            .print-link a { color: #4a90d9; text-decoration: underline; font-size: 13px; display: inline-block; margin: 4px 0; }
-            .sec { margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.2); }
-            .main .sec { border-top: 1px solid #e5e7eb; margin-top: 18px; }
-            .sec-title { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; margin: 0 0 10px; color: #94a3b8; }
-            .main .sec-title { color: #4b5563; }
-            ul { margin: 6px 0 0 18px; padding: 0; }
-            li { margin: 0 0 6px; line-height: 1.5; font-size: 14px; }
-            .summary { margin: 0; line-height: 1.7; font-size: 15px; white-space: pre-wrap; }
-            .work-card { border: 1px solid #f1f5f9; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
-            .work-title { font-weight: 700; margin-bottom: 2px; }
-            .work-date { color: #6b7280; font-size: 12px; margin-bottom: 8px; }
-            .edu-card { border: 1px solid #f1f5f9; border-radius: 8px; padding: 12px; margin-bottom: 10px; background: #fff; }
-            .edu-degree { font-weight: 700; font-size: 14px; color: #111827; }
-            .edu-school { color: #374151; font-size: 13px; margin-top: 2px; }
-            .edu-year { color: #6b7280; font-size: 12px; margin-top: 2px; }
-            @media print {
-              @page { margin: 0; size: A4; }
-              body { background: #fff; margin: 1.6cm; }
-              .cv-shell { border: none; }
-            }
-          </style>
+          <style>${cvPrintCss}</style>
         </head>
         <body>
           <div class="cv-shell">
             <aside class="sidebar">
               ${avatarBlock}
-              <h1 class="name" lang="ka">${esc(localCV.full_name || "")}</h1>
+              <h1 class="name ${longName ? "name--long" : "name--short"}" lang="ka">${esc(localCV.full_name || "")}</h1>
               ${contactBlocks.length ? `<div class="contact">${contactBlocks.join("")}</div>` : ""}
-              ${printLinks ? `<div class="sec" style="border-top:1px solid rgba(255,255,255,.2);margin-top:16px;padding-top:12px">${printLinks}</div>` : ""}
+              ${printLinks ? `<div class="sec sec--links">${printLinks}</div>` : ""}
               ${skillsSec}
               ${langSec}
             </aside>
@@ -477,14 +434,9 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
         </div>
       ) : null}
 
-      <div className="mx-auto w-full max-w-[1000px]" style={{ height: `${scaledHeight}px` }}>
+      <div className="cv-preview-viewport mx-auto w-full max-w-[1000px]">
         <article
-          className="mx-auto grid origin-top overflow-hidden rounded-lg border border-gray-200 shadow-sm md:grid-cols-[260px_1fr]"
-          style={{
-            width: `${A4_WIDTH}px`,
-            minHeight: `${A4_HEIGHT}px`,
-            transform: `scale(${scale})`,
-          }}
+          className="cv-preview-sheet mx-auto grid origin-top overflow-hidden rounded-lg border border-gray-200 shadow-sm md:grid-cols-[260px_1fr]"
         >
           <aside className="sidebar-dark w-[260px] shrink-0 overflow-hidden bg-[#1a1a2e] p-6 text-white [&_*]:break-words">
             {truthyHttpUrl(localCV.avatar_url) ? (
@@ -657,13 +609,6 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
                 ) : null}
               </section>
             ) : null}
-
-            <style>{`
-              .sidebar-dark ::placeholder {
-                color: rgba(255, 255, 255, 0.4);
-                opacity: 1;
-              }
-            `}</style>
           </aside>
 
           <main className="bg-white p-8">

@@ -489,11 +489,11 @@ export default function MessagesPage() {
     const previous = history.scrollRestoration
     history.scrollRestoration = "manual"
     window.scrollTo(0, 0)
-    const prev = document.body.style.overflow
-    document.body.style.overflow = "hidden"
+    const prev = document.body.classList.contains("overflow-hidden")
+    document.body.classList.add("overflow-hidden")
     return () => {
       history.scrollRestoration = previous
-      document.body.style.overflow = prev
+      if (!prev) document.body.classList.remove("overflow-hidden")
     }
   }, [mobileThreadActive, isMobileViewport, validatedActiveId])
 

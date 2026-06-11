@@ -21,6 +21,7 @@ export function buildContentSecurityPolicy(opts = {}) {
   const dev = Boolean(opts.dev)
   const forMeta = Boolean(opts.forMeta)
   const nonce = typeof opts.nonce === "string" ? opts.nonce.trim() : ""
+
   const scriptSrc = ["'self'"]
   if (nonce) {
     scriptSrc.push(`'nonce-${nonce}'`)
@@ -32,15 +33,23 @@ export function buildContentSecurityPolicy(opts = {}) {
   )
   if (dev) scriptSrc.push("'unsafe-eval'")
 
+  const styleSrc = ["'self'", "https://*.paypal.com", "https://*.paypalobjects.com"]
+  const styleSrcElem = [...styleSrc]
+  if (dev) {
+    // Vite dev server injects `<style>` tags for CSS hot-module replacement.
+    styleSrcElem.push("'unsafe-inline'")
+  }
+
   const directives = [
-    "default-src 'self'",
+    "default-src 'none'",
     `script-src ${scriptSrc.join(" ")}`,
-    "style-src 'self' 'unsafe-inline' https://*.paypal.com https://*.paypalobjects.com",
+    `style-src ${styleSrc.join(" ")}`,
+    `style-src-elem ${styleSrcElem.join(" ")}`,
     "font-src 'self' data:",
     "img-src 'self' data: blob: https://*.supabase.co https://*.paypal.com https://*.paypalobjects.com",
     "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.paypal.com https://*.paypalobjects.com https://www.google-analytics.com https://analytics.google.com https://*.google-analytics.com",
     "frame-src 'self' https://*.paypal.com https://*.paypalobjects.com",
-    "child-src 'self' https://*.paypal.com https://*.paypalobjects.com",
+    "manifest-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self' https://*.paypal.com",

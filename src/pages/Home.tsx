@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom"
 import HomeFeedSection from "../components/HomeFeedSection.tsx"
 import { OptimizedImage } from "../components/OptimizedImage.tsx"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { translate } from "../i18n/translate.ts"
 import { useHomeStatsQuery } from "../lib/queries/useHomeStatsQuery.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { normalizeSearchInput } from "../lib/validation.ts"
@@ -19,7 +20,10 @@ export default function HomePage() {
   const [searchText, setSearchText] = useState("")
   const [viewerType, setViewerType] = useState<"freelancer" | "hirer" | null>(null)
   const { data: stats = { freelancerCount: 0, jobCount: 0, completedCount: 0 } } = useHomeStatsQuery()
-  const pageMeta = usePageMeta(t("home.title"), t("home.metaDescription"))
+  const pageMeta = usePageMeta(
+    translate("ka", "home.title"),
+    translate("ka", "home.metaDescription"),
+  )
 
   useEffect(() => {
     let cancelled = false

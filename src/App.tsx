@@ -5,7 +5,8 @@ import PageLoader from "./components/ui/PageLoader.tsx"
 import ProtectedRoute from "./components/ProtectedRoute.tsx"
 import CookieBanner from "./components/CookieBanner.tsx"
 import Footer from "./components/Footer.tsx"
-import { buildSiteOrganizationSchema, JsonLd } from "./lib/structuredData.tsx"
+import { buildSiteOrganizationSchema, buildSiteWebSiteSchema, JsonLd } from "./lib/structuredData.tsx"
+import { trackPageView } from "./lib/analytics.ts"
 
 const HomePage = lazy(() => import("./pages/Home.tsx"))
 const LoginPage = lazy(() => import("./pages/Login.tsx"))
@@ -72,12 +73,24 @@ function ScrollToTopOnRouteChange() {
   return null
 }
 
+/** Sends GA4 page_view on each client-side route change (see src/lib/analytics.ts). */
+function GoogleAnalyticsPageViews() {
+  const location = useLocation()
+
+  useEffect(() => {
+    trackPageView(location.pathname + location.search + location.hash)
+  }, [location.pathname, location.search, location.hash])
+
+  return null
+}
+
 function App() {
   return (
     <>
-      <JsonLd data={buildSiteOrganizationSchema()} />
+      <JsonLd data={[buildSiteOrganizationSchema(), buildSiteWebSiteSchema()]} />
       <Suspense fallback={<PageLoader />}>
         <ScrollToTopOnRouteChange />
+        <GoogleAnalyticsPageViews />
         <Routes>
           <Route element={<MainLayout />}>
             <Route path="/" element={<HomePage />} />

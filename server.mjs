@@ -113,9 +113,14 @@ const server = createServer(async (req, res) => {
   }
 
   if (safePath === "/favicon.ico") {
-    const icoPath = join(root, "icons", "hira-32.png")
+    const icoPath = join(root, "favicon.ico")
     if (existsSync(icoPath)) {
       sendFile(res, icoPath, safePath)
+      return
+    }
+    const fallbackPath = join(root, "icons", "hira-48.png")
+    if (existsSync(fallbackPath)) {
+      sendFile(res, fallbackPath, safePath)
       return
     }
   }

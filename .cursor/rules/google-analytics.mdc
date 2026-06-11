@@ -1,0 +1,38 @@
+---
+description: Google Analytics 4 (GA4) conventions for this project
+alwaysApply: true
+---
+
+# Google Analytics 4
+
+Use **GA4 only** with Measurement ID **`G-HT76VNZHG5`**. Never use Universal Analytics or other measurement IDs.
+
+## Initialization
+
+- GA4 is initialized in `src/main.tsx` via `initGoogleAnalytics()` from `src/lib/analytics.ts`.
+- Analytics runs **only in production** (`import.meta.env.PROD`) and **only after full cookie consent**.
+- Do not add gtag.js snippets to `index.html`; loading is consent-gated in `analytics.ts`.
+
+## Page views
+
+- SPA route changes are tracked in `App.tsx` via `trackPageView()` (see `GoogleAnalyticsPageViews`).
+- Initial `gtag("config")` uses `send_page_view: false` to avoid duplicate first page views.
+- Do not call `gtag("config", …)` directly for navigation; use `trackPageView()`.
+
+## Custom events
+
+Import helpers from `src/lib/analytics.ts`:
+
+```typescript
+import { trackEvent } from "../lib/analytics.ts"
+
+trackEvent("button_click", { button_name: "post_job" })
+```
+
+Use `trackEvent()` for all custom events. Do not call `window.gtag` directly.
+
+## CSP
+
+When adding new analytics domains, update `security/csp.mjs` and `public/_headers` to allow:
+- `https://www.googletagmanager.com` (script-src)
+- `https://www.google-analytics.com`, `https://analytics.google.com`, `https://*.google-analytics.com` (connect-src)

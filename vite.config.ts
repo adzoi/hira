@@ -34,12 +34,11 @@ function securityHeadersPlugin() {
   return {
     name: 'hira-security-headers',
     configureServer(server: ViteDevServer) {
-      server.middlewares.use((req, res, next) => {
+      server.middlewares.use((_req, res, next) => {
         const nonce = generateCspNonce()
         for (const [name, value] of Object.entries(buildSecurityHeaders({ dev: true, nonce }))) {
           res.setHeader(name, value)
         }
-        applyAssetCacheHeader(req.url ?? '/', res)
         cspNonceStorage.run(nonce, () => next())
       })
     },

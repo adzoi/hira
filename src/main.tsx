@@ -10,7 +10,8 @@ import { LocaleProvider } from "./i18n/LocaleContext.tsx"
 import { queryClient } from "./lib/queryClient.ts"
 import { isSupabaseConfigured, supabase } from "./lib/supabase.ts"
 import { initAuthHashCleanup, initSupabaseAuth, initAuthStateCleanup } from "./lib/supabaseAuth.ts"
-import { initGoogleAnalytics } from "./lib/loadGoogleAnalytics.ts"
+// GA4: initialized here (production + cookie consent). Custom events: src/lib/analytics.ts
+import { initGoogleAnalytics } from "./lib/analytics.ts"
 import { initRealtimeAuth } from "./lib/realtimeAuth.ts"
 
 async function bootstrap() {
