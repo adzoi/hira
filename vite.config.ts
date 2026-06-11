@@ -54,6 +54,39 @@ function applyPreviewCacheHeader(urlPath: string, res: { setHeader: (name: strin
   }
 }
 
+function performancePreloadsPlugin() {
+  const FONT_PRELOADS = [500, 600, 700].map(
+    (weight) =>
+      `<link rel="preload" href="/fonts/noto-sans-georgian-${weight}.woff2" as="font" type="font/woff2" crossorigin>`,
+  )
+
+  return {
+    name: 'hira-performance-preloads',
+    transformIndexHtml: {
+      order: 'pre',
+      handler(html: string) {
+        const block = FONT_PRELOADS.map((tag) => `    ${tag}`).join('\n')
+        return html.replace(
+          /<link rel="preload" href="\/fonts\/noto-sans-georgian-\d+\.woff2"[^>]*>\n?/g,
+          '',
+        ).replace('</head>', `${block}\n  </head>`)
+      },
+    },
+    closeBundle() {
+      const distDir = join(process.cwd(), 'dist')
+      const indexPath = join(distDir, 'index.html')
+      let html = readFileSync(indexPath, 'utf8')
+
+      html = html.replace(
+        /(<link rel="stylesheet" crossorigin href=")(\/assets\/[^"]+\.css)(">)/,
+        '<link rel="preload" href="$2" as="style">\n    $1$2$3',
+      )
+
+      writeFileSync(indexPath, html)
+    },
+  }
+}
+
 function securityHeadersPlugin() {
   return {
     name: 'hira-security-headers',
@@ -99,7 +132,7 @@ function securityHeadersPlugin() {
 }
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), securityHeadersPlugin()],
+  plugins: [react(), tailwindcss(), performancePreloadsPlugin(), securityHeadersPlugin()],
   preview: {
     headers: buildSecurityHeaders({ dev: false }),
   },

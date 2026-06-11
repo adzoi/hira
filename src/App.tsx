@@ -3,8 +3,6 @@ import { Outlet, Route, Routes, useLocation } from "react-router-dom"
 import Navbar from "./components/Navbar.tsx"
 import PageLoader from "./components/ui/PageLoader.tsx"
 import ProtectedRoute from "./components/ProtectedRoute.tsx"
-import CookieBanner from "./components/CookieBanner.tsx"
-import Footer from "./components/Footer.tsx"
 import { buildSiteOrganizationSchema, buildSiteWebSiteSchema, JsonLd } from "./lib/structuredData.tsx"
 import { trackPageView } from "./lib/analytics.ts"
 
@@ -39,6 +37,8 @@ const AuthConfirmPage = lazy(() => import("./pages/AuthConfirm.tsx"))
 const PayPalCheckoutE2EPage = lazy(() => import("./pages/PayPalCheckoutE2E.tsx"))
 const SavedPage = lazy(() => import("./pages/Saved.tsx"))
 const MessagesPage = lazy(() => import("./pages/Messages.tsx"))
+const Footer = lazy(() => import("./components/Footer.tsx"))
+const CookieBanner = lazy(() => import("./components/CookieBanner.tsx"))
 
 function MainLayout() {
   const location = useLocation()
@@ -217,8 +217,10 @@ function App() {
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
-      <Footer />
-      <CookieBanner />
+      <Suspense fallback={null}>
+        <Footer />
+        <CookieBanner />
+      </Suspense>
     </>
   )
 }
