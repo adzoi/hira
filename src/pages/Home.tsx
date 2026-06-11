@@ -60,10 +60,10 @@ export default function HomePage() {
           <div className="mx-auto grid w-full max-w-[1200px] items-stretch gap-8 px-4 py-10 md:px-6 lg:grid-cols-2 lg:py-16">
             <div className="flex flex-col justify-center">
               <h1 className="home-hero-title mt-3">
-                <span className="block text-[36px] font-bold tracking-tight text-[#D4A843] drop-shadow-sm lg:text-[58px]">
+                <span className="block text-[36px] font-bold tracking-tight text-[#DEB948] drop-shadow-sm lg:text-[58px]">
                   {t("home.heroBrand")}
                 </span>
-                <span className="mt-1 block text-[22px] font-bold text-white lg:mt-2 lg:text-[38px]">
+                <span className="home-hero-tagline mt-1 block font-bold text-white lg:mt-2">
                   {t("home.heroTagline")}
                 </span>
               </h1>

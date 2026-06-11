@@ -53,7 +53,11 @@ body {
   font-synthesis-weight: none;
   font-synthesis-style: none;
   line-height: 1.12;
-  text-wrap: balance;
+}
+
+.home-hero-tagline {
+  font-size: clamp(0.8125rem, 0.4rem + 2.2vw, 1.875rem);
+  white-space: nowrap;
 }
 
 #root {
