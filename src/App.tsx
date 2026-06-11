@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from "react"
 import { Outlet, Route, Routes, useLocation } from "react-router-dom"
+import CookieBanner from "./components/CookieBanner.tsx"
 import Navbar from "./components/Navbar.tsx"
 import PageLoader from "./components/ui/PageLoader.tsx"
 import ProtectedRoute from "./components/ProtectedRoute.tsx"
@@ -38,7 +39,6 @@ const PayPalCheckoutE2EPage = lazy(() => import("./pages/PayPalCheckoutE2E.tsx")
 const SavedPage = lazy(() => import("./pages/Saved.tsx"))
 const MessagesPage = lazy(() => import("./pages/Messages.tsx"))
 const Footer = lazy(() => import("./components/Footer.tsx"))
-const CookieBanner = lazy(() => import("./components/CookieBanner.tsx"))
 
 function MainLayout() {
   const location = useLocation()
@@ -219,8 +219,8 @@ function App() {
       </Suspense>
       <Suspense fallback={null}>
         <Footer />
-        <CookieBanner />
       </Suspense>
+      <CookieBanner />
     </>
   )
 }

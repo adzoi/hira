@@ -1,0 +1,170 @@
+/* Critical above-the-fold styles — loaded before the JS bundle. */
+
+#static-lcp-shell {
+  min-height: 100vh;
+  font-family: "Noto Sans Georgian", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background-color: #f8f9fc;
+}
+
+.static-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+  padding: 0.75rem 1rem;
+}
+
+.static-logo {
+  height: 2.5rem;
+  width: auto;
+  object-fit: contain;
+}
+
+.static-hero {
+  background: #0088ff;
+  padding: 2.5rem 1rem;
+}
+
+.static-hero-title {
+  margin: 0;
+  line-height: 1.12;
+}
+
+.static-hero-brand {
+  display: block;
+  font-size: 36px;
+  font-weight: 700;
+  color: #f7ce50;
+}
+
+.static-hero-tagline {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: clamp(0.8125rem, 0.4rem + 2.2vw, 1.875rem);
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.static-hero-img {
+  display: none;
+  margin-top: 2rem;
+  width: 100%;
+  max-width: 32rem;
+  height: auto;
+  border-radius: 1rem;
+  object-fit: contain;
+}
+
+@media (min-width: 768px) {
+  .static-hero {
+    padding: 4rem 1.5rem;
+  }
+
+  .static-hero-img {
+    display: block;
+  }
+
+  .static-hero-brand {
+    font-size: 58px;
+  }
+
+  .static-hero-tagline {
+    margin-top: 0.5rem;
+  }
+}
+
+#cookie-banner-static {
+  display: none;
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 90;
+  border-top: 1px solid #e2e8f0;
+  background: #fff;
+  padding: 1rem;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.08);
+  font-family: "Noto Sans Georgian", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+html.cookie-banner-visible #cookie-banner-static {
+  display: block;
+}
+
+#cookie-banner-static .cookie-banner-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 72rem;
+  margin-inline: auto;
+}
+
+#cookie-banner-static .cookie-banner-text {
+  min-width: 0;
+  flex: 1;
+}
+
+#cookie-banner-static .cookie-banner-heading {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+#cookie-banner-static .cookie-banner-message {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  color: #475569;
+}
+
+#cookie-banner-static .cookie-banner-message a {
+  font-weight: 500;
+  color: #0088ff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+#cookie-banner-static .cookie-banner-actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+#cookie-banner-static .cookie-banner-btn {
+  height: 2.75rem;
+  border-radius: 0.5rem;
+  padding-inline: 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#cookie-banner-static .cookie-banner-btn-essential {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+}
+
+#cookie-banner-static .cookie-banner-btn-accept {
+  border: none;
+  background: #0088ff;
+  color: #fff;
+}
+
+@media (min-width: 640px) {
+  #cookie-banner-static {
+    padding-inline: 1.5rem;
+  }
+
+  #cookie-banner-static .cookie-banner-inner {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  #cookie-banner-static .cookie-banner-actions {
+    flex-direction: row;
+  }
+}
