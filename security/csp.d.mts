@@ -7,3 +7,6 @@ export function buildContentSecurityPolicy(opts?: {
 }): string
 export function buildSecurityHeaders(opts?: { dev?: boolean; nonce?: string }): Record<string, string>
 export function buildHeadersFile(opts?: { dev?: boolean }): string
+export const HTML_CACHE_CONTROL: string
+export function longCacheControlForPath(pathname: string): string | null
+export function cacheControlForPath(pathname: string): string | null

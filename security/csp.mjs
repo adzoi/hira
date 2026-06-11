@@ -88,7 +88,7 @@ export function buildSecurityHeaders(opts = {}) {
 }
 
 const LONG_CACHE = "public, max-age=31536000, immutable"
-export const HTML_CACHE_CONTROL = "no-store, no-cache"
+export const HTML_CACHE_CONTROL = "no-store, no-cache, must-revalidate"
 
 const LONG_CACHE_PATHS = [
   "/assets/*",
