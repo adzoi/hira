@@ -1,30 +1,12 @@
 import { consentGatedGetItem, hasFullCookieConsent } from "../lib/consentGatedStorage.ts"
 import type { AppLocale } from "./types.ts"
 import { LOCALE_STORAGE_KEY } from "./types.ts"
+import { en } from "./translations/en.ts"
 import { ka } from "./translations/ka.ts"
 
 type TranslationTree = { [key: string]: string | TranslationTree }
 
-let enTranslations: TranslationTree | null = null
-let enLoadPromise: Promise<void> | null = null
-
-export function loadEnTranslations(): Promise<void> {
-  if (enTranslations) return Promise.resolve()
-  if (!enLoadPromise) {
-    enLoadPromise = import("./translations/en.ts").then((mod) => {
-      enTranslations = mod.en
-    })
-  }
-  return enLoadPromise
-}
-
-function translationTree(locale: AppLocale): TranslationTree {
-  if (locale === "en") {
-    if (!enTranslations) void loadEnTranslations()
-    return enTranslations ?? ka
-  }
-  return ka
-}
+const translations: Record<AppLocale, TranslationTree> = { ka, en }
 
 let currentLocale: AppLocale = "ka"
 
@@ -33,10 +15,6 @@ export function getStoredLocale(): AppLocale {
   if (!hasFullCookieConsent()) return "ka"
   const stored = consentGatedGetItem(LOCALE_STORAGE_KEY)
   return stored === "en" ? "en" : "ka"
-}
-
-if (typeof window !== "undefined" && getStoredLocale() === "en") {
-  void loadEnTranslations()
 }
 
 export function setCurrentLocale(locale: AppLocale) {
@@ -69,8 +47,8 @@ export function translate(
   params?: Record<string, string | number>,
 ): string {
   const template =
-    resolve(translationTree(locale), key) ??
-    resolve(ka, key) ??
+    resolve(translations[locale], key) ??
+    resolve(translations.ka, key) ??
     key
   return interpolate(template, params)
 }

@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { COOKIE_CONSENT_EVENT, consentGatedSetItem } from "../lib/consentGatedStorage.ts"
 import type { AppLocale } from "./types.ts"
 import { LOCALE_STORAGE_KEY } from "./types.ts"
-import { getStoredLocale, loadEnTranslations, setCurrentLocale, translate } from "./translate.ts"
+import { getStoredLocale, setCurrentLocale, translate } from "./translate.ts"
 
 type LocaleContextValue = {
   locale: AppLocale
@@ -16,11 +16,7 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<AppLocale>(() => getStoredLocale())
 
   const setLocale = useCallback((next: AppLocale) => {
-    if (next === "en") {
-      void loadEnTranslations().then(() => setLocaleState("en"))
-    } else {
-      setLocaleState(next)
-    }
+    setLocaleState(next)
     setCurrentLocale(next)
     if (typeof window !== "undefined") {
       consentGatedSetItem(LOCALE_STORAGE_KEY, next)

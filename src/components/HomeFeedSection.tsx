@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { type HomeFreelancerServiceItem, type HomeJobListingItem } from "../lib/homeFeed.ts"
-import { useHomePageQuery } from "../lib/queries/useHomePageQuery.ts"
+import { useHomeFeedQuery } from "../lib/queries/useHomeFeedQuery.ts"
 import { formatJobBudget, formatListingPrice } from "../lib/listingPrice.ts"
 import { OptimizedImage } from "./OptimizedImage.tsx"
 import { ViewCountEyeIcon } from "./ViewCountEyeIcon.tsx"
 import VipBadge from "./VipBadge.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
-import { avatarImageUrl, HOME_FEED_AVATAR_TRANSFORM } from "../lib/storageImageUrl.ts"
+import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { formatCityForDisplay } from "../lib/marketplaceFilters.ts"
 import type { AppLocale } from "../i18n/types.ts"
 import { pickCategoryName } from "../lib/categoryLocale.ts"
@@ -109,7 +109,7 @@ function FreelancerFeedCard({ item }: { item: HomeFreelancerServiceItem }) {
           <span className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-sm font-bold text-[#1B2B4B]">
             {item.avatarUrl ? (
               <OptimizedImage
-                src={avatarImageUrl(supabase, item.avatarUrl, HOME_FEED_AVATAR_TRANSFORM) ?? item.avatarUrl}
+                src={avatarImageUrl(supabase, item.avatarUrl) ?? item.avatarUrl}
                 alt=""
                 width={56}
                 height={56}
@@ -199,7 +199,7 @@ function JobListingFeedCard({ item }: { item: HomeJobListingItem }) {
         <div className="mt-3 flex items-start gap-3">
           {item.companyAvatar ? (
             <OptimizedImage
-              src={avatarImageUrl(supabase, item.companyAvatar, HOME_FEED_AVATAR_TRANSFORM) ?? item.companyAvatar}
+              src={avatarImageUrl(supabase, item.companyAvatar) ?? item.companyAvatar}
               alt=""
               width={56}
               height={56}
@@ -268,8 +268,7 @@ function JobListingFeedCard({ item }: { item: HomeJobListingItem }) {
 
 export default function HomeFeedSection() {
   const { t } = useTranslation()
-  const { data, isLoading: loading } = useHomePageQuery()
-  const items = data?.feed ?? []
+  const { data: items = [], isLoading: loading } = useHomeFeedQuery()
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   /** Guests default to talent (freelancer listings); logged-in users default to the opposite role’s content. */
   const [feedFilter, setFeedFilter] = useState<"all" | "freelancer" | "hirer">("freelancer")

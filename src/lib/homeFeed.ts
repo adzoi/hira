@@ -62,17 +62,6 @@ export type HomeJobListingItem = {
 
 export type HomeFeedItem = HomeFreelancerServiceItem | HomeJobListingItem
 
-export type HomePageCounts = {
-  freelancerCount: number
-  jobCount: number
-  completedCount: number
-}
-
-export type HomePageData = {
-  feed: HomeFeedItem[]
-  counts: HomePageCounts
-}
-
 export function listingPriceNegotiable(price: number, description: string): boolean {
   if (price === 0) return true
   return description.toLowerCase().includes("შეთანხმებით")
@@ -217,16 +206,17 @@ function serviceVipFeatured(row: Record<string, unknown>): boolean {
   )
 }
 
-function parseHomePageCounts(raw: unknown): HomePageCounts {
-  const counts = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null
-  return {
-    freelancerCount: Number(counts?.freelancers ?? 0),
-    jobCount: Number(counts?.jobs ?? 0),
-    completedCount: Number(counts?.completedJobs ?? 0),
+/**
+ * აქტიური ფრილანსერის სერვისები და გახსნილი სამუშაოები (დამქირავებლის განცხადებები) ერთ სიად.
+ */
+export async function loadHomeFeed(): Promise<HomeFeedItem[]> {
+  if (!isSupabaseConfigured || !supabase) {
+    return [...MOCK_SERVICES, ...MOCK_JOB_LISTINGS].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
   }
-}
 
-function buildHomeFeedItems(serviceRows: unknown[], jobRows: unknown[]): HomeFeedItem[] {
+  const payload = (await fetchHomeFeedPayload()) as null | { services?: unknown[]; jobs?: unknown[] }
+  const serviceRows = Array.isArray(payload?.services) ? payload!.services! : []
+  const jobRows = Array.isArray(payload?.jobs) ? payload!.jobs! : []
 
   const freelancerItems: HomeFreelancerServiceItem[] = []
   for (const raw of serviceRows) {
@@ -341,37 +331,4 @@ function buildHomeFeedItems(serviceRows: unknown[], jobRows: unknown[]): HomeFee
     return +new Date(b.createdAt) - +new Date(a.createdAt)
   })
   return merged
-}
-
-/**
- * აქტიური ფრილანსერის სერვისები, გახსნილი სამუშაოები და სტატისტიკა ერთ Edge გამოძახებაში.
- */
-export async function loadHomePageData(): Promise<HomePageData> {
-  if (!isSupabaseConfigured || !supabase) {
-    const feed = [...MOCK_SERVICES, ...MOCK_JOB_LISTINGS].sort(
-      (a, b) => +new Date(b.createdAt) - +new Date(a.createdAt),
-    )
-    return {
-      feed,
-      counts: { freelancerCount: 0, jobCount: 0, completedCount: 0 },
-    }
-  }
-
-  const payload = (await fetchHomeFeedPayload()) as null | {
-    services?: unknown[]
-    jobs?: unknown[]
-    counts?: unknown
-  }
-  const serviceRows = Array.isArray(payload?.services) ? payload.services : []
-  const jobRows = Array.isArray(payload?.jobs) ? payload.jobs : []
-
-  return {
-    feed: buildHomeFeedItems(serviceRows, jobRows),
-    counts: parseHomePageCounts(payload?.counts),
-  }
-}
-
-/** @deprecated Use loadHomePageData — kept for existing imports. */
-export async function loadHomeFeed(): Promise<HomeFeedItem[]> {
-  return (await loadHomePageData()).feed
 }

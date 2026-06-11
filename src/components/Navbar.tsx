@@ -20,7 +20,7 @@ import { sanitizeInternalPath } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import LanguageToggle from "./LanguageToggle.tsx"
 import { OptimizedImage } from "./OptimizedImage.tsx"
-const logoImage = "/logo.webp"
+import logoImage from "../../images/logo.webp"
 
 function buildNavLinks(t: (key: string) => string) {
   return [
@@ -387,8 +387,8 @@ export default function Navbar() {
           <OptimizedImage
             src={logoImage}
             alt={t("brand.name")}
-            width={226}
-            height={140}
+            width={280}
+            height={105}
             loading="eager"
             fetchPriority="high"
             className="h-10 w-auto origin-left object-contain scale-[1.4] lg:h-11 lg:scale-[1.45] xl:h-[52px] xl:scale-[1.55]"
