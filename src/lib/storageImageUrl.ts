@@ -12,7 +12,27 @@ export type AppSupabaseClient = {
   }
 }
 
-const IMAGE_TRANSFORM_QUERY = "width=800&quality=75&format=webp"
+const DEFAULT_IMAGE_TRANSFORM_QUERY = "width=800&quality=75&format=webp"
+
+export type ImageTransformOptions = {
+  width?: number
+  height?: number
+  resize?: "cover" | "contain" | "fill"
+  quality?: number
+  format?: "webp" | "origin"
+}
+
+function buildImageTransformQuery(options?: ImageTransformOptions): string {
+  if (!options) return DEFAULT_IMAGE_TRANSFORM_QUERY
+
+  const params = new URLSearchParams()
+  if (options.width != null) params.set("width", String(options.width))
+  if (options.height != null) params.set("height", String(options.height))
+  if (options.resize) params.set("resize", options.resize)
+  params.set("quality", String(options.quality ?? 75))
+  params.set("format", options.format ?? "webp")
+  return params.toString()
+}
 
 function isSupabaseStorageUrl(url: string): boolean {
   return (
@@ -22,7 +42,7 @@ function isSupabaseStorageUrl(url: string): boolean {
 }
 
 /** Convert a Supabase object or render URL into a transformed render URL. */
-export function applyImageTransform(url: string): string {
+export function applyImageTransform(url: string, options?: ImageTransformOptions): string {
   const trimmed = url.trim()
   if (!trimmed || !isSupabaseStorageUrl(trimmed)) return trimmed
 
@@ -30,7 +50,7 @@ export function applyImageTransform(url: string): string {
     .split("?")[0]!
     .replace("/storage/v1/object/public/", "/storage/v1/render/image/public/")
 
-  return `${base}?${IMAGE_TRANSFORM_QUERY}`
+  return `${base}?${buildImageTransformQuery(options)}`
 }
 
 /** Extract object path from a Supabase Storage public object or render URL for `bucket`. */
@@ -73,9 +93,10 @@ function displayPublicUrl(
   client: AppSupabaseClient,
   bucket: string,
   path: string,
+  options?: ImageTransformOptions,
 ): string | null {
   const plain = safeGetPublicUrl(client, bucket, path)
-  return plain ? applyImageTransform(plain) : null
+  return plain ? applyImageTransform(plain, options) : null
 }
 
 /** Storage path → plain public URL (avatars bucket, no transform). */
@@ -91,9 +112,17 @@ export function avatarPublicUrl(client: AppSupabaseClient, storagePath: string):
  * Returns a displayable URL for a profile avatar.
  * External URLs (Gravatar, Twitter, etc.) pass through unchanged.
  */
+/** Compact avatar transform for homepage feed cards (~131×98 display). */
+export const HOME_FEED_AVATAR_TRANSFORM: ImageTransformOptions = {
+  width: 131,
+  height: 98,
+  resize: "cover",
+}
+
 export function avatarImageUrl(
   client: AppSupabaseClient | null | undefined,
   src: string | null | undefined,
+  transform?: ImageTransformOptions,
 ): string | null {
   if (src == null) return null
   const s = String(src).trim()
@@ -105,23 +134,23 @@ export function avatarImageUrl(
   if (/^https?:\/\//i.test(s) && !isSupabaseStorageUrl(s)) return s
 
   if (!client) {
-    return isSupabaseStorageUrl(s) ? applyImageTransform(s) : s
+    return isSupabaseStorageUrl(s) ? applyImageTransform(s, transform) : s
   }
 
   const extractedFromPublicUrl = storageObjectPathFromPublicUrl(s, "avatars")
   if (extractedFromPublicUrl != null) {
     const path = stripLeadingAvatarsSegment(extractedFromPublicUrl)
-    if (!path) return applyImageTransform(s)
-    return displayPublicUrl(client, "avatars", path) ?? applyImageTransform(s)
+    if (!path) return applyImageTransform(s, transform)
+    return displayPublicUrl(client, "avatars", path, transform) ?? applyImageTransform(s, transform)
   }
 
   if (!/^https?:\/\//i.test(s)) {
     const path = stripLeadingAvatarsSegment(s)
     if (!path) return s
-    return displayPublicUrl(client, "avatars", path) ?? s
+    return displayPublicUrl(client, "avatars", path, transform) ?? s
   }
 
-  return applyImageTransform(s)
+  return applyImageTransform(s, transform)
 }
 
 export function jobImageThumbnailUrl(client: AppSupabaseClient, storagePath: string): string {

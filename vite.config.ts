@@ -54,6 +54,27 @@ function applyPreviewCacheHeader(urlPath: string, res: { setHeader: (name: strin
   }
 }
 
+function deferMainCssPlugin() {
+  return {
+    name: 'hira-defer-main-css',
+    closeBundle() {
+      const indexPath = join(process.cwd(), 'dist', 'index.html')
+      let html = readFileSync(indexPath, 'utf8')
+
+      html = html.replace(
+        /<link rel="stylesheet" crossorigin href="(\/assets\/[^"]+\.css)">/,
+        [
+          '<link rel="preload" href="$1" as="style" crossorigin id="main-css-preload">',
+          '<noscript><link rel="stylesheet" crossorigin href="$1"></noscript>',
+          '<script src="/defer-main-css.js"></script>',
+        ].join('\n    '),
+      )
+
+      writeFileSync(indexPath, html)
+    },
+  }
+}
+
 function securityHeadersPlugin() {
   return {
     name: 'hira-security-headers',
@@ -99,7 +120,7 @@ function securityHeadersPlugin() {
 }
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), securityHeadersPlugin()],
+  plugins: [react(), tailwindcss(), deferMainCssPlugin(), securityHeadersPlugin()],
   preview: {
     headers: buildSecurityHeaders({ dev: false }),
   },

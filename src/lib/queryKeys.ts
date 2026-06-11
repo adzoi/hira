@@ -1,6 +1,5 @@
 export const queryKeys = {
-  homeFeed: ["home-feed"] as const,
-  homeStats: ["home-stats"] as const,
+  homePage: ["home-page"] as const,
   listingsPage: (page: number) => ["listings-page", page] as const,
   listingsCatalog: ["listings-catalog"] as const,
   jobsPage: (category: string, page: number) => ["jobs-page", category, page] as const,

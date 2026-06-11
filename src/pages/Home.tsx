@@ -4,7 +4,7 @@ import HomeFeedSection from "../components/HomeFeedSection.tsx"
 import { OptimizedImage } from "../components/OptimizedImage.tsx"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { translate } from "../i18n/translate.ts"
-import { useHomeStatsQuery } from "../lib/queries/useHomeStatsQuery.ts"
+import { useHomePageQuery } from "../lib/queries/useHomePageQuery.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { normalizeSearchInput } from "../lib/validation.ts"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
@@ -19,7 +19,8 @@ export default function HomePage() {
   const navigate = useNavigate()
   const [searchText, setSearchText] = useState("")
   const [viewerType, setViewerType] = useState<"freelancer" | "hirer" | null>(null)
-  const { data: stats = { freelancerCount: 0, jobCount: 0, completedCount: 0 } } = useHomeStatsQuery()
+  const { data: homePage } = useHomePageQuery()
+  const stats = homePage?.counts ?? { freelancerCount: 0, jobCount: 0, completedCount: 0 }
   const pageMeta = usePageMeta(
     translate("ka", "home.title"),
     translate("ka", "home.metaDescription"),

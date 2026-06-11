@@ -10,7 +10,7 @@ declare const Deno: {
 }
 
 const CACHE_TTL = 60
-const CACHE_KEY = "home:feed:v2"
+const CACHE_KEY = "home:feed:v3"
 // 10 requests per 10 seconds per IP
 const RATE_LIMIT_REQUESTS = 10
 const RATE_LIMIT_WINDOW = "10 s"
