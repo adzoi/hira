@@ -379,7 +379,11 @@ export default function Navbar() {
     <>
     <header className={`sticky top-0 z-40 border-b border-slate-200 bg-white font-sans ${isScrolled ? "shadow-sm" : ""}`}>
       <div className="mx-auto grid w-full max-w-none grid-cols-[auto_1fr_auto] items-center gap-2 px-4 py-3 md:gap-3 md:pl-12 md:pr-6 lg:pl-16 lg:pr-8">
-        <Link to="/" className="inline-flex shrink-0 items-center" aria-label={t("nav.home")}>
+        <Link
+          to="/"
+          className="inline-flex h-10 shrink-0 items-center overflow-visible lg:h-11 xl:h-[52px]"
+          aria-label={t("nav.home")}
+        >
           <OptimizedImage
             src={logoImage}
             alt={t("brand.name")}
@@ -387,7 +391,7 @@ export default function Navbar() {
             height={105}
             loading="eager"
             fetchPriority="high"
-            className="h-10 w-auto object-contain lg:h-11 xl:h-[52px]"
+            className="h-10 w-auto origin-left object-contain scale-[1.4] lg:h-11 lg:scale-[1.45] xl:h-[52px] xl:scale-[1.55]"
           />
         </Link>
 
