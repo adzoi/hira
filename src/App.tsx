@@ -24,6 +24,9 @@ const ListingDetailPage = lazy(() => import("./pages/ListingDetail.tsx"))
 const CVGeneratorPage = lazy(() => import("./pages/CVGenerator.tsx"))
 const PublicCVPage = lazy(() => import("./pages/PublicCV.tsx"))
 const ListingsPage = lazy(() => import("./pages/Listings.tsx"))
+const ForumPage = lazy(() => import("./pages/Forum.tsx"))
+const ForumPostDetailPage = lazy(() => import("./pages/ForumPostDetail.tsx"))
+const ForumPostFormPage = lazy(() => import("./pages/ForumPostForm.tsx"))
 const HirersPage = lazy(() => import("./pages/Hirers.tsx"))
 const HirerPublicPage = lazy(() => import("./pages/HirerPublic.tsx"))
 const AboutPage = lazy(() => import("./pages/About.tsx"))
@@ -100,6 +103,24 @@ function App() {
             <Route path="/cv/:slug" element={<PublicCVPage />} />
             <Route path="/hirers" element={<HirersPage />} />
             <Route path="/hirer/:id" element={<HirerPublicPage />} />
+            <Route path="/forum" element={<ForumPage />} />
+            <Route
+              path="/forum/new"
+              element={
+                <ProtectedRoute>
+                  <ForumPostFormPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/forum/:postId/edit"
+              element={
+                <ProtectedRoute>
+                  <ForumPostFormPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/forum/:postId" element={<ForumPostDetailPage />} />
             <Route path="/about" element={<AboutPage />} />
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />

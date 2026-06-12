@@ -82,6 +82,7 @@ export default function Footer() {
         { labelKey: "nav.listings", to: "/listings" },
         { labelKey: "nav.jobs", to: "/jobs" },
         { labelKey: "nav.hirers", to: "/hirers" },
+        { labelKey: "nav.forum", to: "/forum" },
       ],
     },
     {

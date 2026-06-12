@@ -23,4 +23,7 @@ export const queryKeys = {
   postJob: (userId: string, jobId?: string) => ["post-job", userId, jobId ?? "new"] as const,
   listingForm: (userId: string, listingId?: string) => ["listing-form", userId, listingId ?? "new"] as const,
   onboarding: (userId: string) => ["onboarding", userId] as const,
+  forumPosts: (filters: { category?: string; subcategory?: string; mine?: boolean; userId?: string }) =>
+    ["forum-posts", filters] as const,
+  forumPostDetail: (postId: string) => ["forum-post-detail", postId] as const,
 }

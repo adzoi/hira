@@ -29,10 +29,12 @@ function buildNavLinks(t: (key: string) => string) {
     { label: t("nav.listings"), to: "/listings" },
     { label: t("nav.jobs"), to: "/jobs" },
     { label: t("nav.hirers"), to: "/hirers" },
+    { label: t("nav.forum"), to: "/forum" },
   ]
 }
 
 function navLinkUnderlineActive(pathname: string, to: string) {
+  if (to === "/forum") return pathname === "/forum" || pathname.startsWith("/forum/")
   if (to === "/hirers") return pathname === "/hirers" || pathname.startsWith("/hirer/")
   if (to === "/listings") return pathname === "/listings"
   return pathname === to
@@ -395,12 +397,12 @@ export default function Navbar() {
           />
         </Link>
 
-        <nav className="hidden min-w-0 items-center justify-center gap-1.5 text-sm font-medium lg:flex xl:gap-2">
+        <nav className="hidden min-w-0 items-center justify-center gap-1 text-sm font-medium lg:flex xl:gap-1.5">
           {navLinks.map((link) => (
             <Link
               key={link.label}
               to={link.to}
-              className={`inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-full border px-2.5 text-xs transition xl:h-10 xl:px-4 xl:text-sm ${
+              className={`inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-full border px-2 text-xs transition xl:h-10 xl:px-3 xl:text-sm ${
                 navLinkUnderlineActive(location.pathname, link.to)
                   ? "border-transparent bg-[#0088FF] text-white"
                   : "border-slate-300 bg-white text-slate-500 hover:border-slate-400 hover:text-slate-700"
@@ -703,7 +705,7 @@ export default function Navbar() {
 
       <div
         className={`overflow-hidden border-t border-slate-100 bg-white transition-all lg:hidden ${
-          mobileMenuOpen ? "max-h-[420px] opacity-100" : "max-h-0 opacity-0"
+          mobileMenuOpen ? "max-h-[460px] opacity-100" : "max-h-0 opacity-0"
         }`}
       >
         <div className="mx-auto flex max-w-[1200px] flex-col gap-1 px-4 py-3">
