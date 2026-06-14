@@ -1,5 +1,17 @@
 import { formatFreelancerEducationDegreeLevel } from "./freelancerEducation.ts"
 
+/** Validation / placeholder copy that must never appear as CV summary text. */
+const CV_SUMMARY_PLACEHOLDER_RE =
+  /ბიო\s+უნდა\s+(?:იყოს\s+მინიმუმ|შეიცავდეს\s+მინიმუმ)\s+\d+\s+სიმბოლ(?:ო(?:ს)?)\.?/gi
+
+export function sanitizeCvProfessionalSummary(raw: string | null | undefined): string {
+  const text = String(raw ?? "")
+    .replace(CV_SUMMARY_PLACEHOLDER_RE, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+  return text
+}
+
 const KA_MONTHS = [
   "იანვარი",
   "თებერვალი",
@@ -94,8 +106,16 @@ export function mergeSavedCv(profileCv: BuiltCv, saved: Record<string, unknown> 
   const s = saved as Record<string, unknown>
   const pickStr = (k: string, fallback: string) =>
     typeof s[k] === "string" ? (s[k] as string) : fallback
-  const pickArrStr = (k: string, fallback: string[]) =>
-    Array.isArray(s[k]) ? (s[k] as unknown[]).map((x) => String(x)) : fallback
+  const pickArrStr = (k: string, fallback: string[]) => {
+    if (!Array.isArray(s[k])) return fallback
+    const mapped = (s[k] as unknown[]).map((x) => String(x).trim()).filter(Boolean)
+    return mapped.length > 0 ? mapped : fallback
+  }
+  const savedSummary = sanitizeCvProfessionalSummary(
+    typeof s.professional_summary === "string" ? s.professional_summary : "",
+  )
+  const savedWork = Array.isArray(s.work_experience) ? (s.work_experience as CvWorkRow[]) : null
+  const savedEducation = Array.isArray(s.education) ? (s.education as CvEducationRow[]) : null
   return {
     ...profileCv,
     full_name: pickStr("full_name", profileCv.full_name),
@@ -112,13 +132,11 @@ export function mergeSavedCv(profileCv: BuiltCv, saved: Record<string, unknown> 
         : s.hourly_rate != null && String(s.hourly_rate).trim() !== ""
           ? Number(s.hourly_rate)
           : profileCv.hourly_rate,
-    professional_summary: pickStr("professional_summary", profileCv.professional_summary),
+    professional_summary: savedSummary || profileCv.professional_summary,
     technical_skills: pickArrStr("technical_skills", profileCv.technical_skills),
     languages: pickArrStr("languages", profileCv.languages),
-    work_experience: Array.isArray(s.work_experience)
-      ? (s.work_experience as CvWorkRow[])
-      : profileCv.work_experience,
-    education: Array.isArray(s.education) ? (s.education as CvEducationRow[]) : profileCv.education,
+    work_experience: savedWork && savedWork.length > 0 ? savedWork : profileCv.work_experience,
+    education: savedEducation && savedEducation.length > 0 ? savedEducation : profileCv.education,
     soft_skills: pickArrStr("soft_skills", profileCv.soft_skills ?? []),
     custom_slug: typeof s.custom_slug === "string" ? s.custom_slug : (profileCv as { custom_slug?: string }).custom_slug,
     is_public: typeof s.is_public === "boolean" ? s.is_public : (profileCv as { is_public?: boolean }).is_public,
@@ -195,7 +213,7 @@ export function buildCvFromProfileData(input: {
     portfolio_url: String(fpAny.portfolio_url ?? "").trim(),
     avatar_url,
     hourly_rate,
-    professional_summary: String(fpAny.bio ?? "").trim(),
+    professional_summary: sanitizeCvProfessionalSummary(String(fpAny.bio ?? "")),
     technical_skills: [...new Set([...input.skillNames.map((s) => s.trim()).filter(Boolean), ...extraSkills])],
     languages: [...new Set((fpAny.languages ?? []).map((s) => String(s).trim()).filter(Boolean))],
     work_experience,

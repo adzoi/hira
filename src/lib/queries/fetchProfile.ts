@@ -1,4 +1,5 @@
 import type { FreelancerEducationDegreeLevel } from "../freelancerEducation.ts"
+import { sanitizeCvProfessionalSummary } from "../cvFromProfile.ts"
 import { socialFormFromDbRow } from "../freelancerSocialFields.ts"
 import { META_SUFFIX, resolveListingMetaPrefix, stripLegacyPricePrefix } from "../listingDescription.ts"
 import { normalizeListingPriceType } from "../listingPrice.ts"
@@ -204,7 +205,7 @@ export async function fetchProfile(): Promise<ProfileQueryData> {
         ...base,
         freelancerProfileId: fp.id,
         professionalTitle: fp.professional_title ?? "",
-        bio: loadedBio.trim() === "ბიო უნდა შეიცავდეს მინიმუმ 50 სიმბოლოს" ? "" : loadedBio,
+        bio: sanitizeCvProfessionalSummary(loadedBio),
         availability: fp.availability ?? "",
         acceptingNewWork: fp.is_accepting_new_work !== false,
         languages: Array.isArray(fp.languages) ? fp.languages : [],

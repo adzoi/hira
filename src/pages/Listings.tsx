@@ -496,8 +496,9 @@ export default function ListingsPage() {
       if (catId === parent) {
         const entry = subcategoryNamesById.get(subId)
         const nameKa = (entry?.name_ka ?? "").trim()
-        if (subId && nameKa) {
-          out.push({ id: subId, name_ka: nameKa, name_en: entry?.name_en ?? "" })
+        const nameEn = (entry?.name_en ?? "").trim()
+        if (subId && (nameKa || nameEn)) {
+          out.push({ id: subId, name_ka: nameKa || nameEn, name_en: nameEn })
         }
       }
     }

@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import FollowListsModal, { FollowStatPills, type FollowModalTab } from "../components/FollowListsModal.tsx"
-import VIPUpgrade from "../components/VIPUpgrade"
 import { META_SUFFIX, resolveListingMetaPrefix, stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { formatListingPrice, normalizeListingPriceType } from "../lib/listingPrice.ts"
 import { subscribeToDashboardMessaging } from "../lib/dashboardMessagingRealtime.ts"
@@ -519,9 +518,6 @@ export default function DashboardPage() {
   const [servicesSaving, setServicesSaving] = useState(false)
   const [servicesError, setServicesError] = useState("")
   const [servicesSuccess, setServicesSuccess] = useState("")
-  const [vipOpen, setVipOpen] = useState(false)
-  const [vipListingId, setVipListingId] = useState<string | null>(null)
-  const [vipListingTitle, setVipListingTitle] = useState("ჩემი სერვისი")
   const [initialServicesSnapshot, setInitialServicesSnapshot] = useState("[]")
   /** Distinct logged-in hirers who visited this freelancer profile (via RPC). */
   const [hirerProfileViewerCount, setHirerProfileViewerCount] = useState(0)
@@ -2399,19 +2395,6 @@ export default function DashboardPage() {
                           ) : null}
                           <button
                             type="button"
-                            onClick={() => {
-                              if (!service.id) return
-                              setVipListingId(service.id)
-                              setVipListingTitle(service.title?.trim() || "ჩემი სერვისი")
-                              setVipOpen(true)
-                            }}
-                            className="text-xs font-semibold text-[#D4A843]"
-                            disabled={!service.id}
-                          >
-                            VIP განახლება
-                          </button>
-                          <button
-                            type="button"
                             onClick={() => removeServiceDraft(originalIndex)}
                             className="text-xs font-semibold text-red-600"
                           >
@@ -2451,19 +2434,6 @@ export default function DashboardPage() {
                         ) : null}
                         <button
                           type="button"
-                          onClick={() => {
-                            if (!service.id) return
-                            setVipListingId(service.id)
-                            setVipListingTitle(service.title?.trim() || "ჩემი სერვისი")
-                            setVipOpen(true)
-                          }}
-                          className="text-xs font-semibold text-[#D4A843]"
-                          disabled={!service.id}
-                        >
-                          VIP განახლება
-                        </button>
-                        <button
-                          type="button"
                           onClick={() => removeServiceDraft(originalIndex)}
                           className="text-xs font-semibold text-red-600"
                         >
@@ -2489,22 +2459,6 @@ export default function DashboardPage() {
               {servicesError ? <p className="mt-3 text-sm text-red-600">{servicesError}</p> : null}
               {servicesSuccess ? <p className="mt-3 text-sm text-emerald-600">{servicesSuccess}</p> : null}
             </div>
-            ) : null}
-
-            {vipListingId ? (
-              <VIPUpgrade
-                open={vipOpen}
-                jobId={vipListingId}
-                jobTitle={vipListingTitle}
-                listingType="freelancer"
-                onClose={() => {
-                  setVipOpen(false)
-                  setVipListingId(null)
-                }}
-                onSuccess={() => {
-                  setServicesSuccess("VIP წარმატებით ჩაირთო.")
-                }}
-              />
             ) : null}
 
             {freelancerListingCompleteModal ? (

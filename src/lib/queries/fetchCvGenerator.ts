@@ -5,39 +5,25 @@ import { getAuthenticatedSession } from "../supabaseAuth.ts"
 
 export type CvPayload = Record<string, unknown>
 
-export async function fetchCvGenerator(_userId: string): Promise<CvPayload> {
+export async function loadMergedCvForUser(
+  userId: string,
+  savedCv: Record<string, unknown> | null,
+): Promise<CvPayload> {
   if (!isSupabaseConfigured || !supabase) {
     throw new Error("Supabase არ არის კონფიგურირებული.")
   }
 
-  const { user, session } = await getAuthenticatedSession(supabase)
-  if (!user || !session?.access_token) {
-    throw new Error("AUTH_REQUIRED")
+  const uid = userId.trim()
+  if (!uid) {
+    throw new Error("User id is required.")
   }
 
-  const [fpRes, profileRes, cvResponse] = await Promise.all([
-    supabase.from("freelancer_profiles").select("*").eq("user_id", user.id).maybeSingle(),
-    supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
-    fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/cv-get`, {
-      method: "GET",
-      headers: supabaseEdgeHeaders(session.access_token),
-    }),
+  const [fpRes, profileRes] = await Promise.all([
+    supabase.from("freelancer_profiles").select("*").eq("user_id", uid).maybeSingle(),
+    supabase.from("profiles").select("*").eq("id", uid).maybeSingle(),
   ])
 
-  let savedCv: Record<string, unknown> | null = null
   const fpRow = fpRes.data as Record<string, unknown> | null
-  if (cvResponse.ok) {
-    const payload = await cvResponse.json().catch(() => null)
-    const maybeCv = payload?.cv
-    const hasRealCvObject = Boolean(
-      maybeCv &&
-        typeof maybeCv === "object" &&
-        typeof (maybeCv as { id?: string }).id === "string" &&
-        String((maybeCv as { id: string }).id).trim(),
-    )
-    if (hasRealCvObject) savedCv = maybeCv as Record<string, unknown>
-  }
-
   const fpId = fpRow && typeof fpRow.id === "string" ? fpRow.id : null
 
   let experienceRows: Array<Record<string, unknown>> = []
@@ -73,4 +59,35 @@ export async function fetchCvGenerator(_userId: string): Promise<CvPayload> {
   })
 
   return built as CvPayload
+}
+
+export async function fetchCvGenerator(_userId: string): Promise<CvPayload> {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error("Supabase არ არის კონფიგურირებული.")
+  }
+
+  const { user, session } = await getAuthenticatedSession(supabase)
+  if (!user || !session?.access_token) {
+    throw new Error("AUTH_REQUIRED")
+  }
+
+  const cvResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/cv-get`, {
+    method: "GET",
+    headers: supabaseEdgeHeaders(session.access_token),
+  })
+
+  let savedCv: Record<string, unknown> | null = null
+  if (cvResponse.ok) {
+    const payload = await cvResponse.json().catch(() => null)
+    const maybeCv = payload?.cv
+    const hasRealCvObject = Boolean(
+      maybeCv &&
+        typeof maybeCv === "object" &&
+        typeof (maybeCv as { id?: string }).id === "string" &&
+        String((maybeCv as { id: string }).id).trim(),
+    )
+    if (hasRealCvObject) savedCv = maybeCv as Record<string, unknown>
+  }
+
+  return loadMergedCvForUser(user.id, savedCv)
 }

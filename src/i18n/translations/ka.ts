@@ -760,7 +760,7 @@ export const ka: T = {
     selectCategory: "აირჩიე კატეგორია",
     selectSubcategoryFirst: "ჯერ აირჩიე კატეგორია",
     noSubcategoryForCategory: "ამ კატეგორიისთვის ქვეკატეგორია არ არის",
-    selectSubcategory: "აირჩიე subcategory",
+    selectSubcategory: "აირჩიე ქვეკატეგორია",
     selectSpecializationOptional: "აირჩიე (არასავალდებულო)",
     selectSubcategoryOrCategoryFirst: "ჯერ აირჩიე ქვეკატეგორია ან კატეგორია",
     tagsHint: "თეგების არჩევა შეგიძლია კატეგორიის მითითების შემდეგ - სავალდებულო არ არის.",

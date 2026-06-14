@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import VIPUpgrade from "../components/VIPUpgrade"
 import {
   PRICE_TYPE_LABELS,
   type ListingPriceType,
@@ -86,6 +85,7 @@ export default function ListingFormPage() {
   const [description, setDescription] = useState("")
   const [descriptionEn, setDescriptionEn] = useState("")
   const [price, setPrice] = useState("")
+  const [priceNegotiable, setPriceNegotiable] = useState(false)
   const [priceType, setPriceType] = useState<ListingPriceType>("fixed")
   const [isActive, setIsActive] = useState(true)
   /** Mid-level category (e.g. Web Development); stored in listing meta as `categoryId`. */
@@ -96,7 +96,6 @@ export default function ListingFormPage() {
   const [tags, setTags] = useState<string[]>([])
   const [existingImageUrls, setExistingImageUrls] = useState<string[]>([])
   const [newImageFiles, setNewImageFiles] = useState<File[]>([])
-  const [vipOpen, setVipOpen] = useState(false)
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return
     void supabase.auth.getUser().then(({ data: { user } }) => {
@@ -123,7 +122,9 @@ export default function ListingFormPage() {
       setTitleEn(edit.titleEn)
       setDescription(edit.description)
       setDescriptionEn(edit.descriptionEn)
-      setPrice(edit.price)
+      const editPrice = Number(edit.price)
+      setPriceNegotiable(editPrice === 0)
+      setPrice(editPrice === 0 ? "" : edit.price)
       setPriceType(edit.priceType)
       setIsActive(edit.isActive)
       setRootCategoryId(edit.rootCategoryId)
@@ -271,7 +272,9 @@ export default function ListingFormPage() {
       setError(tagsResult.message)
       return
     }
-    const priceResult = validateMoneyAmount(price || "0", { min: 0, label: t("common.price") })
+    const priceResult = priceNegotiable
+      ? ({ ok: true, value: 0 } as const)
+      : validateMoneyAmount(price, { min: 1, label: t("common.price") })
     if (priceResult.ok === false) {
       setError(priceResult.message)
       return
@@ -489,7 +492,7 @@ export default function ListingFormPage() {
 
             {!isOtherCategorySelected ? (
               <label className="block">
-                <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("listingForm.subcategorySpecialization")}</span>
+                <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("common.specialization")}</span>
                 <select
                   value={subcategoryId}
                   disabled={!specializationParentCategoryId}
@@ -582,14 +585,27 @@ export default function ListingFormPage() {
                   ))}
                 </div>
               </div>
+              <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={priceNegotiable}
+                  onChange={(event) => {
+                    const checked = event.target.checked
+                    setPriceNegotiable(checked)
+                    if (checked) setPrice("")
+                  }}
+                />
+                {t("common.priceOnRequest")}
+              </label>
               <label className="block">
                 <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("listingForm.priceAmount")}</span>
                 <input
                   type="number"
-                  min="0"
+                  min="1"
                   value={price}
+                  disabled={priceNegotiable}
                   onChange={(event) => setPrice(event.target.value)}
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm"
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm disabled:cursor-not-allowed disabled:bg-slate-100"
                 />
               </label>
             </div>
@@ -678,32 +694,9 @@ export default function ListingFormPage() {
             >
               {t("common.cancel")}
             </Link>
-            {freelancerProfileId ? (
-              <button
-                type="button"
-                onClick={() => setVipOpen(true)}
-                className="h-11 w-full rounded-lg border border-[#D4A843] bg-amber-50 px-5 text-sm font-semibold text-[#1B2B4B] sm:w-auto"
-                disabled={!id}
-                title={!id ? t("listingForm.saveFirstForVip") : undefined}
-              >
-                {t("listingForm.upgradeVip")}
-              </button>
-            ) : null}
           </div>
         </div>
       </main>
-      {freelancerProfileId && id ? (
-        <VIPUpgrade
-          open={vipOpen}
-          jobId={id}
-          jobTitle={title.trim() || t("listingForm.defaultServiceTitle")}
-          listingType="freelancer"
-          onClose={() => setVipOpen(false)}
-          onSuccess={() => {
-            setError("")
-          }}
-        />
-      ) : null}
     </div>
   </>
   )

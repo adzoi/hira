@@ -7,6 +7,7 @@ import {
   formatGeorgianExperienceRange,
   formatGeorgianMonthYear,
   initialsFromName,
+  sanitizeCvProfessionalSummary,
   stripUrlForDisplay,
 } from "../../src/lib/cvFromProfile.ts"
 import { OptimizedImage } from "../../src/components/OptimizedImage.tsx"
@@ -16,6 +17,37 @@ import cvPrintCss from "./cv-print.css?raw"
 
 const A4_WIDTH = 794
 const A4_HEIGHT = 1123
+
+function cvPdfFilename(fullName) {
+  const base = String(fullName || "cv")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^\w\u10A0-\u10FF.-]/g, "")
+    .slice(0, 60)
+  return `${base || "cv"}.pdf`
+}
+
+async function waitForIframeImages(iframe) {
+  const doc = iframe.contentDocument
+  if (!doc) return
+  const win = iframe.contentWindow
+  await new Promise((resolve) => {
+    if (doc.readyState === "complete") resolve()
+    else win?.addEventListener("load", () => resolve(), { once: true })
+  })
+  await Promise.all(
+    [...doc.images].map(
+      (img) =>
+        new Promise((resolve) => {
+          if (img.complete) resolve()
+          else {
+            img.addEventListener("load", () => resolve(), { once: true })
+            img.addEventListener("error", () => resolve(), { once: true })
+          }
+        }),
+    ),
+  )
+}
 
 function truthyStr(v) {
   if (v == null) return false
@@ -49,7 +81,7 @@ function normalizeCV(input) {
     github_url: String(source.github_url || ""),
     portfolio_url: String(source.portfolio_url || ""),
     avatar_url: String(source.avatar_url || ""),
-    professional_summary: String(source.professional_summary || ""),
+    professional_summary: sanitizeCvProfessionalSummary(String(source.professional_summary || "")),
     work_experience: Array.isArray(source.work_experience) ? source.work_experience : [],
     education: Array.isArray(source.education) ? source.education : [],
     technical_skills: ts,
@@ -306,7 +338,7 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
         ? avatarImageUrl(supabase, localCV.avatar_url) ?? localCV.avatar_url
         : localCV.avatar_url
     const avatarBlock = truthyHttpUrl(avatarPrintSrc)
-      ? `<img class="avatar" src="${esc(avatarPrintSrc)}" alt="" width="96" height="96" />`
+      ? `<img class="avatar" src="${esc(avatarPrintSrc)}" alt="" width="96" height="96" crossorigin="anonymous" />`
       : truthyStr(localCV.full_name)
         ? `<div class="avatar-fallback">${esc(initialsFromName(localCV.full_name))}</div>`
         : ""
@@ -389,29 +421,53 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
               ${eduSec}
             </main>
           </div>
-          <script>window.onload = () => window.print();</script>
         </body>
       </html>
     `
   }
 
-  async function printCV() {
+  async function downloadCvPdf() {
     const fullName = String(localCV?.full_name || "").trim()
     if (!fullName) {
-      notify("warning", "დაამატე სახელი სანამ PDF-ს დაბეჭდი.")
+      notify("warning", "დაამატე სახელი სანამ PDF-ს ჩამოტვირთავ.")
       return
     }
     setIsPrinting(true)
+    const iframe = document.createElement("iframe")
+    iframe.setAttribute("aria-hidden", "true")
+    iframe.style.cssText = `position:fixed;left:-10000px;top:0;width:${A4_WIDTH}px;height:${A4_HEIGHT}px;border:0;`
+    document.body.appendChild(iframe)
     try {
-      const printWindow = window.open("", "_blank", "width=1024,height=900")
-      if (!printWindow) throw new Error("ბროუზერმა ახლის ფანჯრის გახსნა დაბლოკა.")
-      printWindow.document.open()
-      printWindow.document.write(buildPrintableHtml())
-      printWindow.document.close()
-      notify("success", "ბეჭდვის დიალოგი გაიხსნა.")
+      const doc = iframe.contentDocument
+      if (!doc) throw new Error("PDF მომზადება ვერ მოხერხდა.")
+      doc.open()
+      doc.write(buildPrintableHtml())
+      doc.close()
+      await waitForIframeImages(iframe)
+      const shell = doc.querySelector(".cv-shell")
+      if (!shell) throw new Error("CV შაბლონი ვერ მოიძებნა.")
+      const html2pdf = (await import("html2pdf.js")).default
+      await html2pdf()
+        .set({
+          margin: 0,
+          filename: cvPdfFilename(fullName),
+          pagebreak: { mode: ["avoid-all", "css", "legacy"] },
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: {
+            scale: 2,
+            useCORS: true,
+            width: A4_WIDTH,
+            windowWidth: A4_WIDTH,
+          },
+          jsPDF: { unit: "px", format: [A4_WIDTH, A4_HEIGHT], orientation: "portrait" },
+        })
+        .from(shell)
+        .save()
+      notify("success", "PDF ჩამოტვირთულია.")
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "ვერ გაიხსნა ბეჭდვა.")
+      notify("error", error instanceof Error ? error.message : "PDF ჩამოტვირთვა ვერ მოხერხდა.")
     } finally {
+      iframe.remove()
       setIsPrinting(false)
     }
   }
@@ -425,11 +481,11 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
         <div className="print:hidden flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={printCV}
+            onClick={() => void downloadCvPdf()}
             disabled={isPrinting}
             className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isPrinting ? " იხსნება…" : "PDF / ბეჭდვა"}
+            {isPrinting ? "იტვირთება…" : "PDF ჩამოტვირთვა"}
           </button>
         </div>
       ) : null}
