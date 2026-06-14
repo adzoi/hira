@@ -15,6 +15,7 @@ export type CategoryRow = {
   is_active: boolean | null
   sort_order: number | null
   parent_id: string | null
+  slug?: string | null
 }
 
 export type SkillRow = { id: string; name: string; category_id: string | null; is_approved: boolean | null }
@@ -79,7 +80,7 @@ export async function fetchPostJob(jobId?: string): Promise<PostJobQueryData> {
 
   const [{ data: hirerRow, error: hirerErr }, { data: catRows, error: catErr }] = await Promise.all([
     supabase.from("hirer_profiles").select("id").eq("user_id", user.id).maybeSingle(),
-    supabase.from("categories").select("id,name_ka,name_en,is_active,sort_order,parent_id").eq("is_active", true).order("sort_order", { ascending: true }),
+    supabase.from("categories").select("id,name_ka,name_en,is_active,sort_order,parent_id,slug").eq("is_active", true).order("sort_order", { ascending: true }),
   ])
 
   if (hirerErr) throw hirerErr
@@ -96,6 +97,7 @@ export async function fetchPostJob(jobId?: string): Promise<PostJobQueryData> {
     is_active: (row.is_active as boolean | null | undefined) ?? null,
     sort_order: (row.sort_order as number | null | undefined) ?? null,
     parent_id: (row.parent_id as string | null | undefined) ?? null,
+    slug: (row.slug as string | null | undefined) ?? null,
   }))
 
   const { data: skillRows, error: skillErr } = await supabase

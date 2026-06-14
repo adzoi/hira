@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { jobImageThumbnailUrl } from "../lib/storageImageUrl.ts"
-import { categoryChildrenOf, categoryRoots, type CategoryBranchRow } from "../lib/marketplaceCategoryTree.ts"
+import { categoryChildrenOf, categoryRoots, isOtherRootCategory, type CategoryBranchRow } from "../lib/marketplaceCategoryTree.ts"
 import { formatJobBudget, PRICE_TYPE_LABELS } from "../lib/listingPrice.ts"
 import {
   encodeJobContactPreference,
@@ -205,12 +205,22 @@ export default function PostJobPage() {
     () => (rootCategoryId ? categoryChildrenOf(categories as CategoryBranchRow[], rootCategoryId) : []),
     [categories, rootCategoryId],
   )
+  const isOtherCategorySelected = useMemo(
+    () => isOtherRootCategory(categories as CategoryBranchRow[], rootCategoryId),
+    [categories, rootCategoryId],
+  )
 
   const specializationParentCategoryId = useMemo(() => {
+    if (isOtherCategorySelected) return ""
     if (categoryId.trim()) return categoryId.trim()
     if (rootCategoryId && categoryMidsList.length === 0) return rootCategoryId
     return ""
-  }, [categoryId, rootCategoryId, categoryMidsList.length])
+  }, [categoryId, rootCategoryId, categoryMidsList.length, isOtherCategorySelected])
+
+  const persistedJobCategoryId = useMemo(() => {
+    if (isOtherCategorySelected) return rootCategoryId.trim()
+    return categoryId.trim() || (rootCategoryId && categoryMidsList.length === 0 ? rootCategoryId.trim() : "")
+  }, [categoryId, rootCategoryId, categoryMidsList.length, isOtherCategorySelected])
 
   useEffect(() => {
     const loadSubs = async () => {
@@ -420,7 +430,7 @@ export default function PostJobPage() {
         const { error: upErr } = await supabase
           .from("jobs")
           .update({
-            category_id: categoryId,
+            category_id: persistedJobCategoryId,
             subcategory_id: subcategoryId || null,
             title: safeTitle,
             title_en: safeTitleEn,
@@ -459,7 +469,7 @@ export default function PostJobPage() {
           .from("jobs")
           .insert({
             hirer_profile_id: hirerProfileId,
-            category_id: categoryId,
+            category_id: persistedJobCategoryId,
             subcategory_id: subcategoryId || null,
             title: safeTitle,
             title_en: safeTitleEn,
@@ -601,8 +611,10 @@ export default function PostJobPage() {
 
               <div className="flex flex-wrap gap-2 text-xs">
                 <span className="rounded-full bg-white px-3 py-1 text-slate-700">{t("common.category")}: {rootCategoryLabel}</span>
-                <span className="rounded-full bg-white px-3 py-1 text-slate-700">{t("common.subcategory")}: {midCategoryLabel}</span>
-                {subcategoryId ? (
+                {!isOtherCategorySelected ? (
+                  <span className="rounded-full bg-white px-3 py-1 text-slate-700">{t("common.subcategory")}: {midCategoryLabel}</span>
+                ) : null}
+                {!isOtherCategorySelected && subcategoryId ? (
                   <span className="rounded-full bg-white px-3 py-1 text-slate-700">{t("postJob.specialization")}: {subcategoryLabel}</span>
                 ) : null}
                 <span className="rounded-full bg-white px-3 py-1 text-slate-700">
@@ -716,6 +728,8 @@ export default function PostJobPage() {
                         const mids = nextRoot ? categoryChildrenOf(categories as CategoryBranchRow[], nextRoot) : []
                         if (!nextRoot) {
                           setCategoryId("")
+                        } else if (isOtherRootCategory(categories as CategoryBranchRow[], nextRoot)) {
+                          setCategoryId("")
                         } else if (mids.length === 0) {
                           setCategoryId(nextRoot)
                         } else {
@@ -733,6 +747,7 @@ export default function PostJobPage() {
                     </select>
                   </label>
 
+                  {!isOtherCategorySelected ? (
                   <label className="block">
                     <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">
                       {t("common.subcategory")} {categoryMidsList.length > 0 ? <span className="text-red-500">*</span> : null}
@@ -760,9 +775,11 @@ export default function PostJobPage() {
                       ))}
                     </select>
                   </label>
+                  ) : null}
                   {fieldErrors.categoryId ? <p className="text-sm text-red-600">{fieldErrors.categoryId}</p> : null}
                 </div>
 
+                {!isOtherCategorySelected ? (
                 <label className="block">
                   <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("postJob.specialization")}</span>
                   <select
@@ -781,6 +798,7 @@ export default function PostJobPage() {
                     ))}
                   </select>
                 </label>
+                ) : null}
 
                 <label className="block">
                   <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("postJob.descriptionKa")}</span>

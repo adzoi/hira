@@ -5,8 +5,15 @@
 }
 
 .cv-preview-sheet {
-  width: 794px;
-  min-height: 1123px;
+  width: 100%;
+  min-height: auto;
+}
+
+@media (min-width: 768px) {
+  .cv-preview-sheet {
+    width: 794px;
+    min-height: 1123px;
+  }
 }
 
 .sidebar-dark ::placeholder {

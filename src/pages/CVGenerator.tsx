@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import Navbar from "../components/Navbar"
 import CVPreview from "../../components/cv/CVPreview.jsx"
 import { fetchCvGenerator } from "../lib/queries/fetchCvGenerator.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
@@ -63,7 +62,6 @@ export default function CVGeneratorPage() {
     {usePageMeta(t("cv.generatorTitle"), t("cv.generatorMetaDescription"))}
 
     <div className="min-h-screen bg-slate-50">
-      <Navbar />
       <main className="mx-auto max-w-5xl px-4 py-8 md:px-6">
         {loading ? <p className="text-sm text-slate-600">{t("common.loading")}</p> : null}
         {!loading && error ? (

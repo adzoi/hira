@@ -420,7 +420,7 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
   const eduList = Array.isArray(localCV.education) ? localCV.education : []
 
   return (
-    <div className="space-y-4 bg-slate-100 p-4 md:p-6">
+    <div className="space-y-4 bg-slate-100 p-2 sm:p-4 md:p-6">
       {showActions ? (
         <div className="print:hidden flex flex-wrap items-center gap-2">
           <button
@@ -438,7 +438,7 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
         <article
           className="cv-preview-sheet mx-auto grid origin-top overflow-hidden rounded-lg border border-gray-200 shadow-sm md:grid-cols-[260px_1fr]"
         >
-          <aside className="sidebar-dark w-[260px] shrink-0 overflow-hidden bg-[#1a1a2e] p-6 text-white [&_*]:break-words">
+          <aside className="sidebar-dark w-full shrink-0 overflow-hidden bg-[#1a1a2e] p-4 text-white md:w-[260px] md:p-6 [&_*]:break-words">
             {truthyHttpUrl(localCV.avatar_url) ? (
               <OptimizedImage
                 src={avatarImageUrl(supabase, localCV.avatar_url) ?? localCV.avatar_url}
@@ -611,7 +611,7 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
             ) : null}
           </aside>
 
-          <main className="bg-white p-8">
+          <main className="bg-white p-4 md:p-8">
             {showSummary ? (
               <section className="border-b border-gray-200 pb-5">
                 <div className="flex items-start justify-between gap-2">

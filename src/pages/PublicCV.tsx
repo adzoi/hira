@@ -1,6 +1,5 @@
 import { useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import Navbar from "../components/Navbar"
 import CVPreview from "../../components/cv/CVPreview.jsx"
 import { fetchPublicCvBySlug } from "../lib/queries/fetchPublicCv.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
@@ -27,7 +26,6 @@ export default function PublicCVPage() {
     {usePageMeta(t("cv.publicTitle"), t("cv.publicMetaDescription"))}
 
     <div className="min-h-screen bg-slate-50">
-      <Navbar />
       <main className="mx-auto max-w-5xl px-4 py-8 md:px-6">
         {loading ? <p className="text-sm text-slate-600">{t("common.loading")}</p> : null}
         {!loading && error ? (

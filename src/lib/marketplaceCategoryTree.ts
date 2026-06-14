@@ -1,9 +1,20 @@
+export const OTHER_CATEGORY_SLUG = "other"
+
 /** Rows from `categories` including optional self-FK `parent_id`. */
 export type CategoryBranchRow = {
   id: string
   name_ka: string
   name_en?: string | null
   parent_id: string | null
+  slug?: string | null
+}
+
+/** Root "Other" category: no mid-level subcategory or specialization pickers. */
+export function isOtherRootCategory(rows: CategoryBranchRow[], rootCategoryId: string): boolean {
+  const id = rootCategoryId.trim()
+  if (!id) return false
+  const row = rows.find((r) => r.id === id)
+  return String(row?.slug ?? "").trim() === OTHER_CATEGORY_SLUG
 }
 
 function sortByNameKa(a: CategoryBranchRow, b: CategoryBranchRow) {

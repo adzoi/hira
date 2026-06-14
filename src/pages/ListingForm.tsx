@@ -8,7 +8,7 @@ import {
 } from "../lib/listingPrice.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { serviceImageThumbnailUrl } from "../lib/storageImageUrl.ts"
-import { categoryChildrenOf, categoryRoots, type CategoryBranchRow } from "../lib/marketplaceCategoryTree.ts"
+import { categoryChildrenOf, categoryRoots, isOtherRootCategory, type CategoryBranchRow } from "../lib/marketplaceCategoryTree.ts"
 import {
   validateListingDescription,
   validateListingTitle,
@@ -139,18 +139,23 @@ export default function ListingFormPage() {
     () => (rootCategoryId ? categoryChildrenOf(categories, rootCategoryId) : []),
     [categories, rootCategoryId],
   )
+  const isOtherCategorySelected = useMemo(
+    () => isOtherRootCategory(categories, rootCategoryId),
+    [categories, rootCategoryId],
+  )
 
   /** DB `subcategories.category_id`: mid row if mids exist, else standalone root. */
   const specializationParentCategoryId = useMemo(() => {
+    if (isOtherCategorySelected) return ""
     if (categoryId.trim()) return categoryId.trim()
     if (rootCategoryId && categoryMidsList.length === 0) return rootCategoryId
     return ""
-  }, [categoryId, rootCategoryId, categoryMidsList.length])
+  }, [categoryId, rootCategoryId, categoryMidsList.length, isOtherCategorySelected])
 
-  const persistedListingCategoryId = useMemo(
-    () => categoryId.trim() || (rootCategoryId && categoryMidsList.length === 0 ? rootCategoryId.trim() : ""),
-    [categoryId, rootCategoryId, categoryMidsList.length],
-  )
+  const persistedListingCategoryId = useMemo(() => {
+    if (isOtherCategorySelected) return rootCategoryId.trim()
+    return categoryId.trim() || (rootCategoryId && categoryMidsList.length === 0 ? rootCategoryId.trim() : "")
+  }, [categoryId, rootCategoryId, categoryMidsList.length, isOtherCategorySelected])
 
   const categoryFilteredTags = useMemo(
     () => availableTags.filter((tag) => tag.categoryId === specializationParentCategoryId),
@@ -435,6 +440,8 @@ export default function ListingFormPage() {
                   const mids = nextRoot ? categoryChildrenOf(categories, nextRoot) : []
                   if (!nextRoot) {
                     setCategoryId("")
+                  } else if (isOtherRootCategory(categories, nextRoot)) {
+                    setCategoryId("")
                   } else if (mids.length === 0) {
                     setCategoryId(nextRoot)
                   } else {
@@ -452,53 +459,58 @@ export default function ListingFormPage() {
               </select>
             </label>
 
-            <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("listingForm.subcategory")}</span>
-              <select
-                value={categoryId}
-                disabled={!rootCategoryId || categoryMidsList.length === 0}
-                onChange={(event) => {
-                  setCategoryId(event.target.value)
-                  setSubcategoryId("")
-                }}
-                className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm disabled:cursor-not-allowed disabled:bg-slate-100"
-              >
-                <option value="">
-                  {!rootCategoryId
-                    ? t("listingForm.selectSubcategoryFirst")
-                    : categoryMidsList.length === 0
-                      ? t("listingForm.noSubcategoryForCategory")
-                      : t("listingForm.selectSubcategory")}
-                </option>
-                {categoryMidsList.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {pickCategoryName(category, locale)}
+            {!isOtherCategorySelected ? (
+              <label className="block">
+                <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("listingForm.subcategory")}</span>
+                <select
+                  value={categoryId}
+                  disabled={!rootCategoryId || categoryMidsList.length === 0}
+                  onChange={(event) => {
+                    setCategoryId(event.target.value)
+                    setSubcategoryId("")
+                  }}
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm disabled:cursor-not-allowed disabled:bg-slate-100"
+                >
+                  <option value="">
+                    {!rootCategoryId
+                      ? t("listingForm.selectSubcategoryFirst")
+                      : categoryMidsList.length === 0
+                        ? t("listingForm.noSubcategoryForCategory")
+                        : t("listingForm.selectSubcategory")}
                   </option>
-                ))}
-              </select>
-            </label>
+                  {categoryMidsList.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {pickCategoryName(category, locale)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
 
-            <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("listingForm.subcategorySpecialization")}</span>
-              <select
-                value={subcategoryId}
-                disabled={!specializationParentCategoryId}
-                onChange={(event) => setSubcategoryId(event.target.value)}
-                className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm disabled:cursor-not-allowed disabled:bg-slate-100"
-              >
-                <option value="">
-                  {specializationParentCategoryId
-                    ? t("listingForm.selectSpecializationOptional")
-                    : t("listingForm.selectSubcategoryOrCategoryFirst")}
-                </option>
-                {subcategories.map((sub) => (
-                  <option key={sub.id} value={sub.id}>
-                    {pickCategoryName(sub, locale)}
+            {!isOtherCategorySelected ? (
+              <label className="block">
+                <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("listingForm.subcategorySpecialization")}</span>
+                <select
+                  value={subcategoryId}
+                  disabled={!specializationParentCategoryId}
+                  onChange={(event) => setSubcategoryId(event.target.value)}
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm disabled:cursor-not-allowed disabled:bg-slate-100"
+                >
+                  <option value="">
+                    {specializationParentCategoryId
+                      ? t("listingForm.selectSpecializationOptional")
+                      : t("listingForm.selectSubcategoryOrCategoryFirst")}
                   </option>
-                ))}
-              </select>
-            </label>
+                  {subcategories.map((sub) => (
+                    <option key={sub.id} value={sub.id}>
+                      {pickCategoryName(sub, locale)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
 
+            {!isOtherCategorySelected ? (
             <div>
               <p className="mb-1 text-sm font-semibold text-[#1B2B4B]">{t("listingForm.tagsOptional")}</p>
               {!specializationParentCategoryId ? (
@@ -529,6 +541,7 @@ export default function ListingFormPage() {
                 </>
               )}
             </div>
+            ) : null}
 
             <label className="block">
               <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("listingForm.descriptionKa")}</span>
