@@ -13,10 +13,10 @@ import {
 import { OptimizedImage } from "../../src/components/OptimizedImage.tsx"
 import { compressImageForUpload } from "../../src/lib/compressImageForUpload.ts"
 import "./cv-preview.css"
-import cvPrintCss from "./cv-print.css?raw"
 
 const A4_WIDTH = 794
 const A4_HEIGHT = 1123
+const CV_PRINT_CSS = "/cv-print.css"
 
 function cvPdfFilename(fullName) {
   const base = String(fullName || "cv")
@@ -27,16 +27,10 @@ function cvPdfFilename(fullName) {
   return `${base || "cv"}.pdf`
 }
 
-async function waitForIframeImages(iframe) {
-  const doc = iframe.contentDocument
-  if (!doc) return
-  const win = iframe.contentWindow
-  await new Promise((resolve) => {
-    if (doc.readyState === "complete") resolve()
-    else win?.addEventListener("load", () => resolve(), { once: true })
-  })
+async function waitForElementImages(root) {
+  if (!root) return
   await Promise.all(
-    [...doc.images].map(
+    [...root.querySelectorAll("img")].map(
       (img) =>
         new Promise((resolve) => {
           if (img.complete) resolve()
@@ -47,6 +41,25 @@ async function waitForIframeImages(iframe) {
         }),
     ),
   )
+}
+
+async function waitForIframeReady(iframe) {
+  const doc = iframe.contentDocument
+  if (!doc) return
+  const win = iframe.contentWindow
+  await new Promise((resolve) => {
+    if (doc.readyState === "complete") resolve()
+    else win?.addEventListener("load", () => resolve(), { once: true })
+  })
+  const link = doc.querySelector('link[rel="stylesheet"]')
+  if (link && !link.sheet) {
+    await new Promise((resolve) => {
+      link.addEventListener("load", () => resolve(), { once: true })
+      link.addEventListener("error", () => resolve(), { once: true })
+    })
+  }
+  const shell = doc.querySelector(".cv-shell")
+  if (shell) await waitForElementImages(shell)
 }
 
 function truthyStr(v) {
@@ -399,7 +412,7 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
         <head>
           <meta charset="utf-8" />
           <title>CV</title>
-          <style>${cvPrintCss}</style>
+          <link rel="stylesheet" href="${CV_PRINT_CSS}" />
         </head>
         <body>
           <div class="cv-shell">
@@ -443,7 +456,7 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
       doc.open()
       doc.write(buildPrintableHtml())
       doc.close()
-      await waitForIframeImages(iframe)
+      await waitForIframeReady(iframe)
       const shell = doc.querySelector(".cv-shell")
       if (!shell) throw new Error("CV შაბლონი ვერ მოიძებნა.")
       const html2pdf = (await import("html2pdf.js")).default
@@ -456,6 +469,7 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
           html2canvas: {
             scale: 2,
             useCORS: true,
+            backgroundColor: "#ffffff",
             width: A4_WIDTH,
             windowWidth: A4_WIDTH,
           },
@@ -694,6 +708,7 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
                   {!readOnly ? (
                     <button
                       type="button"
+                      data-cv-export-hide
                       className="text-xs font-semibold text-blue-600"
                       onClick={() =>
                         setLocalCV((p) => ({
@@ -738,7 +753,7 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
                             )}
                           </div>
                           {!readOnly ? (
-                            <div className="flex shrink-0 gap-1">
+                            <div className="flex shrink-0 gap-1 print:hidden" data-cv-export-hide>
                               <PencilButton onClick={() => setEditingWorkIdx(editing ? null : index)} label="რედაქტირება" />
                               <button
                                 type="button"
@@ -849,6 +864,7 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
                   {!readOnly ? (
                     <button
                       type="button"
+                      data-cv-export-hide
                       className="text-xs font-semibold text-blue-600"
                       onClick={() =>
                         setLocalCV((p) => ({
@@ -869,25 +885,23 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
                     const editing = editingEduIdx === index && !readOnly
                     return (
                       <div key={`edu-${index}`} className="rounded border border-gray-100 p-4">
-                        <div className="mb-2 flex justify-end gap-1">
-                          {!readOnly ? (
-                            <>
-                              <PencilButton onClick={() => setEditingEduIdx(editing ? null : index)} label="რედაქტირება" />
-                              <button
-                                type="button"
-                                className="text-xs text-red-600"
-                                onClick={() =>
-                                  setLocalCV((p) => ({
-                                    ...p,
-                                    education: eduList.filter((_, i) => i !== index),
-                                  }))
-                                }
-                              >
-                                წაშლა
-                              </button>
-                            </>
-                          ) : null}
-                        </div>
+                        {!readOnly ? (
+                          <div className="mb-2 flex justify-end gap-1 print:hidden" data-cv-export-hide>
+                            <PencilButton onClick={() => setEditingEduIdx(editing ? null : index)} label="რედაქტირება" />
+                            <button
+                              type="button"
+                              className="text-xs text-red-600"
+                              onClick={() =>
+                                setLocalCV((p) => ({
+                                  ...p,
+                                  education: eduList.filter((_, i) => i !== index),
+                                }))
+                              }
+                            >
+                              წაშლა
+                            </button>
+                          </div>
+                        ) : null}
                         {editing ? (
                           <div className="space-y-2 text-sm">
                             <input

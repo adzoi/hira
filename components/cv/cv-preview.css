@@ -7,6 +7,8 @@
 .cv-preview-sheet {
   width: 100%;
   min-height: auto;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
 
 @media (min-width: 768px) {

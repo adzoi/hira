@@ -1,26 +1,24 @@
 * {
   -webkit-print-color-adjust: exact !important;
   print-color-adjust: exact !important;
+  box-sizing: border-box;
 }
 
-@page {
-  margin: 0;
-  size: A4;
-}
-
+html,
 body {
-  margin: 1.6cm;
-  background: #f3f4f6;
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
   font-family: "Arial", "Helvetica", sans-serif;
 }
 
 .cv-shell {
   width: 794px;
   min-height: 1123px;
-  margin: 0 auto;
+  margin: 0;
   display: grid;
   grid-template-columns: 260px 1fr;
-  border: 1px solid #e5e7eb;
+  border: none;
 }
 
 .sidebar {
@@ -28,7 +26,7 @@ body {
   overflow: hidden;
   flex-shrink: 0;
   background: #1a1a2e;
-  color: #fff;
+  color: #ffffff;
   padding: 24px;
 }
 
@@ -38,7 +36,7 @@ body {
 }
 
 .main {
-  background: #fff;
+  background: #ffffff;
   color: #111827;
   padding: 32px;
 }
@@ -62,7 +60,7 @@ body {
   align-items: center;
   justify-content: center;
   background: rgba(255, 255, 255, 0.15);
-  color: #fff;
+  color: #ffffff;
   font-weight: 700;
   font-size: 22px;
 }
@@ -72,6 +70,7 @@ body {
   margin: 0 0 12px;
   word-break: break-word;
   hyphens: auto;
+  color: #ffffff;
 }
 
 .name--short {
@@ -89,10 +88,10 @@ body {
 }
 
 .print-link a {
-  color: #4a90d9;
-  text-decoration: underline;
-  font-size: 13px;
-  display: inline-block;
+  color: #cbd5e1;
+  text-decoration: none;
+  font-size: 14px;
+  display: block;
   margin: 4px 0;
 }
 
@@ -117,6 +116,13 @@ body {
 .main .sec {
   border-top: 1px solid #e5e7eb;
   margin-top: 18px;
+  padding-top: 18px;
+}
+
+.main .sec--first {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
 }
 
 .sec-title {
@@ -132,15 +138,28 @@ body {
   color: #4b5563;
 }
 
-ul {
+.sidebar ul {
   margin: 6px 0 0 18px;
   padding: 0;
 }
 
-li {
+.sidebar li {
   margin: 0 0 6px;
   line-height: 1.5;
   font-size: 14px;
+  color: #ffffff;
+}
+
+.main ul {
+  margin: 6px 0 0 18px;
+  padding: 0;
+}
+
+.main li {
+  margin: 0 0 6px;
+  line-height: 1.5;
+  font-size: 14px;
+  color: #374151;
 }
 
 .summary {
@@ -148,6 +167,7 @@ li {
   line-height: 1.7;
   font-size: 15px;
   white-space: pre-wrap;
+  color: #374151;
 }
 
 .work-card {
@@ -160,6 +180,7 @@ li {
 .work-title {
   font-weight: 700;
   margin-bottom: 2px;
+  color: #111827;
 }
 
 .work-date {
@@ -173,7 +194,7 @@ li {
   border-radius: 8px;
   padding: 12px;
   margin-bottom: 10px;
-  background: #fff;
+  background: #ffffff;
 }
 
 .edu-degree {
@@ -192,20 +213,4 @@ li {
   color: #6b7280;
   font-size: 12px;
   margin-top: 2px;
-}
-
-@media print {
-  @page {
-    margin: 0;
-    size: A4;
-  }
-
-  body {
-    background: #fff;
-    margin: 1.6cm;
-  }
-
-  .cv-shell {
-    border: none;
-  }
 }
