@@ -47,6 +47,14 @@
   white-space: nowrap;
 }
 
+.static-hero-description {
+  margin: 1rem 0 0;
+  max-width: 36rem;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.92);
+}
+
 .static-hero-img {
   display: none;
   margin-top: 2rem;

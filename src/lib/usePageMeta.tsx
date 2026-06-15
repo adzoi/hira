@@ -25,6 +25,7 @@ export function PageMeta({ title, description, url }: PageMetaProps) {
       <meta property="og:image" content={SITE_OG_IMAGE} />
       <meta property="og:type" content="website" />
       <meta property="og:site_name" content="ჰირა" />
+      <meta property="og:locale" content="ka_GE" />
       <meta name="twitter:card" content="summary" />
       <meta name="twitter:image" content={SITE_OG_IMAGE} />
     </Helmet>

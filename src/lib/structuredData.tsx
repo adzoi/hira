@@ -6,7 +6,7 @@ import { normalizeListingPriceType } from "./listingPrice.ts"
 import { SITE_BASE_URL, SITE_OG_IMAGE } from "./usePageMeta.tsx"
 
 const SITE_DESCRIPTION_KA =
-  "ქართული freelance ბაზარი: იპოვე სერვისები, დაიქირავე პროფესიონალები და აღმოაჩინე სამუშაოები ერთ ადგილას."
+  "ქართული ფრილანს პლატფორმა - იპოვე სერვისები, დაიქირავე პროფესიონალები და აღმოაჩინე სამუშაოები ერთ ადგილას."
 
 export function buildSiteOrganizationSchema(): Record<string, unknown> {
   return {
