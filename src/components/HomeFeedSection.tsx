@@ -323,8 +323,8 @@ export default function HomeFeedSection() {
           <div className="min-w-0 flex-1">
             <h2 className="mt-2 text-2xl font-bold text-[#0088FF] md:text-[28px]">{t("home.servicesAndJobs")}</h2>
           </div>
-          <div className="w-full shrink-0 lg:w-auto lg:max-w-none">
-            <div className="flex max-w-full flex-nowrap items-center justify-end gap-2 overflow-x-auto pl-1 pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="min-w-0 w-full shrink-0 lg:w-auto">
+            <div className="flex min-w-0 -mx-4 flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain scroll-px-4 px-4 pb-1 touch-pan-x lg:mx-0 lg:justify-end lg:scroll-px-0 lg:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <button
                 type="button"
                 onClick={() => setFeedFilter("all")}
