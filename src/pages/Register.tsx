@@ -279,15 +279,15 @@ export default function RegisterPage() {
                 </label>
 
                 <div className="grid gap-4 md:grid-cols-2">
-                  <label className="block">
+                  <label className="block md:col-span-2">
                     <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("common.password")}</span>
                     <div className="relative">
                       <input
                         type={showPassword ? "text" : "password"}
                         value={password}
                         onChange={(event) => setPassword(event.target.value)}
-                        placeholder={t("auth.passwordMinPlaceholder")}
-                        className="h-11 w-full rounded-lg border border-slate-300 px-3 pr-12 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
+                        autoComplete="new-password"
+                        className="h-11 w-full rounded-lg border border-slate-300 px-3 pr-24 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
                       />
                       <button
                         type="button"
@@ -297,8 +297,9 @@ export default function RegisterPage() {
                         {showPassword ? t("common.hide") : t("common.show")}
                       </button>
                     </div>
+                    <p className="mt-1 text-xs text-slate-500">{t("auth.passwordMinPlaceholder")}</p>
                   </label>
-                  <label className="block">
+                  <label className="block md:col-span-2">
                     <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">
                       {t("auth.confirmPassword")}
                     </span>
@@ -307,7 +308,8 @@ export default function RegisterPage() {
                         type={showConfirmPassword ? "text" : "password"}
                         value={confirmPassword}
                         onChange={(event) => setConfirmPassword(event.target.value)}
-                        className="h-11 w-full rounded-lg border border-slate-300 px-3 pr-12 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
+                        autoComplete="new-password"
+                        className="h-11 w-full rounded-lg border border-slate-300 px-3 pr-24 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
                       />
                       <button
                         type="button"

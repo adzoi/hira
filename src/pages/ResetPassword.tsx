@@ -171,7 +171,6 @@ export default function ResetPasswordPage() {
                     autoComplete="new-password"
                     onChange={(e) => setPassword(e.target.value)}
                     className="h-11 w-full rounded-lg border border-slate-300 px-3 pr-24 text-sm outline-none ring-[#1B2B4B] focus:ring-2"
-                    placeholder={t("auth.passwordMinPlaceholder")}
                   />
                   <button
                     type="button"
@@ -181,6 +180,7 @@ export default function ResetPasswordPage() {
                     {showPassword ? t("common.hide") : t("common.show")}
                   </button>
                 </div>
+                <p className="mt-1 text-xs text-slate-500">{t("auth.passwordMinPlaceholder")}</p>
               </label>
               <label className="block">
                 <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("auth.repeatPassword")}</span>
