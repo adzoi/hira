@@ -77,14 +77,9 @@ export function validatePasswordForLogin(raw: string): FieldResult<string> {
 export function validatePassword(raw: string): FieldResult<string> {
   if (typeof raw !== "string") return fail("Password is required.")
   if (raw.length > LIMITS.passwordMax) return fail("Password is too long.")
-  if (
-    raw.length < LIMITS.passwordMin ||
-    !/[a-zA-Z]/.test(raw) ||
-    !/[A-Z]/.test(raw) ||
-    !/\d/.test(raw)
-  ) {
+  if (raw.length < LIMITS.passwordMin || !/[A-Z]/.test(raw) || !/\d/.test(raw)) {
     return fail(
-      "Password must be at least 8 characters and include at least one uppercase letter, one letter, and one number.",
+      "Password must be at least 8 characters and include at least one uppercase letter and one number.",
     )
   }
   return { ok: true, value: raw }
