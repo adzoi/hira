@@ -23,6 +23,7 @@ export const en: T = {
     logout: "Log out",
     user: "User",
     postJob: "Post a job",
+    postJobShort: "Post job",
     postListing: "Post a listing",
     completeProfile: "Complete profile",
     notifications: "Notifications",

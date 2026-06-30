@@ -383,7 +383,7 @@ export default function Navbar() {
       <div className="mx-auto grid w-full max-w-none grid-cols-[auto_1fr_auto] items-center gap-2 px-4 py-3 md:gap-3 md:pl-12 md:pr-6 lg:pl-16 lg:pr-8">
         <Link
           to="/"
-          className="inline-flex h-10 shrink-0 items-center overflow-visible lg:h-11 xl:h-[52px]"
+          className="inline-flex h-10 shrink-0 items-center overflow-visible lg:h-11 xl:h-[52px] lg:mr-2 xl:mr-4"
           aria-label={t("nav.home")}
         >
           <OptimizedImage
@@ -397,21 +397,23 @@ export default function Navbar() {
           />
         </Link>
 
-        <nav className="hidden min-w-0 items-center justify-center gap-1 text-sm font-medium lg:flex xl:gap-1.5">
-          {navLinks.map((link) => (
-            <Link
-              key={link.label}
-              to={link.to}
-              className={`inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-full border px-2 text-xs transition xl:h-10 xl:px-3 xl:text-sm ${
-                navLinkUnderlineActive(location.pathname, link.to)
-                  ? "border-transparent bg-[#0088FF] text-white"
-                  : "border-slate-300 bg-white text-slate-500 hover:border-slate-400 hover:text-slate-700"
-              }`}
-            >
-              {link.label}
-            </Link>
-          ))}
-        </nav>
+        <div className="hidden min-w-0 justify-center overflow-hidden lg:flex">
+          <nav className="flex max-w-full items-center gap-0.5 overflow-x-auto text-sm font-medium [scrollbar-width:none] xl:gap-1.5 [&::-webkit-scrollbar]:hidden">
+            {navLinks.map((link) => (
+              <Link
+                key={link.label}
+                to={link.to}
+                className={`inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-full border px-2 text-xs transition xl:h-10 xl:px-3 xl:text-sm ${
+                  navLinkUnderlineActive(location.pathname, link.to)
+                    ? "border-transparent bg-[#0088FF] text-white"
+                    : "border-slate-300 bg-white text-slate-500 hover:border-slate-400 hover:text-slate-700"
+                }`}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+        </div>
 
         <div className="flex shrink-0 items-center justify-end gap-1.5 md:gap-2 lg:gap-3">
           {isAuthed ? (
@@ -651,13 +653,13 @@ export default function Navbar() {
             <>
               <Link
                 to="/login"
-                className="inline-flex h-11 shrink-0 items-center whitespace-nowrap text-sm font-semibold text-[#1B2B4B] transition hover:text-[#D4A843]"
+                className="inline-flex h-9 shrink-0 items-center whitespace-nowrap text-xs font-semibold text-[#1B2B4B] transition hover:text-[#D4A843] xl:h-11 xl:text-sm"
               >
                 {t("nav.login")}
               </Link>
               <Link
                 to="/register"
-                className="inline-flex h-10 shrink-0 items-center whitespace-nowrap rounded-md border border-slate-300 px-3 text-sm font-semibold text-[#1B2B4B] transition hover:border-[#D4A843] hover:text-[#D4A843] xl:h-11 xl:px-4"
+                className="inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-full border border-slate-300 px-2.5 text-xs font-semibold text-[#1B2B4B] transition hover:border-[#D4A843] hover:text-[#D4A843] xl:h-11 xl:px-4 xl:text-sm"
               >
                 {t("nav.register")}
               </Link>
@@ -667,10 +669,14 @@ export default function Navbar() {
                   event.preventDefault()
                   handlePostJob()
                 }}
-                className="inline-flex h-10 shrink-0 items-center whitespace-nowrap rounded-md bg-[#0088FF] px-3 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC] xl:h-11 xl:px-4"
+                className="inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-full bg-[#0088FF] px-2.5 text-xs font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC] xl:h-11 xl:px-4 xl:text-sm"
               >
-                {t("nav.postJob")}
+                <span className="xl:hidden">{t("nav.postJobShort")}</span>
+                <span className="hidden xl:inline">{t("nav.postJob")}</span>
               </Link>
+              <div className="xl:hidden">
+                <LanguageToggle locale={locale} onChange={setLocale} variant="compact" />
+              </div>
             </>
           ) : (
             <div className="inline-flex h-11 items-center gap-3">
@@ -698,7 +704,9 @@ export default function Navbar() {
             <span className="text-lg">{mobileMenuOpen ? "✕" : "☰"}</span>
           </button>
           {authStatus === "anon" ? (
-            <LanguageToggle locale={locale} onChange={setLocale} variant="flags" />
+            <div className="lg:hidden xl:block">
+              <LanguageToggle locale={locale} onChange={setLocale} variant="flags" />
+            </div>
           ) : null}
         </div>
       </div>

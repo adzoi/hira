@@ -23,6 +23,7 @@ export const ka: T = {
     logout: "გასვლა",
     user: "მომხმარებელი",
     postJob: "სამუშაოს განთავსება",
+    postJobShort: "განთავსება",
     postListing: "განცხადების დამატება",
     completeProfile: "პროფილის შევსება",
     notifications: "შეტყობინებები",

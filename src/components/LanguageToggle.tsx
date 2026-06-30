@@ -9,12 +9,27 @@ const LOCALE_FLAGS: Record<AppLocale, string> = {
 type LanguageToggleProps = {
   locale: AppLocale
   onChange: (locale: AppLocale) => void
-  variant?: "flags" | "menu"
+  variant?: "flags" | "menu" | "compact"
 }
 
 export default function LanguageToggle({ locale, onChange, variant = "menu" }: LanguageToggleProps) {
   const { t } = useTranslation()
   const options: AppLocale[] = ["ka", "en"]
+
+  if (variant === "compact") {
+    const other = locale === "ka" ? "en" : "ka"
+    return (
+      <button
+        type="button"
+        onClick={() => onChange(other)}
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#E8F4FF] text-base leading-none ring-2 ring-[#0088FF] ring-offset-1 transition hover:bg-[#D4EEFF]"
+        aria-label={`${LOCALE_LABELS[locale]} — ${t("nav.language")}`}
+        title={`${LOCALE_LABELS[other]}`}
+      >
+        <span aria-hidden>{LOCALE_FLAGS[locale]}</span>
+      </button>
+    )
+  }
 
   if (variant === "flags") {
     return (
