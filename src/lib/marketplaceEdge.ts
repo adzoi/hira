@@ -35,7 +35,7 @@ function parseEdgeResponse<T>(data: unknown): T {
 /** Cached marketplace Edge Function via Supabase client (handles apikey + JWT headers). */
 async function invokeMarketplaceEdge<T>(
   functionName: string,
-  body?: Record<string, string | number>,
+  body?: Record<string, string | number | null>,
 ): Promise<T> {
   if (!isSupabaseConfigured || !supabase) {
     throw new Error("Supabase not configured")
@@ -57,12 +57,23 @@ export async function fetchHomeFeedPayload(): Promise<unknown> {
   return invokeMarketplaceEdge("get-home-feed")
 }
 
-export async function fetchListingsPagePayload(page: number): Promise<unknown> {
-  return invokeMarketplaceEdge("get-listings-page", { category: "all", page })
+export async function fetchListingsPagePayload(
+  page: number,
+  searchQuery: string | null = null,
+): Promise<unknown> {
+  const body: Record<string, string | number | null> = { category: "all", page }
+  if (searchQuery) body.search = searchQuery
+  return invokeMarketplaceEdge("get-listings-page", body)
 }
 
-export async function fetchJobsPagePayload(category: string, page: number): Promise<unknown> {
-  return invokeMarketplaceEdge("get-jobs-page", { category, page })
+export async function fetchJobsPagePayload(
+  category: string,
+  page: number,
+  searchQuery: string | null = null,
+): Promise<unknown> {
+  const body: Record<string, string | number | null> = { category, page }
+  if (searchQuery) body.search = searchQuery
+  return invokeMarketplaceEdge("get-jobs-page", body)
 }
 
 export async function fetchHomepageVipPayload(limit = 20): Promise<unknown> {

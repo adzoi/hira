@@ -1,11 +1,21 @@
+/// <reference path="../esm-modules.d.ts" />
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts"
+import { recordNotifyEmailFailure } from "../_shared/alerting.ts"
 import { enforceRateLimit } from "../_shared/rateLimit.ts"
 import { corsHeadersFor } from "../_shared/cors.ts"
+import { logStructured, requestLog } from "../_shared/structuredLog.ts"
 import { readJsonBody, validateTextField, validateUuid, escapeHtml } from "../_shared/validation.ts"
+import { serveWithSentry } from "../_shared/sentry.ts"
+
+declare const Deno: {
+  serve: (handler: (req: Request) => Response | Promise<Response>) => void
+  env: { get: (key: string) => string | undefined }
+}
 
 /** Gmail SMTP path: CTA always opens production dashboard (ASCII URL avoids client quirks). */
 const GMAIL_CTA_DASHBOARD_URL = "https://gigori-production.up.railway.app/dashboard"
+const FUNCTION_NAME = "send-notification-email"
 
 function jsonResponse(req: Request, body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -45,6 +55,41 @@ type Body = {
   link?: string | null
   type?: string | null
   payload?: Record<string, unknown> | null
+}
+
+async function logEmailFailure(
+  req: Request,
+  reason: string,
+  status: number,
+  detail?: Record<string, unknown>,
+  options?: { alert?: boolean },
+): Promise<void> {
+  const ctx = requestLog(req)
+  const fields = {
+    reason,
+    status,
+    user_id: ctx?.getFields().user_id ?? null,
+    notification_type: ctx?.getFields().notification_type ?? null,
+    notification_title: ctx?.getFields().notification_title ?? null,
+    link: ctx?.getFields().link ?? null,
+    source: "notify_via_email",
+    ...(detail ?? {}),
+  }
+  logStructured("error", FUNCTION_NAME, "notify_email_delivery_failed", fields)
+  if (options?.alert !== false && shouldAlertNotifyFailure(reason)) {
+    await recordNotifyEmailFailure(fields)
+  }
+}
+
+function shouldAlertNotifyFailure(reason: string): boolean {
+  return [
+    "resend_failed",
+    "smtp_failed",
+    "profile_lookup_failed",
+    "user_email_not_found",
+    "server_misconfigured",
+    "email_not_configured",
+  ].includes(reason)
 }
 
 async function sendWithResend(params: {
@@ -129,11 +174,14 @@ async function sendWithGmailSmtp(params: {
   }
 }
 
-Deno.serve(async (req: Request) => {
+serveWithSentry(FUNCTION_NAME, async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeadersFor(req) })
   if (req.method !== "POST") return jsonResponse(req, { error: "Method not allowed" }, 405)
 
-  if (!isAuthorized(req)) return jsonResponse(req, { error: "Unauthorized" }, 401)
+  if (!isAuthorized(req)) {
+    await logEmailFailure(req, "unauthorized", 401, undefined, { alert: false })
+    return jsonResponse(req, { error: "Unauthorized" }, 401)
+  }
 
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() ?? ""
   const resendKey = Deno.env.get("RESEND_API_KEY")?.trim() ?? ""
@@ -141,18 +189,32 @@ Deno.serve(async (req: Request) => {
   const gmailAppPassword = Deno.env.get("GMAIL_SMTP_APP_PASSWORD")?.trim() ?? ""
 
   if (!resendKey && (!gmailUser || !gmailAppPassword)) {
+    await logEmailFailure(req, "email_not_configured", 503)
     return jsonResponse(req, { error: "Email not configured" }, 503)
   }
 
   const bodyParsed = await readJsonBody(req)
   if (!bodyParsed.ok) {
+    await logEmailFailure(req, "invalid_json", bodyParsed.status, { error: bodyParsed.error }, { alert: false })
     return jsonResponse(req, { error: bodyParsed.error }, bodyParsed.status)
   }
   const parsed = bodyParsed.value as Body
 
   const userIdResult = validateUuid(typeof parsed.user_id === "string" ? parsed.user_id : "", "user_id")
-  if (!userIdResult.ok) return jsonResponse(req, { error: userIdResult.message }, 400)
+  if (!userIdResult.ok) {
+    await logEmailFailure(req, "invalid_user_id", 400, { error: userIdResult.message }, { alert: false })
+    return jsonResponse(req, { error: userIdResult.message }, 400)
+  }
   const userId = userIdResult.value
+
+  const notificationType = parsed.type != null ? String(parsed.type).slice(0, 64) : null
+  const notificationTitle = parsed.title != null ? String(parsed.title).slice(0, 200) : null
+  requestLog(req)?.set({
+    user_id: userId,
+    notification_type: notificationType,
+    notification_title: notificationTitle,
+    link: parsed.link != null ? String(parsed.link).slice(0, 2048) : null,
+  })
 
   if (parsed.title != null) {
     const titleResult = validateTextField(parsed.title, {
@@ -160,7 +222,10 @@ Deno.serve(async (req: Request) => {
       required: false,
       label: "title",
     })
-    if (!titleResult.ok) return jsonResponse(req, { error: titleResult.message }, 400)
+    if (!titleResult.ok) {
+      await logEmailFailure(req, "invalid_title", 400, { error: titleResult.message }, { alert: false })
+      return jsonResponse(req, { error: titleResult.message }, 400)
+    }
   }
   if (parsed.body != null && typeof parsed.body === "string" && parsed.body.trim()) {
     const bodyResult = validateTextField(parsed.body, {
@@ -168,7 +233,10 @@ Deno.serve(async (req: Request) => {
       required: false,
       label: "body",
     })
-    if (!bodyResult.ok) return jsonResponse(req, { error: bodyResult.message }, 400)
+    if (!bodyResult.ok) {
+      await logEmailFailure(req, "invalid_body", 400, { error: bodyResult.message }, { alert: false })
+      return jsonResponse(req, { error: bodyResult.message }, 400)
+    }
   }
 
   const linkRaw = parsed.link != null ? String(parsed.link).trim().slice(0, 2048) : ""
@@ -181,7 +249,10 @@ Deno.serve(async (req: Request) => {
   if (rateLimited) return rateLimited
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim() ?? ""
-  if (!supabaseUrl || !serviceRole) return jsonResponse(req, { error: "Server misconfigured" }, 500)
+  if (!supabaseUrl || !serviceRole) {
+    await logEmailFailure(req, "server_misconfigured", 500)
+    return jsonResponse(req, { error: "Server misconfigured" }, 500)
+  }
 
   const admin = createClient(supabaseUrl, serviceRole, {
     auth: { autoRefreshToken: false, persistSession: false },
@@ -193,11 +264,19 @@ Deno.serve(async (req: Request) => {
     .eq("id", userId)
     .maybeSingle()
 
-  if (profileErr) return jsonResponse(req, { error: "Profile lookup failed" }, 500)
+  if (profileErr) {
+    await logEmailFailure(req, "profile_lookup_failed", 500, { error: profileErr.message })
+    return jsonResponse(req, { error: "Profile lookup failed" }, 500)
+  }
   if (!profile?.is_active) return jsonResponse(req, { ok: true, skipped: "inactive_profile" })
 
   const { data: adminUser, error: authErr } = await admin.auth.admin.getUserById(userId)
-  if (authErr || !adminUser?.user?.email) return jsonResponse(req, { error: "User email not found" }, 404)
+  if (authErr || !adminUser?.user?.email) {
+    await logEmailFailure(req, "user_email_not_found", 404, {
+      error: authErr?.message ?? "missing email",
+    })
+    return jsonResponse(req, { error: "User email not found" }, 404)
+  }
 
   const email = adminUser.user.email.trim()
   const siteUrl = (Deno.env.get("PUBLIC_SITE_URL") ?? Deno.env.get("SITE_URL") ?? "").replace(/\/$/, "")
@@ -225,7 +304,11 @@ Deno.serve(async (req: Request) => {
 </html>`
     const r = await sendWithResend({ resendKey, from, to: email, subject: "Hira - New Notification", html })
     if (!r.ok) {
-      console.error("[send-notification-email] Resend:", r.status, r.detail)
+      await logEmailFailure(req, "resend_failed", 502, {
+        transport: "resend",
+        provider_status: r.status,
+        provider_detail: r.detail.slice(0, 500),
+      })
       return jsonResponse(req, { error: "Resend failed", detail: r.detail }, 502)
     }
     return jsonResponse(req, { ok: true, transport: "resend" })
@@ -234,7 +317,10 @@ Deno.serve(async (req: Request) => {
   const fromHeader = Deno.env.get("GMAIL_SMTP_FROM")?.trim() || `Hira <${gmailUser}>`
   const g = await sendWithGmailSmtp({ to: email, gmailUser, gmailAppPassword, fromHeader })
   if (!g.ok) {
-    console.error("[send-notification-email] Gmail SMTP:", g.detail)
+    await logEmailFailure(req, "smtp_failed", 502, {
+      transport: "gmail_smtp",
+      provider_detail: g.detail.slice(0, 500),
+    })
     return jsonResponse(req, { error: "SMTP send failed", detail: g.detail }, 502)
   }
 

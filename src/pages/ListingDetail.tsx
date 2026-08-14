@@ -19,6 +19,7 @@ import { pickCategoryName } from "../lib/categoryLocale.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { pickListingDescription, pickListingTitle } from "../lib/listingLocale.ts"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
+import { assertContentRateLimit, formatContentRateLimitError } from "../lib/contentRateLimit.ts"
 
 type ListingMeta = {
   categoryId: string | null
@@ -318,6 +319,7 @@ export default function ListingDetailPage() {
         setOfferError("დამქირავებლის პროფილი საჭიროა შეთავაზებისთვის.")
         return
       }
+      await assertContentRateLimit("service-inquiry")
       const { error: insertErr } = await supabase.from("service_inquiries").insert({
         service_id: item.id,
         freelancer_profile_id: item.freelancerProfileId,
@@ -340,7 +342,8 @@ export default function ListingDetailPage() {
       setOfferBudget("")
       setOfferError("")
     } catch (e) {
-      setOfferError(e instanceof Error ? e.message : "შეთავაზების გაგზავნა ვერ მოხერხდა.")
+      const rateMsg = formatContentRateLimitError(e, t)
+      setOfferError(rateMsg ?? (e instanceof Error ? e.message : "შეთავაზების გაგზავნა ვერ მოხერხდა."))
     } finally {
       setOfferSubmitting(false)
     }

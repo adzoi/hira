@@ -20,6 +20,10 @@ interface ImportMetaEnv {
   readonly VITE_PAYPAL_CLIENT_ID?: string
   /** Set to "1" for Playwright diagnostics only. */
   readonly VITE_PAYPAL_E2E_DIAG?: string
+  /** Sentry browser DSN (public). */
+  readonly VITE_SENTRY_DSN?: string
+  /** Set to "1" to throw a deliberate error on load for Sentry verification. */
+  readonly VITE_SENTRY_TEST_ERROR?: string
 }
 
 interface ImportMeta {

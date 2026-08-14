@@ -2,6 +2,12 @@ import { enforceRateLimit, getRedis } from "../_shared/rateLimit.ts"
 import { normalizeCategory, parsePage, readJsonBody } from "../_shared/validation.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
 import { corsHeadersFor } from "../_shared/cors.ts"
+import { serveWithSentry } from "../_shared/sentry.ts"
+
+declare const Deno: {
+  serve: (handler: (req: Request) => Response | Promise<Response>) => void
+  env: { get: (key: string) => string | undefined }
+}
 
 const CACHE_TTL = 30
 const PAGE_SIZE = 20
@@ -21,24 +27,32 @@ function isCachedSuccessPayload(v: unknown): v is SuccessPayload {
   return o.ok === true && "data" in o
 }
 
-async function parseParams(req: Request): Promise<{ category: string; page: number }> {
+function normalizeSearch(raw: unknown): string | null {
+  if (typeof raw !== "string") return null
+  const s = raw.trim().slice(0, 100)
+  return s.length > 0 ? s : null
+}
+
+async function parseParams(req: Request): Promise<{ category: string; page: number; search: string | null }> {
   if (req.method === "GET") {
     const u = new URL(req.url)
     return {
       category: normalizeCategory(u.searchParams.get("category")),
       page: parsePage(u.searchParams.get("page")),
+      search: normalizeSearch(u.searchParams.get("search") ?? u.searchParams.get("q")),
     }
   }
   const parsed = await readJsonBody(req)
-  if (!parsed.ok) return { category: "all", page: 1 }
+  if (!parsed.ok) return { category: "all", page: 1, search: null }
   const body = parsed.value
   return {
     category: normalizeCategory(body.category),
     page: parsePage(body.page),
+    search: normalizeSearch(body.search ?? body.q ?? body.searchQuery),
   }
 }
 
-Deno.serve(async (req) => {
+serveWithSentry("get-listings-page", async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeadersFor(req) })
   }
@@ -61,8 +75,8 @@ Deno.serve(async (req) => {
 
   const redis = getRedis()
 
-  const { category, page } = await parseParams(req)
-  const cacheKey = `listings:page:${category}:${page}`
+  const { category, page, search } = await parseParams(req)
+  const cacheKey = `listings:page:${category}:${page}:${search ?? ""}`
 
   if (redis) {
     try {
@@ -92,7 +106,7 @@ Deno.serve(async (req) => {
   const p_offset = (page - 1) * PAGE_SIZE
 
   const { data, error } = await admin.rpc("get_listings_page", {
-    p_search: null,
+    p_search: search,
     p_limit: PAGE_SIZE,
     p_offset,
   })

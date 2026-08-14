@@ -47,7 +47,7 @@ export function buildContentSecurityPolicy(opts = {}) {
     `style-src-elem ${styleSrcElem.join(" ")}`,
     "font-src 'self' data:",
     "img-src 'self' data: blob: https://*.supabase.co https://*.paypal.com https://*.paypalobjects.com",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.paypal.com https://*.paypalobjects.com https://www.google-analytics.com https://analytics.google.com https://*.google-analytics.com",
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.paypal.com https://*.paypalobjects.com https://www.google-analytics.com https://analytics.google.com https://*.google-analytics.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io",
     "frame-src 'self' https://*.paypal.com https://*.paypalobjects.com",
     "manifest-src 'self'",
     "object-src 'none'",

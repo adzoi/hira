@@ -2,6 +2,8 @@
 import { enforceRateLimit } from "../_shared/rateLimit.ts"
 import { corsHeadersFor } from "../_shared/cors.ts"
 import { readJsonBody, validateEmail } from "../_shared/validation.ts"
+import { requestLog } from "../_shared/structuredLog.ts"
+import { serveWithSentry } from "../_shared/sentry.ts"
 
 declare const Deno: {
   serve: (handler: (req: Request) => Response | Promise<Response>) => void
@@ -21,7 +23,7 @@ function jsonResponse(req: Request, body: unknown, status = 200) {
   })
 }
 
-Deno.serve(async (req) => {
+serveWithSentry("auth-rate-limit", async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeadersFor(req) })
   }
@@ -39,6 +41,8 @@ Deno.serve(async (req) => {
   if (!ALLOWED_ACTIONS.has(action)) {
     return jsonResponse(req, { ok: false, error: "Invalid action" }, 400)
   }
+
+  requestLog(req)?.set({ action })
 
   if (typeof body.email === "string" && body.email.trim()) {
     const emailResult = validateEmail(body.email)

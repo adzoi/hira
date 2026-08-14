@@ -15,6 +15,7 @@ import { getAuthenticatedSession } from "../lib/supabaseAuth.ts"
 import { validateTextField, LIMITS } from "../lib/validation.ts"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { assertContentRateLimit, formatContentRateLimitError } from "../lib/contentRateLimit.ts"
 
 function formatForumDateTime(iso: string, locale: string): string {
   const t = new Date(iso).getTime()
@@ -112,6 +113,8 @@ export default function ForumPostDetailPage() {
 
     setSubmittingComment(true)
     try {
+      await assertContentRateLimit("forum-comment")
+
       const { data: profile } = await client
         .from("profiles")
         .select("full_name, avatar_url")
@@ -132,8 +135,9 @@ export default function ForumPostDetailPage() {
       pushToast({ type: "success", message: t("forum.commentSuccess") })
       void queryClient.invalidateQueries({ queryKey: queryKeys.forumPostDetail(post.id) })
       void queryClient.invalidateQueries({ queryKey: ["forum-posts"] })
-    } catch {
-      pushToast({ type: "error", message: t("forum.commentError") })
+    } catch (commentSubmitError) {
+      const rateMsg = formatContentRateLimitError(commentSubmitError, t)
+      pushToast({ type: "error", message: rateMsg ?? t("forum.commentError") })
     } finally {
       setSubmittingComment(false)
     }

@@ -1,7 +1,22 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { avatarImageUrl } from "./storageImageUrl.ts"
 import { broadcastChatMessage } from "./chatBroadcast.ts"
-import { assertField, LIMITS, validateTextField, validateUuid } from "./validation.ts"
+import {
+  removeChatAttachment,
+  uploadChatAttachment,
+  type ChatAttachmentMeta,
+} from "./chatAttachments.ts"
+import {
+  assertContentRateLimit,
+  parseContentRateLimitFromError,
+} from "./contentRateLimit.ts"
+import {
+  assertField,
+  chatMessagePreviewText,
+  LIMITS,
+  validateTextField,
+  validateUuid,
+} from "./validation.ts"
 
 export type ChatMessage = {
   id: string
@@ -12,7 +27,51 @@ export type ChatMessage = {
   isOwn: boolean
   /** True when the other participant's last_read_at is at or after this message. */
   readByOther: boolean
+  attachmentUrl: string | null
+  attachmentName: string | null
+  attachmentType: string | null
+  attachmentSizeBytes: number | null
 }
+
+const MESSAGE_SELECT =
+  "id, conversation_id, sender_id, body, created_at, attachment_url, attachment_name, attachment_type, attachment_size_bytes"
+
+function mapMessageRow(
+  row: {
+    id: string
+    conversation_id: string
+    sender_id: string
+    body: string | null
+    created_at: string
+    attachment_url?: string | null
+    attachment_name?: string | null
+    attachment_type?: string | null
+    attachment_size_bytes?: number | null
+  },
+  meId: string,
+  otherLastReadAt: string | null,
+): ChatMessage {
+  const createdAt = String(row.created_at)
+  const isOwn = String(row.sender_id) === meId
+  return {
+    id: String(row.id),
+    conversationId: String(row.conversation_id),
+    senderId: String(row.sender_id),
+    body: row.body != null ? String(row.body) : "",
+    createdAt,
+    isOwn,
+    readByOther: isOwn && isMessageReadByOther(createdAt, otherLastReadAt),
+    attachmentUrl: row.attachment_url != null ? String(row.attachment_url) : null,
+    attachmentName: row.attachment_name != null ? String(row.attachment_name) : null,
+    attachmentType: row.attachment_type != null ? String(row.attachment_type) : null,
+    attachmentSizeBytes:
+      row.attachment_size_bytes != null && Number.isFinite(Number(row.attachment_size_bytes))
+        ? Number(row.attachment_size_bytes)
+        : null,
+  }
+}
+
+export { chatMessagePreviewText }
 
 export function isMessageReadByOther(messageCreatedAt: string, otherLastReadAt: string | null): boolean {
   if (!otherLastReadAt) return false
@@ -94,7 +153,10 @@ export async function getOrCreateConversation(
 }
 
 type InboxMessageStats = {
-  latestByConv: Map<string, { body: string; created_at: string; sender_id: string }>
+  latestByConv: Map<
+    string,
+    { body: string; created_at: string; sender_id: string; attachment_name?: string | null }
+  >
   unreadCountMap: Map<string, number>
 }
 
@@ -103,7 +165,10 @@ async function fetchInboxMessageStats(
   convIds: string[],
   userId: string,
 ): Promise<InboxMessageStats> {
-  const latestByConv = new Map<string, { body: string; created_at: string; sender_id: string }>()
+  const latestByConv = new Map<
+    string,
+    { body: string; created_at: string; sender_id: string; attachment_name?: string | null }
+  >()
   const unreadCountMap = new Map<string, number>()
   if (convIds.length === 0) return { latestByConv, unreadCountMap }
 
@@ -135,7 +200,7 @@ async function fetchInboxMessageStats(
       .in("conversation_id", convIds),
     client
       .from("messages")
-      .select("conversation_id, body, created_at, sender_id")
+      .select("conversation_id, body, created_at, sender_id, attachment_name, attachment_url")
       .in("conversation_id", convIds)
       .order("created_at", { ascending: false }),
     client
@@ -154,9 +219,10 @@ async function fetchInboxMessageStats(
     const cid = String(m.conversation_id)
     if (!latestByConv.has(cid)) {
       latestByConv.set(cid, {
-        body: String(m.body),
+        body: m.body != null ? String(m.body) : "",
         created_at: String(m.created_at),
         sender_id: String(m.sender_id),
+        attachment_name: m.attachment_name != null ? String(m.attachment_name) : null,
       })
     }
   }
@@ -255,7 +321,9 @@ export async function fetchConversations(client: SupabaseClient): Promise<ChatCo
       otherUserId: otherId,
       otherName: prof?.full_name?.trim() || "მომხმარებელი",
       otherAvatarUrl: prof?.avatar_url ?? null,
-      lastMessagePreview: latest ? latest.body.replace(/\s+/g, " ").trim() : null,
+      lastMessagePreview: latest
+        ? chatMessagePreviewText(latest.body, latest.attachment_name)
+        : null,
       lastMessageAt: lastActivity,
       unread,
       unreadCount,
@@ -308,7 +376,7 @@ export async function fetchMessages(
   const [messagesRes, otherLastReadAt] = await Promise.all([
     client
       .from("messages")
-      .select("id, conversation_id, sender_id, body, created_at")
+      .select(MESSAGE_SELECT)
       .eq("conversation_id", convId)
       .order("created_at", { ascending: true })
       .limit(200),
@@ -317,32 +385,40 @@ export async function fetchMessages(
 
   if (messagesRes.error) throw messagesRes.error
 
-  const messages = (messagesRes.data ?? []).map((row) => {
-    const createdAt = String(row.created_at)
-    const isOwn = String(row.sender_id) === user.id
-    return {
-      id: String(row.id),
-      conversationId: String(row.conversation_id),
-      senderId: String(row.sender_id),
-      body: String(row.body),
-      createdAt,
-      isOwn,
-      readByOther: isOwn && isMessageReadByOther(createdAt, otherLastReadAt),
-    }
-  })
+  const messages = (messagesRes.data ?? []).map((row) => mapMessageRow(row, user.id, otherLastReadAt))
 
   return { messages, meId: user.id, otherLastReadAt }
 }
 
-export async function sendMessage(client: SupabaseClient, conversationId: string, body: string): Promise<ChatMessage> {
+export type SendMessageOpts = {
+  body?: string
+  file?: File | null
+  onUploadProgress?: (ratio: number) => void
+}
+
+export async function sendMessage(
+  client: SupabaseClient,
+  conversationId: string,
+  bodyOrOpts: string | SendMessageOpts,
+): Promise<ChatMessage> {
   const convId = requireConversationId(conversationId)
+  const opts: SendMessageOpts =
+    typeof bodyOrOpts === "string" ? { body: bodyOrOpts } : (bodyOrOpts ?? {})
+
+  const rawBody = opts.body ?? ""
+  const hasFile = Boolean(opts.file)
   const trimmed = assertField(
-    validateTextField(body, {
-      min: LIMITS.chatMessageMin,
+    validateTextField(rawBody, {
+      min: hasFile ? 0 : LIMITS.chatMessageMin,
       max: LIMITS.chatMessage,
+      required: !hasFile,
       label: "შეტყობინება",
     }),
   )
+
+  if (!trimmed && !hasFile) {
+    throw new Error("Message cannot be empty")
+  }
 
   const {
     data: { user },
@@ -350,28 +426,64 @@ export async function sendMessage(client: SupabaseClient, conversationId: string
   } = await client.auth.getUser()
   if (userErr || !user) throw new Error("Not authenticated")
 
+  await assertContentRateLimit("message", { conversationId: convId })
+
+  const messageId =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : undefined
+
+  let attachment: ChatAttachmentMeta | null = null
+  if (opts.file) {
+    if (!messageId) throw new Error("Could not generate message id")
+    try {
+      attachment = await uploadChatAttachment(client, {
+        conversationId: convId,
+        messageId,
+        file: opts.file,
+        onProgress: opts.onUploadProgress,
+      })
+    } catch (e) {
+      throw e instanceof Error ? e : new Error("Upload failed")
+    }
+  }
+
+  const insertPayload: {
+    id?: string
+    conversation_id: string
+    sender_id: string
+    body: string | null
+    attachment_url?: string
+    attachment_name?: string
+    attachment_type?: string
+    attachment_size_bytes?: number
+  } = {
+    conversation_id: convId,
+    sender_id: user.id,
+    body: trimmed || null,
+  }
+  if (messageId) insertPayload.id = messageId
+  if (attachment) {
+    insertPayload.attachment_url = attachment.url
+    insertPayload.attachment_name = attachment.name
+    insertPayload.attachment_type = attachment.type
+    insertPayload.attachment_size_bytes = attachment.sizeBytes
+  }
+
   const { data, error } = await client
     .from("messages")
-    .insert({
-      conversation_id: convId,
-      sender_id: user.id,
-      body: trimmed,
-    })
-    .select("id, conversation_id, sender_id, body, created_at")
+    .insert(insertPayload)
+    .select(MESSAGE_SELECT)
     .single()
 
-  if (error) throw error
-
-  const createdAt = String(data.created_at)
-  const message: ChatMessage = {
-    id: String(data.id),
-    conversationId: String(data.conversation_id),
-    senderId: String(data.sender_id),
-    body: String(data.body),
-    createdAt,
-    isOwn: true,
-    readByOther: false,
+  if (error) {
+    if (attachment) void removeChatAttachment(client, attachment.url)
+    const limited = parseContentRateLimitFromError(error)
+    if (limited) throw limited
+    throw error
   }
+
+  const message = mapMessageRow(data, user.id, null)
 
   void (async () => {
     try {

@@ -1,9 +1,6 @@
 "use client"
 
-/**
- * საჭიროა მთავარი აპლიკაციის (Vite) მარშრუტი /cv-generator.
- * ეს ფაილი აღარ იყენებს cv-generate-ს.
- */
+/** Legacy Next.js stub — use the Vite app route /cv-generator instead. */
 export default function LegacyCVGeneratorStub() {
   return (
     <main className="mx-auto max-w-2xl p-8 text-sm text-slate-700">

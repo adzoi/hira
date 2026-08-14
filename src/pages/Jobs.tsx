@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import { useInfiniteQuery } from "@tanstack/react-query"
 import { Link, useSearchParams } from "react-router-dom"
 import { OptimizedImage } from "../components/OptimizedImage.tsx"
@@ -336,7 +336,11 @@ type JobsCatalogPage = {
   total: number
 }
 
-async function loadJobsCatalogPage(category: string, page: number): Promise<JobsCatalogPage> {
+async function loadJobsCatalogPage(
+  category: string,
+  page: number,
+  searchQuery: string | null = null,
+): Promise<JobsCatalogPage> {
   if (!isSupabaseConfigured || !supabase) {
     return {
       jobs: mockJobs,
@@ -348,7 +352,7 @@ async function loadJobsCatalogPage(category: string, page: number): Promise<Jobs
   }
 
   const client = supabase
-  const payload = (await fetchJobsPagePayload(category, page)) as Record<string, unknown> | null
+  const payload = (await fetchJobsPagePayload(category, page, searchQuery)) as Record<string, unknown> | null
   const jobRows = Array.isArray(payload?.jobs) ? (payload.jobs as unknown[]) : []
   const categoryRows = Array.isArray(payload?.categories) ? (payload.categories as unknown[]) : []
   const totalRaw = payload?.total_count ?? payload?.total
@@ -356,7 +360,7 @@ async function loadJobsCatalogPage(category: string, page: number): Promise<Jobs
   const safeTotal = Number.isFinite(total) ? total : 0
 
   const mappedJobs = mapRpcRowsToJobs(jobRows)
-  const jobs = page === 1 && mappedJobs.length === 0 ? mockJobs : mappedJobs
+  const jobs = page === 1 && mappedJobs.length === 0 && !searchQuery ? mockJobs : mappedJobs
 
   const categories = categoryRows.map((c) => {
     const row = c as Record<string, unknown>
@@ -414,6 +418,8 @@ export default function JobsPage() {
   const advancedDropdownRef = useRef<HTMLDivElement>(null)
 
   const [searchText, setSearchText] = useState("")
+  const deferredSearchText = useDeferredValue(searchText)
+  const serverSearchQuery = deferredSearchText.trim()
   const [filterRootCategoryId, setFilterRootCategoryId] = useState("")
   const [filterMidCategoryId, setFilterMidCategoryId] = useState("")
   const [filterSpecializationId, setFilterSpecializationId] = useState("")
@@ -461,8 +467,9 @@ export default function JobsPage() {
     isFetchingNextPage: loadingMore,
     refetch,
   } = useInfiniteQuery({
-    queryKey: queryKeys.jobsCatalog(jobsCategoryKey),
-    queryFn: ({ pageParam }) => loadJobsCatalogPage(jobsCategoryKey, pageParam),
+    queryKey: queryKeys.jobsCatalog(jobsCategoryKey, serverSearchQuery),
+    queryFn: ({ pageParam }) =>
+      loadJobsCatalogPage(jobsCategoryKey, pageParam, serverSearchQuery || null),
     initialPageParam: 1,
     staleTime: 30_000,
     getNextPageParam: (lastPage, _allPages, lastPageParam) => {
@@ -750,34 +757,10 @@ export default function JobsPage() {
   ])
 
   const filteredJobs = useMemo(() => {
-    const search = searchText.trim().toLowerCase()
     const minBudget = appliedBudgetMin ? Number(appliedBudgetMin) : null
     const maxBudget = appliedBudgetMax ? Number(appliedBudgetMax) : null
 
     return jobs.filter((job) => {
-      const skillsBlob = job.skills.map((s) => s.name).join(" ").toLowerCase()
-      const taxonomyBlob = [
-        jobCategoryLabel(job, categories, locale),
-        jobSubcategoryLabel(job, subcategoryNamesById, locale) ?? "",
-        job.categoryName,
-        job.subcategoryName ?? "",
-        categories.find((c) => c.id === job.categoryId)?.name_en ?? "",
-        job.subcategoryId ? (subcategoryNamesById.get(job.subcategoryId)?.name_en ?? "") : "",
-      ]
-        .join(" ")
-        .toLowerCase()
-      const cityBlob = (job.city ?? "").toLowerCase()
-      const matchesSearch =
-        search.length === 0 ||
-        job.title.toLowerCase().includes(search) ||
-        (job.titleEn ?? "").toLowerCase().includes(search) ||
-        job.description.toLowerCase().includes(search) ||
-        (job.descriptionEn ?? "").toLowerCase().includes(search) ||
-        skillsBlob.includes(search) ||
-        taxonomyBlob.includes(search) ||
-        (cityBlob.length > 0 && cityBlob.includes(search))
-      if (!matchesSearch) return false
-
       if (
         catalogFilterEffectiveId &&
         !catalogSelectionMatchesEntity(
@@ -821,12 +804,9 @@ export default function JobsPage() {
     })
   }, [
     jobs,
-    searchText,
     catalogFilterEffectiveId,
     categories,
-    subcategoryNamesById,
     subcategoryParentById,
-    locale,
     appliedBudgetTypes,
     appliedBudgetMin,
     appliedBudgetMax,
@@ -838,7 +818,9 @@ export default function JobsPage() {
 
   const sortedJobs = useMemo(() => {
     const list = [...filteredJobs]
+    // When FTS is active, preserve server VIP + rank + recency order for the default sort.
     if (sortBy === "newest") {
+      if (serverSearchQuery) return list
       return list.sort((a, b) => {
         const v = (b.vipActive ? 1 : 0) - (a.vipActive ? 1 : 0)
         if (v !== 0) return v
@@ -863,7 +845,7 @@ export default function JobsPage() {
       const bTs = b.applicationDeadline ? +new Date(b.applicationDeadline) : Number.MAX_SAFE_INTEGER
       return aTs - bTs
     })
-  }, [filteredJobs, sortBy])
+  }, [filteredJobs, sortBy, serverSearchQuery])
 
   const budgetLabel = (job: JobItem) => formatJobBudget(job.budgetMin, job.budgetMax, job.budgetType)
 

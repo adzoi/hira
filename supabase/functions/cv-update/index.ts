@@ -9,6 +9,9 @@ import {
   validateOptionalUrl,
   validateTextField,
 } from "../_shared/validation.ts"
+import { corsHeadersFor } from "../_shared/cors.ts"
+import { requestLog } from "../_shared/structuredLog.ts"
+import { serveWithSentry } from "../_shared/sentry.ts"
 
 declare const Deno: {
   serve: (handler: (req: Request) => Response | Promise<Response>) => void
@@ -68,7 +71,7 @@ function sanitizeCvField(key: string, value: unknown): unknown {
   return value
 }
 
-Deno.serve(async (req: Request) => {
+serveWithSentry("cv-update", async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeadersFor(req) })
   if (req.method !== "POST" && req.method !== "PATCH") {
     return jsonResponse(req, { errors: ["Method not allowed"] }, 405)
@@ -90,6 +93,7 @@ Deno.serve(async (req: Request) => {
     if (!token) return jsonResponse(req, { errors: ["Unauthorized"] }, 401)
     const { data: authData, error: authError } = await supabaseClient.auth.getUser(token)
     if (authError || !authData.user) return jsonResponse(req, { errors: ["Unauthorized"] }, 401)
+    requestLog(req)?.set({ user_id: authData.user.id })
 
     const rateLimited = await enforceRateLimit(
       req,
@@ -157,7 +161,7 @@ Deno.serve(async (req: Request) => {
       .single()
 
     if (updateError) {
-      console.error("[cv-update] upsert error:", updateError.message)
+      requestLog(req)?.event("cv_upsert_failed", { error: updateError.message }, "error")
       return jsonResponse(req, { errors: [updateError.message] }, 500)
     }
     return jsonResponse(req, { success: true, cv: updatedCV }, 200)

@@ -12,7 +12,18 @@ export type ConversationReadRealtimeHandlers = {
 }
 
 export type ChatInboxEvent =
-  | { kind: "message"; messageId: string; conversationId: string; senderId: string; body: string; createdAt: string }
+  | {
+      kind: "message"
+      messageId: string
+      conversationId: string
+      senderId: string
+      body: string
+      createdAt: string
+      attachmentUrl?: string | null
+      attachmentName?: string | null
+      attachmentType?: string | null
+      attachmentSizeBytes?: number | null
+    }
   | { kind: "reads" }
 
 function realtimeChannelSuffix(): string {
@@ -25,6 +36,29 @@ function requireConversationIdForRealtime(conversationId: string): string {
   const result = validateUuid(conversationId, "საუბარი")
   if (!result.ok) throw new Error(result.message)
   return result.value
+}
+
+function mapRealtimeMessage(row: Record<string, unknown>, meId: string): ChatMessage | null {
+  if (!row?.id || !row.conversation_id || !row.sender_id || !row.created_at) return null
+  const body = row.body != null ? String(row.body) : ""
+  const attachmentUrl = row.attachment_url != null ? String(row.attachment_url) : null
+  if (!body.trim() && !attachmentUrl) return null
+  return {
+    id: String(row.id),
+    conversationId: String(row.conversation_id),
+    senderId: String(row.sender_id),
+    body,
+    createdAt: String(row.created_at),
+    isOwn: String(row.sender_id) === meId,
+    readByOther: false,
+    attachmentUrl,
+    attachmentName: row.attachment_name != null ? String(row.attachment_name) : null,
+    attachmentType: row.attachment_type != null ? String(row.attachment_type) : null,
+    attachmentSizeBytes:
+      row.attachment_size_bytes != null && Number.isFinite(Number(row.attachment_size_bytes))
+        ? Number(row.attachment_size_bytes)
+        : null,
+  }
 }
 
 export function subscribeToConversationMessages(
@@ -46,17 +80,9 @@ export function subscribeToConversationMessages(
       filter,
     },
     (payload) => {
-      const row = payload.new as Record<string, unknown>
-      if (!row?.id) return
-      handlers.onInsert({
-        id: String(row.id),
-        conversationId: String(row.conversation_id),
-        senderId: String(row.sender_id),
-        body: String(row.body),
-        createdAt: String(row.created_at),
-        isOwn: String(row.sender_id) === meId,
-        readByOther: false,
-      })
+      const message = mapRealtimeMessage(payload.new as Record<string, unknown>, meId)
+      if (!message) return
+      handlers.onInsert(message)
     },
   )
 
@@ -128,14 +154,24 @@ export function subscribeToChatInbox(
     },
     (payload) => {
       const row = payload.new as Record<string, unknown>
-      if (!row?.id || !row.conversation_id || !row.sender_id || !row.body || !row.created_at) return
+      if (!row?.id || !row.conversation_id || !row.sender_id || !row.created_at) return
+      const body = row.body != null ? String(row.body) : ""
+      const attachmentUrl = row.attachment_url != null ? String(row.attachment_url) : null
+      if (!body.trim() && !attachmentUrl) return
       onEvent({
         kind: "message",
         messageId: String(row.id),
         conversationId: String(row.conversation_id),
         senderId: String(row.sender_id),
-        body: String(row.body),
+        body,
         createdAt: String(row.created_at),
+        attachmentUrl,
+        attachmentName: row.attachment_name != null ? String(row.attachment_name) : null,
+        attachmentType: row.attachment_type != null ? String(row.attachment_type) : null,
+        attachmentSizeBytes:
+          row.attachment_size_bytes != null && Number.isFinite(Number(row.attachment_size_bytes))
+            ? Number(row.attachment_size_bytes)
+            : null,
       })
     },
   )

@@ -29,6 +29,9 @@ export const LIMITS = {
   listingDescriptionMin: 10,
   chatMessage: 4000,
   chatMessageMin: 1,
+  chatAttachmentMaxBytes: 15 * 1024 * 1024,
+  chatAttachmentMaxMb: 15,
+  chatAttachmentName: 200,
   inquiryMessage: 5000,
   inquiryMessageMin: 10,
   coverLetter: 5000,
@@ -193,7 +196,7 @@ export function validateTags(raw: string[]): FieldResult<string[]> {
   const out: string[] = []
   for (const tag of raw) {
     const r = validateTextField(tag, { max: LIMITS.tag, min: 1, label: "ტეგი" })
-    if (!r.ok) return r
+    if (r.ok === false) return fail(r.message)
     if (!out.includes(r.value)) out.push(r.value)
   }
   return { ok: true, value: out }
@@ -238,7 +241,7 @@ export function validateOptionalUrl(raw: unknown): FieldResult<string | null> {
 }
 
 export function assertField<T>(result: FieldResult<T>): T {
-  if (!result.ok) throw new Error(result.message)
+  if (result.ok === false) throw new Error(result.message)
   return result.value
 }
 
@@ -298,4 +301,86 @@ export function validateCoverLetter(raw: string): FieldResult<string | null> {
   }
   if (cleaned.length > LIMITS.coverLetter) return fail(msg("validation.fieldTooLong", { label: msg("nav.comment"), max: LIMITS.coverLetter }))
   return { ok: true, value: cleaned }
+}
+
+/** Allowed chat attachment mime types (must match extension via validateChatAttachment). */
+export const CHAT_ATTACHMENT_MIME_TYPES = [
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "image/png",
+  "image/jpeg",
+  "application/zip",
+  "application/x-zip-compressed",
+] as const
+
+export const CHAT_ATTACHMENT_EXTENSIONS = ["pdf", "docx", "xlsx", "png", "jpg", "jpeg", "zip"] as const
+
+const CHAT_ATTACHMENT_MIME_BY_EXT: Record<(typeof CHAT_ATTACHMENT_EXTENSIONS)[number], readonly string[]> = {
+  pdf: ["application/pdf"],
+  docx: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+  xlsx: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+  png: ["image/png"],
+  jpg: ["image/jpeg"],
+  jpeg: ["image/jpeg"],
+  zip: ["application/zip", "application/x-zip-compressed"],
+}
+
+/** Strip anything that isn't alphanumeric, dash, underscore; keep a single extension dot. */
+export function sanitizeChatAttachmentFilename(filename: string): string {
+  const trimmed = filename.trim().slice(0, LIMITS.chatAttachmentName)
+  const lastDot = trimmed.lastIndexOf(".")
+  const rawBase = lastDot > 0 ? trimmed.slice(0, lastDot) : trimmed
+  const rawExt = lastDot > 0 ? trimmed.slice(lastDot + 1) : ""
+  const base = rawBase.replace(/[^a-zA-Z0-9_-]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "") || "file"
+  const ext = rawExt.replace(/[^a-zA-Z0-9]/g, "").toLowerCase().slice(0, 10)
+  return ext ? `${base.slice(0, 160)}.${ext}` : base.slice(0, 160)
+}
+
+function chatAttachmentExtension(filename: string): string | null {
+  const lastDot = filename.lastIndexOf(".")
+  if (lastDot <= 0 || lastDot === filename.length - 1) return null
+  return filename.slice(lastDot + 1).toLowerCase()
+}
+
+/** Validate mime + extension (both must agree) and 15MB max before chat upload. */
+export function validateChatAttachment(file: File): FieldResult<File> {
+  if (!(file instanceof File)) return fail(msg("validation.chatAttachmentInvalid"))
+  if (file.size <= 0) return fail(msg("validation.chatAttachmentEmpty"))
+  if (file.size > LIMITS.chatAttachmentMaxBytes) {
+    return fail(msg("validation.chatAttachmentTooLarge", { max: LIMITS.chatAttachmentMaxMb }))
+  }
+
+  const ext = chatAttachmentExtension(file.name)
+  if (!ext || !(CHAT_ATTACHMENT_EXTENSIONS as readonly string[]).includes(ext)) {
+    return fail(msg("validation.chatAttachmentType"))
+  }
+
+  const allowedMimes = CHAT_ATTACHMENT_MIME_BY_EXT[ext as (typeof CHAT_ATTACHMENT_EXTENSIONS)[number]]
+  const mime = (file.type || "").toLowerCase()
+  if (!mime || !allowedMimes.includes(mime)) {
+    return fail(msg("validation.chatAttachmentType"))
+  }
+  if (!(CHAT_ATTACHMENT_MIME_TYPES as readonly string[]).includes(mime)) {
+    return fail(msg("validation.chatAttachmentType"))
+  }
+
+  return { ok: true, value: file }
+}
+
+/** Preview text for inbox / notifications when body is empty but a file was sent. */
+export function chatAttachmentPreviewLabel(attachmentName: string | null | undefined): string {
+  const name = attachmentName?.trim() || "file"
+  return `Sent a file: ${name}`
+}
+
+/** Inbox / notification preview: text body, or "Sent a file: …" for attachment-only. */
+export function chatMessagePreviewText(
+  body: string | null | undefined,
+  attachmentName?: string | null,
+): string {
+  const trimmed = (body ?? "").replace(/\s+/g, " ").trim()
+  if (trimmed) return trimmed
+  if (attachmentName?.trim()) return chatAttachmentPreviewLabel(attachmentName)
+  return ""
 }

@@ -18,6 +18,7 @@ import { isSupabaseConfigured, supabase } from "../lib/supabase.ts"
 import { getAuthenticatedSession } from "../lib/supabaseAuth.ts"
 import { validateTextField, LIMITS } from "../lib/validation.ts"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
+import { assertContentRateLimit, formatContentRateLimitError } from "../lib/contentRateLimit.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 
 const fieldClass =
@@ -142,6 +143,8 @@ export default function ForumPostFormPage() {
         void queryClient.invalidateQueries({ queryKey: ["forum-posts"] })
         navigate(`/forum/${postId}`)
       } else {
+        await assertContentRateLimit("forum-post")
+
         const { data: profile } = await client
           .from("profiles")
           .select("full_name, avatar_url")
@@ -167,8 +170,12 @@ export default function ForumPostFormPage() {
         void queryClient.invalidateQueries({ queryKey: ["forum-posts"] })
         navigate(`/forum/${inserted.id}`)
       }
-    } catch {
-      pushToast({ type: "error", message: isEdit ? t("forum.updateError") : t("forum.createError") })
+    } catch (submitError) {
+      const rateMsg = formatContentRateLimitError(submitError, t)
+      pushToast({
+        type: "error",
+        message: rateMsg ?? (isEdit ? t("forum.updateError") : t("forum.createError")),
+      })
     } finally {
       setSubmitting(false)
     }

@@ -27,6 +27,7 @@ import { queryKeys } from "../lib/queryKeys.ts"
 import { pickCategoryName } from "../lib/categoryLocale.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
+import { assertContentRateLimit, formatContentRateLimitError } from "../lib/contentRateLimit.ts"
 
 type SkillCategoryRow = { id: string; name_ka: string; name_en?: string | null; parent_id: string | null }
 
@@ -258,7 +259,10 @@ export default function ProfilePage() {
     const user = (await supabase.auth.getUser()).data.user
     if (!user) return
     const uploadCheck = validateAvatarUpload(file)
-    if (!uploadCheck.ok) return setError(uploadCheck.message)
+    if (uploadCheck.ok === false) {
+      setError(uploadCheck.message)
+      return
+    }
     setAvatarUploading(true)
     setError("")
     try {
@@ -333,10 +337,10 @@ export default function ProfilePage() {
         max: LIMITS.fullName,
         label: "სახელი",
       })
-      if (!fullNameResult.ok) throw new Error(fullNameResult.message)
+      if (fullNameResult.ok === false) throw new Error(fullNameResult.message)
 
       const websiteResult = validateOptionalUrl(companyWebsite)
-      if (!websiteResult.ok) throw new Error(websiteResult.message)
+      if (websiteResult.ok === false) throw new Error(websiteResult.message)
 
       await supabase.from("profiles").update({
         full_name: fullNameResult.value,
@@ -352,7 +356,7 @@ export default function ProfilePage() {
           required: false,
           label: "ბიო",
         })
-        if (!bioResult.ok) throw new Error(bioResult.message)
+        if (bioResult.ok === false) throw new Error(bioResult.message)
 
         const parsedSocial = parseFreelancerSocialFields({
           linkedinUrl,
@@ -494,6 +498,7 @@ export default function ProfilePage() {
             if (updateServiceError) throw updateServiceError
             savedListingIds.push(listing.id)
           } else {
+            await assertContentRateLimit("listing-post")
             const { data: insertedService, error: insertServiceError } = await supabase
               .from("services")
               .insert({
@@ -612,14 +617,14 @@ export default function ProfilePage() {
           max: 120,
           label: "კომპანიის სახელი",
         })
-        if (!companyNameResult.ok) throw new Error(companyNameResult.message)
+        if (companyNameResult.ok === false) throw new Error(companyNameResult.message)
 
         const companyDescriptionResult = validateTextField(companyDescription, {
           min: LIMITS.companyDescriptionMin,
           max: LIMITS.companyDescription,
           label: "აღწერა",
         })
-        if (!companyDescriptionResult.ok) throw new Error(companyDescriptionResult.message)
+        if (companyDescriptionResult.ok === false) throw new Error(companyDescriptionResult.message)
 
         await supabase.from("hirer_profiles").upsert({
           user_id: userId,
@@ -631,7 +636,8 @@ export default function ProfilePage() {
       }
       setSuccess(t("profile.changesSaved"))
     } catch (err) {
-      setError(formatSaveError(err))
+      const rateMsg = formatContentRateLimitError(err, t)
+      setError(rateMsg ?? formatSaveError(err))
     } finally {
       setSaving(false)
     }
@@ -770,7 +776,7 @@ export default function ProfilePage() {
       return
     }
     const newPasswordResult = validatePassword(newPassword)
-    if (!newPasswordResult.ok) {
+    if (newPasswordResult.ok === false) {
       setAccountErr(newPasswordResult.message)
       return
     }

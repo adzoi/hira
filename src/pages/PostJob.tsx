@@ -24,6 +24,7 @@ import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
 import { OptimizedImage } from "../components/OptimizedImage.tsx"
 import { compressImageForUpload } from "../lib/compressImageForUpload.ts"
+import { assertContentRateLimit, formatContentRateLimitError } from "../lib/contentRateLimit.ts"
 
 const MAX_JOB_IMAGES = 3
 const MAX_INPUT_IMAGE_BYTES = 10 * 1024 * 1024
@@ -462,6 +463,8 @@ export default function PostJobPage() {
         }
         currentJobId = jobId
       } else {
+        await assertContentRateLimit("job-post")
+
         const exp = new Date()
         exp.setDate(exp.getDate() + 30)
 
@@ -549,12 +552,14 @@ export default function PostJobPage() {
         state: { successMessage: isEdit ? t("postJob.updatedSuccess") : t("postJob.publishedSuccess") },
       })
     } catch (e) {
+      const rateMsg = formatContentRateLimitError(e, t)
       setPageError(
-        e instanceof Error
-          ? e.message
-          : isEdit
-            ? t("postJob.updateFailed")
-            : t("postJob.publishFailedShort"),
+        rateMsg ??
+          (e instanceof Error
+            ? e.message
+            : isEdit
+              ? t("postJob.updateFailed")
+              : t("postJob.publishFailedShort")),
       )
     } finally {
       setSubmitting(false)

@@ -221,7 +221,7 @@ export default function OnboardingPage() {
     if (!user) return
 
     const uploadCheck = validateAvatarUpload(file)
-    if (!uploadCheck.ok) {
+    if (uploadCheck.ok === false) {
       setError(uploadCheck.message)
       return
     }
@@ -457,19 +457,19 @@ export default function OnboardingPage() {
       max: 120,
       label: "კომპანიის სახელი",
     })
-    if (!companyNameResult.ok) return setError(companyNameResult.message)
+    if (companyNameResult.ok === false) return setError(companyNameResult.message)
 
     const companyDescriptionResult = validateTextField(companyDescription, {
       min: LIMITS.companyDescriptionMin,
       max: LIMITS.companyDescription,
       label: "აღწერა",
     })
-    if (!companyDescriptionResult.ok) return setError(companyDescriptionResult.message)
+    if (companyDescriptionResult.ok === false) return setError(companyDescriptionResult.message)
 
     if (!industry) return setError("აირჩიე ინდუსტრია.")
 
     const websiteResult = validateOptionalUrl(companyWebsite)
-    if (!websiteResult.ok) return setError(websiteResult.message)
+    if (websiteResult.ok === false) return setError(websiteResult.message)
 
     setSubmitting(true)
     setError("")

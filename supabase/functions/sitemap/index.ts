@@ -1,6 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
 import { enforceRateLimit, getRedis } from "../_shared/rateLimit.ts"
 import { corsHeadersFor } from "../_shared/cors.ts"
+import { logStructured } from "../_shared/structuredLog.ts"
+import { serveWithSentry } from "../_shared/sentry.ts"
 
 declare const Deno: {
   serve: (handler: (req: Request) => Response | Promise<Response>) => void
@@ -181,7 +183,7 @@ function xmlResponse(req: Request, body: string, status = 200): Response {
   })
 }
 
-Deno.serve(async (req) => {
+serveWithSentry("sitemap", async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeadersFor(req) })
   }
@@ -237,7 +239,7 @@ Deno.serve(async (req) => {
     return xmlResponse(req, xml)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    console.error("[sitemap]", message)
+    logStructured("error", "sitemap", "sitemap_build_failed", { error: message })
     return xmlResponse(req, buildSitemapXml(staticEntries()), 500)
   }
 })

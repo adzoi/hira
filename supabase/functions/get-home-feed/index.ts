@@ -3,6 +3,7 @@ import { enforceRateLimit, getRedis } from "../_shared/rateLimit.ts"
 // @ts-ignore: URL imports are resolved at Supabase Edge runtime (Deno), not by local TS server.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
 import { corsHeadersFor } from "../_shared/cors.ts"
+import { serveWithSentry } from "../_shared/sentry.ts"
 
 declare const Deno: {
   serve: (handler: (req: Request) => Response | Promise<Response>) => void
@@ -45,7 +46,7 @@ async function deleteExpiredJobs(admin: ReturnType<typeof createClient>): Promis
   }
 }
 
-Deno.serve(async (req) => {
+serveWithSentry("get-home-feed", async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeadersFor(req) })
   }

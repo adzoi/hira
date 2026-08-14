@@ -25,7 +25,10 @@ export function subscribeInboxBroadcastHub(
     const listeners = new Set<(payload: ChatBroadcastPayload) => void>()
     channel.on("broadcast", { event: "chat_message" }, ({ payload }) => {
       const row = payload as Partial<ChatBroadcastPayload> | null
-      if (!row?.messageId || !row.conversationId || !row.senderId || !row.body || !row.createdAt) return
+      if (!row?.messageId || !row.conversationId || !row.senderId || !row.createdAt) return
+      const hasBody = Boolean((row.body ?? "").trim())
+      const hasAttachment = Boolean(row.attachmentUrl)
+      if (!hasBody && !hasAttachment) return
       for (const fn of listeners) {
         fn(row as ChatBroadcastPayload)
       }

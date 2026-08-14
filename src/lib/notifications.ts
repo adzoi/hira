@@ -1,6 +1,7 @@
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js"
 import type { Json } from "./database.types.ts"
 import { subscribeRealtimeChannel } from "./realtimeAuth.ts"
+import { chatMessagePreviewText } from "./validation.ts"
 
 export type AppNotification = {
   id: string
@@ -17,6 +18,18 @@ export type AppNotification = {
 /** Chat messages use the chat icon; they must not appear on the bell. */
 export function isBellNotification(n: Pick<AppNotification, "type">): boolean {
   return n.type !== "chat_message"
+}
+
+/**
+ * Body text for a chat_message notification / toast.
+ * Attachment-only messages use "Sent a file: {filename}" instead of a blank body.
+ * (Chat no longer inserts bell rows; this keeps broadcast/email-shaped payloads consistent.)
+ */
+export function chatNotificationBody(
+  body: string | null | undefined,
+  attachmentName?: string | null,
+): string {
+  return chatMessagePreviewText(body, attachmentName)
 }
 
 function mapRow(row: Record<string, unknown>): AppNotification {

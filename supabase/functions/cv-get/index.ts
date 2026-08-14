@@ -1,6 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import { enforceRateLimit } from "../_shared/rateLimit.ts"
 import { corsHeadersFor } from "../_shared/cors.ts"
+import { requestLog } from "../_shared/structuredLog.ts"
+import { serveWithSentry } from "../_shared/sentry.ts"
 
 function jsonResponse(req: Request, body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: corsHeadersFor(req) })
@@ -14,7 +16,7 @@ function getBearerToken(req: Request): string | null {
   return token
 }
 
-Deno.serve(async (req: Request) => {
+serveWithSentry("cv-get", async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeadersFor(req) })
   if (req.method !== "GET") return jsonResponse(req, { errors: ["Method not allowed"] }, 405)
 
@@ -41,6 +43,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     if (slug) {
+      requestLog(req)?.set({ slug })
       if (slug.length < 2) return jsonResponse(req, { errors: ["Slug must be at least 2 characters."] }, 400)
 
       const { data: publicCV, error: publicError } = await supabaseClient
@@ -56,6 +59,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (userId) {
+      requestLog(req)?.set({ target_user_id: userId })
       const { data: publicVisibleCv, error: publicVisibleError } = await supabaseClient
         .from("user_cvs")
         .select("*")
@@ -71,6 +75,7 @@ Deno.serve(async (req: Request) => {
     if (!token) return jsonResponse(req, { errors: ["Unauthorized"] }, 401)
     const { data: authData, error: authError } = await supabaseClient.auth.getUser(token)
     if (authError || !authData.user) return jsonResponse(req, { errors: ["Unauthorized"] }, 401)
+    requestLog(req)?.set({ user_id: authData.user.id })
 
     const { data: ownCV, error: ownError } = await supabaseClient
       .from("user_cvs")

@@ -775,21 +775,33 @@ export interface Database {
       }
       messages: {
         Row: {
-          body: string
+          attachment_name: string | null
+          attachment_size_bytes: number | null
+          attachment_type: string | null
+          attachment_url: string | null
+          body: string | null
           conversation_id: string
           created_at: string
           id: string
           sender_id: string
         }
         Insert: {
-          body: string
+          attachment_name?: string | null
+          attachment_size_bytes?: number | null
+          attachment_type?: string | null
+          attachment_url?: string | null
+          body?: string | null
           conversation_id: string
           created_at?: string
           id?: string
           sender_id: string
         }
         Update: {
-          body?: string
+          attachment_name?: string | null
+          attachment_size_bytes?: number | null
+          attachment_type?: string | null
+          attachment_url?: string | null
+          body?: string | null
           conversation_id?: string
           created_at?: string
           id?: string
@@ -1488,6 +1500,13 @@ export interface Database {
           p_search?: string | null
           p_limit?: number
           p_offset?: number
+        }
+        Returns: Json
+      }
+      get_recommended_jobs_for_freelancer: {
+        Args: {
+          p_freelancer_id: string
+          p_limit?: number
         }
         Returns: Json
       }

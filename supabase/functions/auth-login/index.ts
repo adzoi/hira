@@ -2,6 +2,7 @@
 import { enforceAuthRateLimit } from "../_shared/rateLimit.ts"
 import { readJsonBody, validateEmail, validatePasswordForLogin } from "../_shared/validation.ts"
 import { corsHeadersFor } from "../_shared/cors.ts"
+import { serveWithSentry } from "../_shared/sentry.ts"
 
 declare const Deno: {
   serve: (handler: (req: Request) => Response | Promise<Response>) => void
@@ -20,7 +21,7 @@ type LoginBody = {
   password?: string
 }
 
-Deno.serve(async (req) => {
+serveWithSentry("auth-login", async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeadersFor(req) })
   }

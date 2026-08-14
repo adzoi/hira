@@ -1,6 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
 import { enforceRateLimit } from "../_shared/rateLimit.ts"
 import { corsHeadersFor } from "../_shared/cors.ts"
+import { requestLog } from "../_shared/structuredLog.ts"
+import { serveWithSentry } from "../_shared/sentry.ts"
 
 function jsonResponse(req: Request, body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -17,7 +19,7 @@ function paypalClientSecret(): string {
   )
 }
 
-async function paypalAccessToken(apiBase: string, clientId: string, secret: string): Promise<string> {
+async function paypalAccessToken(req: Request, apiBase: string, clientId: string, secret: string): Promise<string> {
   const auth = btoa(`${clientId}:${secret}`)
   const res = await fetch(`${apiBase}/v1/oauth2/token`, {
     method: "POST",
@@ -29,7 +31,7 @@ async function paypalAccessToken(apiBase: string, clientId: string, secret: stri
   })
   if (!res.ok) {
     const t = await res.text()
-    console.error("[paypal-capture] PayPal token error", res.status, t)
+    requestLog(req)?.event("paypal_token_failed", { http_status: res.status, detail: t.slice(0, 500) }, "error")
     throw new Error("PayPal authentication failed")
   }
   const data = (await res.json()) as { access_token?: string }
@@ -38,10 +40,12 @@ async function paypalAccessToken(apiBase: string, clientId: string, secret: stri
 }
 
 async function paypalGetOrder(
+  req: Request,
   apiBase: string,
   accessToken: string,
   orderId: string,
 ): Promise<Record<string, unknown>> {
+  requestLog(req)?.event("paypal_order_lookup_start", { order_id: orderId })
   const res = await fetch(`${apiBase}/v2/checkout/orders/${encodeURIComponent(orderId)}`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -50,9 +54,14 @@ async function paypalGetOrder(
   })
   const body = (await res.json()) as Record<string, unknown>
   if (!res.ok) {
-    console.error("[paypal-capture] get order failed", res.status, body)
+    requestLog(req)?.event(
+      "paypal_order_lookup_failed",
+      { order_id: orderId, http_status: res.status, paypal_status: body.status ?? null },
+      "error",
+    )
     throw new Error("PayPal order lookup failed")
   }
+  requestLog(req)?.event("paypal_order_lookup_ok", { order_id: orderId, paypal_status: body.status ?? null })
   return body
 }
 
@@ -61,10 +70,12 @@ async function paypalGetOrder(
  * @see https://developer.paypal.com/docs/api/orders/v2/#orders_capture
  */
 async function paypalCaptureOrder(
+  req: Request,
   apiBase: string,
   accessToken: string,
   orderId: string,
 ): Promise<Record<string, unknown>> {
+  requestLog(req)?.event("paypal_order_capture_start", { order_id: orderId })
   const res = await fetch(`${apiBase}/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`, {
     method: "POST",
     headers: {
@@ -75,7 +86,11 @@ async function paypalCaptureOrder(
   })
   const body = (await res.json()) as Record<string, unknown>
   if (!res.ok) {
-    console.error("[paypal-capture] capture failed", res.status, body)
+    requestLog(req)?.event(
+      "paypal_order_capture_failed",
+      { order_id: orderId, http_status: res.status, paypal_name: body.name ?? null },
+      "error",
+    )
     const msg =
       typeof body.message === "string"
         ? body.message
@@ -84,6 +99,7 @@ async function paypalCaptureOrder(
           : "PayPal capture failed"
     throw new Error(msg)
   }
+  requestLog(req)?.event("paypal_order_capture_ok", { order_id: orderId, paypal_status: body.status ?? null })
   return body
 }
 
@@ -138,7 +154,7 @@ function orderReferenceId(order: Record<string, unknown>): string | null {
   return typeof ref === "string" && ref.trim() ? ref.trim() : null
 }
 
-Deno.serve(async (req: Request) => {
+serveWithSentry("paypal-capture", async (req: Request) => {
   try {
     if (req.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeadersFor(req) })
@@ -171,6 +187,8 @@ Deno.serve(async (req: Request) => {
       return jsonResponse(req, { error: "Unauthorized" }, 401)
     }
 
+    requestLog(req)?.set({ user_id: user.id })
+
     const rateLimited = await enforceRateLimit(
       req,
       { prefix: "rl:paypal-capture", requests: 5, window: "1 m", key: user.id, failClosed: true },
@@ -197,6 +215,8 @@ Deno.serve(async (req: Request) => {
     if (!listingId) {
       return jsonResponse(req, { error: "job_id is required" }, 400)
     }
+    requestLog(req)?.set({ order_id: orderID, listing_id: listingId, listing_type: listingType })
+
     if (listingType !== "job" && listingType !== "freelancer") {
       return jsonResponse(req, { error: "Invalid listing_type" }, 400)
     }
@@ -217,8 +237,8 @@ Deno.serve(async (req: Request) => {
       return jsonResponse(req, { error: "PayPal not configured" }, 500)
     }
 
-    const accessToken = await paypalAccessToken(paypalApiBase, paypalClientId, paypalSecret)
-    const order = await paypalGetOrder(paypalApiBase, accessToken, orderID)
+    const accessToken = await paypalAccessToken(req, paypalApiBase, paypalClientId, paypalSecret)
+    const order = await paypalGetOrder(req, paypalApiBase, accessToken, orderID)
 
     const referenceId = orderReferenceId(order)
     if (referenceId !== listingId) {
@@ -233,11 +253,11 @@ Deno.serve(async (req: Request) => {
       return jsonResponse(req, { error: "Order is not capturable" }, 400)
     }
 
-    const captureResponse = await paypalCaptureOrder(paypalApiBase, accessToken, orderID)
+    const captureResponse = await paypalCaptureOrder(req, paypalApiBase, accessToken, orderID)
     return jsonResponse(req, captureResponse, 200)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    console.error("[paypal-capture] unhandled error:", message)
+    requestLog(req)?.event("paypal_capture_unhandled_error", { error: message }, "error")
     return jsonResponse(req, { error: message }, 500)
   }
 })

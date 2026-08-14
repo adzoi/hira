@@ -2,6 +2,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
 import { enforceRateLimit } from "../_shared/rateLimit.ts"
 import { corsHeadersFor } from "../_shared/cors.ts"
+import { requestLog } from "../_shared/structuredLog.ts"
+import { serveWithSentry } from "../_shared/sentry.ts"
 
 declare const Deno: {
   env: { get: (key: string) => string | undefined }
@@ -27,27 +29,43 @@ function jsonResponse(req: Request, body: unknown, status = 200) {
   })
 }
 
-async function paypalAccessToken(apiBase: string, clientId: string, secret: string): Promise<string> {
-  const auth = btoa(`${clientId}:${secret}`)
+async function paypalAccessToken(
+  req: Request,
+  apiBase: string,
+  clientId: string,
+  secret: string,
+): Promise<string> {
+  const log = requestLog(req)
   const res = await fetch(`${apiBase}/v1/oauth2/token`, {
     method: "POST",
     headers: {
-      Authorization: `Basic ${auth}`,
+      Authorization: `Basic ${btoa(`${clientId}:${secret}`)}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: "grant_type=client_credentials",
   })
   if (!res.ok) {
     const t = await res.text()
-    console.error("[activate-vip] PayPal token error", res.status, t)
+    log?.event("paypal_token_failed", { http_status: res.status, detail: t.slice(0, 500) }, "error")
     throw new Error("PayPal authentication failed")
   }
   const data = (await res.json()) as { access_token?: string }
-  if (!data.access_token) throw new Error("PayPal token missing")
+  if (!data.access_token) {
+    log?.event("paypal_token_missing", {}, "error")
+    throw new Error("PayPal token missing")
+  }
+  log?.event("paypal_token_ok", {})
   return data.access_token
 }
 
-async function paypalGetOrder(apiBase: string, accessToken: string, orderId: string): Promise<Record<string, unknown>> {
+async function paypalGetOrder(
+  req: Request,
+  apiBase: string,
+  accessToken: string,
+  orderId: string,
+): Promise<Record<string, unknown>> {
+  const log = requestLog(req)
+  log?.event("paypal_order_verify_start", { order_id: orderId })
   const res = await fetch(`${apiBase}/v2/checkout/orders/${encodeURIComponent(orderId)}`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -56,13 +74,21 @@ async function paypalGetOrder(apiBase: string, accessToken: string, orderId: str
   })
   const body = (await res.json()) as Record<string, unknown>
   if (!res.ok) {
-    console.error("[activate-vip] PayPal get order", res.status, body)
+    log?.event(
+      "paypal_order_verify_failed",
+      { order_id: orderId, http_status: res.status, paypal_status: body.status ?? null },
+      "error",
+    )
     throw new Error("PayPal order lookup failed")
   }
+  log?.event("paypal_order_verify_ok", {
+    order_id: orderId,
+    paypal_status: body.status ?? null,
+  })
   return body
 }
 
-Deno.serve(async (req) => {
+serveWithSentry("activate-vip", async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeadersFor(req) })
   }
@@ -79,11 +105,9 @@ Deno.serve(async (req) => {
   const paypalApiBase = (Deno.env.get("PAYPAL_API_BASE") ?? "https://api-m.sandbox.paypal.com").replace(/\/$/, "")
 
   if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey) {
-    console.error("[activate-vip] Missing Supabase env")
     return jsonResponse(req, { ok: false, error: "Server misconfiguration" }, 500)
   }
   if (!paypalClientId || !paypalSecret) {
-    console.error("[activate-vip] Missing PayPal env")
     return jsonResponse(req, { ok: false, error: "PayPal not configured" }, 500)
   }
 
@@ -114,6 +138,13 @@ Deno.serve(async (req) => {
   const tier = tierRaw as Tier
   const tierCfg = VIP_TIERS[tier]
 
+  requestLog(req)?.set({
+    order_id: orderId,
+    listing_id: listingId,
+    listing_type: listingType,
+    tier,
+  })
+
   const userClient = createClient(supabaseUrl, supabaseAnonKey, {
     global: { headers: { Authorization: authHeader } },
   })
@@ -122,9 +153,10 @@ Deno.serve(async (req) => {
     error: userErr,
   } = await userClient.auth.getUser()
   if (userErr || !user) {
-    console.error("[activate-vip] auth.getUser", userErr)
     return jsonResponse(req, { ok: false, error: "Unauthorized" }, 401)
   }
+
+  requestLog(req)?.set({ user_id: user.id })
 
   const rateLimited = await enforceRateLimit(
     req,
@@ -141,13 +173,14 @@ Deno.serve(async (req) => {
     .eq("paypal_order_id", orderId)
     .maybeSingle()
   if (dupErr) {
-    console.error("[activate-vip] duplicate check", dupErr)
     return jsonResponse(req, { ok: false, error: "Database error" }, 500)
   }
   if (existingPay && String((existingPay as { listing_id?: string }).listing_id) === listingId) {
+    requestLog(req)?.event("paypal_order_verify_skipped", { reason: "already_processed" })
     return jsonResponse(req, { ok: true, message: "Already processed" })
   }
   if (existingPay) {
+    requestLog(req)?.event("paypal_order_verify_rejected", { reason: "order_already_used" }, "warn")
     return jsonResponse(req, { ok: false, error: "Order already used" }, 400)
   }
 
@@ -159,7 +192,6 @@ Deno.serve(async (req) => {
       .eq("id", listingId)
       .maybeSingle()
     if (serviceErr || !serviceRow) {
-      console.error("[activate-vip] service load", serviceErr)
       return jsonResponse(req, { ok: false, error: "Listing not found" }, 404)
     }
 
@@ -170,11 +202,9 @@ Deno.serve(async (req) => {
       .eq("id", freelancerProfileId)
       .maybeSingle()
     if (freelancerErr || !freelancerRow) {
-      console.error("[activate-vip] freelancer profile load", freelancerErr)
       return jsonResponse(req, { ok: false, error: "Freelancer profile not found" }, 404)
     }
     if (String((freelancerRow as { user_id?: string }).user_id ?? "") !== user.id) {
-      console.error("[activate-vip] ownership", { listingType, listingId, userId: user.id })
       return jsonResponse(req, { ok: false, error: "Forbidden" }, 403)
     }
 
@@ -184,7 +214,6 @@ Deno.serve(async (req) => {
       .eq("listing_id", listingId)
       .eq("status", "completed")
     if (priorVipErr) {
-      console.error("[activate-vip] prior vip load", priorVipErr)
       return jsonResponse(req, { ok: false, error: "Database error" }, 500)
     }
     let maxExpiresAtMs = 0
@@ -206,7 +235,6 @@ Deno.serve(async (req) => {
       .eq("id", listingId)
       .maybeSingle()
     if (jobErr || !jobRow) {
-      console.error("[activate-vip] job load", jobErr)
       return jsonResponse(req, { ok: false, error: "Job not found" }, 404)
     }
 
@@ -217,7 +245,6 @@ Deno.serve(async (req) => {
       .eq("id", hirerProfileId)
       .maybeSingle()
     if (hpErr || !hp?.user_id || String(hp.user_id) !== user.id) {
-      console.error("[activate-vip] ownership", hpErr, hp)
       return jsonResponse(req, { ok: false, error: "Forbidden" }, 403)
     }
     prevExpiresRaw = (jobRow as { vip_expires_at?: string | null }).vip_expires_at ?? null
@@ -225,22 +252,24 @@ Deno.serve(async (req) => {
 
   let accessToken: string
   try {
-    accessToken = await paypalAccessToken(paypalApiBase, paypalClientId, paypalSecret)
-  } catch (e) {
-    console.error(e)
+    accessToken = await paypalAccessToken(req, paypalApiBase, paypalClientId, paypalSecret)
+  } catch {
     return jsonResponse(req, { ok: false, error: "PayPal authentication failed" }, 502)
   }
 
   let order: Record<string, unknown>
   try {
-    order = await paypalGetOrder(paypalApiBase, accessToken, orderId)
-  } catch (e) {
-    console.error(e)
+    order = await paypalGetOrder(req, paypalApiBase, accessToken, orderId)
+  } catch {
     return jsonResponse(req, { ok: false, error: "Could not verify PayPal order" }, 502)
   }
 
   if (String(order.status) !== "COMPLETED") {
-    console.error("[activate-vip] order not completed", order.status)
+    requestLog(req)?.event(
+      "paypal_order_verify_rejected",
+      { order_id: orderId, paypal_status: order.status ?? null, reason: "not_completed" },
+      "warn",
+    )
     return jsonResponse(req, { ok: false, error: "Payment not completed" }, 400)
   }
 
@@ -256,13 +285,32 @@ Deno.serve(async (req) => {
   const paidCurrency = amountObj?.currency_code != null ? String(amountObj.currency_code).toUpperCase() : ""
 
   if (!Number.isFinite(paidValue) || Math.abs(paidValue - tierCfg.price) > 0.02) {
-    console.error("[activate-vip] amount mismatch", paidValue, tierCfg.price)
+    requestLog(req)?.event(
+      "paypal_order_verify_rejected",
+      {
+        order_id: orderId,
+        reason: "amount_mismatch",
+        paid_value: paidValue,
+        expected_value: tierCfg.price,
+      },
+      "warn",
+    )
     return jsonResponse(req, { ok: false, error: "Amount mismatch" }, 400)
   }
   if (paidCurrency !== tierCfg.currency.toUpperCase()) {
-    console.error("[activate-vip] currency mismatch", paidCurrency)
+    requestLog(req)?.event(
+      "paypal_order_verify_rejected",
+      { order_id: orderId, reason: "currency_mismatch", paid_currency: paidCurrency },
+      "warn",
+    )
     return jsonResponse(req, { ok: false, error: "Currency mismatch" }, 400)
   }
+
+  requestLog(req)?.event("paypal_order_verify_accepted", {
+    order_id: orderId,
+    paid_value: paidValue,
+    paid_currency: paidCurrency,
+  })
 
   const now = new Date()
   let base = now.getTime()
@@ -296,7 +344,6 @@ Deno.serve(async (req) => {
 
   const { error: payInsErr } = await admin.from("vip_payments").insert(vipPaymentInsert)
   if (payInsErr) {
-    console.error("[activate-vip] vip_payments insert", payInsErr)
     if (String(payInsErr.code) === "23505") {
       return jsonResponse(req, { ok: true, message: "Already processed" })
     }
@@ -314,7 +361,6 @@ Deno.serve(async (req) => {
       })
       .eq("id", listingId)
     if (updErr) {
-      console.error("[activate-vip] listing update", updErr)
       return jsonResponse(req, { ok: false, error: "Could not activate VIP" }, 500)
     }
   } else if (listingType === "freelancer") {
@@ -327,7 +373,6 @@ Deno.serve(async (req) => {
       })
       .eq("id", listingId)
     if (svcErr) {
-      console.error("[activate-vip] service VIP update", svcErr)
       return jsonResponse(req, { ok: false, error: "Could not activate VIP" }, 500)
     }
   }

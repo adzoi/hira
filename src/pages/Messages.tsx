@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { OptimizedImage } from "../components/OptimizedImage.tsx"
+import ChatMessageAttachment from "../components/ChatMessageAttachment.tsx"
 import ChatIcon from "../components/ui/ChatIcon.tsx"
 import EmptyState from "../components/ui/EmptyState.tsx"
 import ErrorState from "../components/ui/ErrorState.tsx"
 import PageLoader from "../components/ui/PageLoader.tsx"
 import {
   applyReadReceipts,
+  chatMessagePreviewText,
   getOrCreateConversation,
   markConversationRead,
   readReceiptLabel,
@@ -16,6 +18,8 @@ import {
   type ChatConversation,
   type ChatMessage,
 } from "../lib/chat.ts"
+import { formatChatAttachmentSize } from "../lib/chatAttachments.ts"
+import { formatContentRateLimitError } from "../lib/contentRateLimit.ts"
 import { subscribeToConversationBroadcast, subscribeToInboxBroadcast } from "../lib/chatBroadcast.ts"
 import type { ChatBroadcastPayload } from "../lib/chatBroadcast.ts"
 import { oncePerChatMessage } from "../lib/chatMessageDedup.ts"
@@ -30,7 +34,7 @@ import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { unreadCountsQueryKey } from "../lib/unreadCountsCache.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase.ts"
-import { LIMITS, validateUuid } from "../lib/validation.ts"
+import { LIMITS, validateChatAttachment, validateUuid } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
 
@@ -125,11 +129,15 @@ export default function MessagesPage() {
   const [meId, setMeId] = useState("")
   const [otherLastReadAt, setOtherLastReadAt] = useState<string | null>(null)
   const [draft, setDraft] = useState("")
+  const [pendingAttachment, setPendingAttachment] = useState<File | null>(null)
+  const [attachmentError, setAttachmentError] = useState("")
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [sending, setSending] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const threadViewportRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const otherLastReadAtRef = useRef<string | null>(null)
   const activeIdRef = useRef<string | null>(activeId)
   const scrollBehaviorRef = useRef<ScrollBehavior>("auto")
@@ -206,6 +214,14 @@ export default function MessagesPage() {
 
   useEffect(() => {
     activeIdRef.current = validatedActiveId
+  }, [validatedActiveId])
+
+  useEffect(() => {
+    setDraft("")
+    setPendingAttachment(null)
+    setAttachmentError("")
+    setUploadProgress(null)
+    if (fileInputRef.current) fileInputRef.current.value = ""
   }, [validatedActiveId])
 
   useEffect(() => {
@@ -342,7 +358,12 @@ export default function MessagesPage() {
         const next = [...prev, msg]
         return applyReadReceipts(next, otherLastReadAtRef.current)
       })
-      bumpConversationInList(validatedActiveId, msg.body, msg.createdAt, false)
+      bumpConversationInList(
+        validatedActiveId,
+        chatMessagePreviewText(msg.body, msg.attachmentName),
+        msg.createdAt,
+        false,
+      )
       if (!msg.isOwn) {
         void markConversationRead(client, validatedActiveId)
       }
@@ -382,7 +403,12 @@ export default function MessagesPage() {
     (payload: ChatBroadcastPayload) => {
       oncePerChatMessage(payload.messageId, () => {
         if (payload.senderId === messagesUserId) return
-        bumpConversationInList(payload.conversationId, payload.body, payload.createdAt, false)
+        bumpConversationInList(
+          payload.conversationId,
+          chatMessagePreviewText(payload.body, payload.attachmentName),
+          payload.createdAt,
+          false,
+        )
         void queryClient.invalidateQueries({ queryKey: queryKeys.messagesList(messagesUserId) })
         void queryClient.invalidateQueries({ queryKey: queryKeys.messagesThread(payload.conversationId) })
         if (messagesUserId) {
@@ -406,6 +432,10 @@ export default function MessagesPage() {
           senderName: "",
           body: event.body,
           createdAt: event.createdAt,
+          attachmentUrl: event.attachmentUrl,
+          attachmentName: event.attachmentName,
+          attachmentType: event.attachmentType,
+          attachmentSizeBytes: event.attachmentSizeBytes,
         })
         return
       }
@@ -449,19 +479,51 @@ export default function MessagesPage() {
     scrollBehaviorRef.current = "smooth"
   }, [messages])
 
+  const handlePickAttachment = (file: File | null) => {
+    setAttachmentError("")
+    if (!file) {
+      setPendingAttachment(null)
+      return
+    }
+    const result = validateChatAttachment(file)
+    if (result.ok === false) {
+      setPendingAttachment(null)
+      setAttachmentError(result.message)
+      if (fileInputRef.current) fileInputRef.current.value = ""
+      return
+    }
+    setPendingAttachment(result.value)
+  }
+
   const handleSend = async () => {
     if (!supabase || !validatedActiveId || sending) return
     const text = draft.trim()
-    if (!text) return
+    if (!text && !pendingAttachment) return
     setSending(true)
+    setAttachmentError("")
+    setUploadProgress(pendingAttachment ? 0 : null)
     try {
-      const msg = await sendMessage(supabase, validatedActiveId, text)
+      const msg = await sendMessage(supabase, validatedActiveId, {
+        body: text,
+        file: pendingAttachment,
+        onUploadProgress: (ratio) => setUploadProgress(ratio),
+      })
       setDraft("")
+      setPendingAttachment(null)
+      setUploadProgress(null)
+      if (fileInputRef.current) fileInputRef.current.value = ""
       setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]))
-      bumpConversationInList(validatedActiveId, msg.body, msg.createdAt, false)
+      bumpConversationInList(
+        validatedActiveId,
+        chatMessagePreviewText(msg.body, msg.attachmentName),
+        msg.createdAt,
+        false,
+      )
       composerRef.current?.focus()
     } catch (e) {
-      setThreadValidationError(e instanceof Error ? e.message : t("messages.sendFailed"))
+      const rateMsg = formatContentRateLimitError(e, t)
+      setThreadValidationError(rateMsg ?? (e instanceof Error ? e.message : t("messages.sendFailed")))
+      setUploadProgress(null)
     } finally {
       setSending(false)
     }
@@ -709,7 +771,18 @@ export default function MessagesPage() {
                                 : "rounded-bl-md border border-slate-200 bg-white text-[#1B2B4B]"
                             }`}
                           >
-                            <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                            {m.body.trim() ? (
+                              <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                            ) : null}
+                            {m.attachmentUrl ? (
+                              <ChatMessageAttachment
+                                path={m.attachmentUrl}
+                                name={m.attachmentName}
+                                mimeType={m.attachmentType}
+                                sizeBytes={m.attachmentSizeBytes}
+                                isOwn={m.isOwn}
+                              />
+                            ) : null}
                             <div
                               className={`mt-1 flex flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-[10px] ${
                                 m.isOwn ? "text-white/70" : "text-slate-400"
@@ -731,7 +804,64 @@ export default function MessagesPage() {
                 </div>
 
                 <div className="shrink-0 border-t border-slate-100 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
+                  {pendingAttachment || attachmentError || uploadProgress != null ? (
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      {pendingAttachment ? (
+                        <div className="flex max-w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-[#1B2B4B]">
+                          <span className="min-w-0 truncate font-medium">{pendingAttachment.name}</span>
+                          <span className="shrink-0 text-slate-500">
+                            {formatChatAttachmentSize(pendingAttachment.size)}
+                          </span>
+                          {uploadProgress != null ? (
+                            <span className="shrink-0 text-[#0088FF]">
+                              {uploadProgress >= 1
+                                ? t("messages.uploading")
+                                : `${Math.round(uploadProgress * 100)}%`}
+                            </span>
+                          ) : null}
+                          <button
+                            type="button"
+                            disabled={sending}
+                            aria-label={t("messages.removeAttachment")}
+                            onClick={() => {
+                              setPendingAttachment(null)
+                              setAttachmentError("")
+                              if (fileInputRef.current) fileInputRef.current.value = ""
+                            }}
+                            className="shrink-0 rounded px-1 text-slate-500 hover:bg-slate-200 hover:text-slate-700 disabled:opacity-50"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ) : null}
+                      {attachmentError ? (
+                        <p className="text-xs text-red-600">{attachmentError}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <div className="flex items-end gap-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      className="hidden"
+                      accept=".pdf,.docx,.xlsx,.png,.jpg,.jpeg,.zip,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/png,image/jpeg,application/zip"
+                      onChange={(e) => handlePickAttachment(e.target.files?.[0] ?? null)}
+                    />
+                    <button
+                      type="button"
+                      disabled={sending}
+                      aria-label={t("messages.attachFile")}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M21.44 11.05l-8.49 8.49a5.25 5.25 0 01-7.43-7.43l9.19-9.19a3.5 3.5 0 014.95 4.95l-9.2 9.19a1.75 1.75 0 01-2.47-2.47l8.49-8.48"
+                        />
+                      </svg>
+                    </button>
                     <textarea
                       ref={composerRef}
                       value={draft}
@@ -745,7 +875,7 @@ export default function MessagesPage() {
                     />
                     <button
                       type="button"
-                      disabled={sending || !draft.trim()}
+                      disabled={sending || (!draft.trim() && !pendingAttachment)}
                       aria-label={t("common.send")}
                       onClick={() => void handleSend()}
                       className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#0088FF] text-sm font-semibold text-white transition hover:bg-[#006ACC] disabled:cursor-not-allowed disabled:opacity-50 sm:h-11 sm:w-auto sm:px-4"

@@ -23,6 +23,7 @@ import { buildJobPostingStructuredData, JsonLd } from "../lib/structuredData.tsx
 import { pickCategoryName } from "../lib/categoryLocale.ts"
 import { pickListingTitle } from "../lib/listingLocale.ts"
 import { displayJobDescription } from "../lib/jobDescriptionDisplay.ts"
+import { assertContentRateLimit, formatContentRateLimitError } from "../lib/contentRateLimit.ts"
 
 function formatDate(dateString: string) {
   if (!dateString.trim()) return "—"
@@ -228,6 +229,8 @@ export default function JobDetailPage() {
       if (rateNote) noteParts.push(rateNote)
       const coverNote = noteParts.length > 0 ? noteParts.join("\n\n") : null
 
+      await assertContentRateLimit("job-application")
+
       const { data: inserted, error: applyError } = await supabase
         .from("job_applications")
         .insert({
@@ -252,8 +255,12 @@ export default function JobDetailPage() {
       setSubmitSuccess(`განცხადება გაგზავნილია! დამქირავებელი დაგიკავშირდება: ${contact}`)
       pushToast({ type: "success", message: "განცხადება გაგზავნილია" })
     } catch (applyErr) {
-      setSubmitError(applyErr instanceof Error ? applyErr.message : "გაგზავნა ვერ მოხერხდა.")
-      pushToast({ type: "error", message: "შეცდომა მოხდა, სცადე თავიდან" })
+      const rateMsg = formatContentRateLimitError(applyErr, t)
+      setSubmitError(rateMsg ?? (applyErr instanceof Error ? applyErr.message : "გაგზავნა ვერ მოხერხდა."))
+      pushToast({
+        type: "error",
+        message: rateMsg ?? "შეცდომა მოხდა, სცადე თავიდან",
+      })
     } finally {
       setSubmitting(false)
     }

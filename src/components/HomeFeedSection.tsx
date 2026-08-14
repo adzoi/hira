@@ -3,6 +3,7 @@ import { Link } from "react-router-dom"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { type HomeFreelancerServiceItem, type HomeJobListingItem } from "../lib/homeFeed.ts"
 import { useHomeFeedQuery } from "../lib/queries/useHomeFeedQuery.ts"
+import { useRecommendedJobs } from "../lib/queries/useRecommendedJobs.ts"
 import { formatJobBudget, formatListingPrice } from "../lib/listingPrice.ts"
 import { OptimizedImage } from "./OptimizedImage.tsx"
 import { ViewCountEyeIcon } from "./ViewCountEyeIcon.tsx"
@@ -266,13 +267,37 @@ function JobListingFeedCard({ item }: { item: HomeJobListingItem }) {
   )
 }
 
+function FeedCardSkeleton() {
+  return (
+    <li className="flex h-72 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="h-3 w-24 animate-pulse rounded bg-slate-200" />
+      <div className="mt-4 flex items-center gap-3">
+        <div className="h-14 w-14 shrink-0 animate-pulse rounded-full bg-slate-200" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="h-4 w-2/3 animate-pulse rounded bg-slate-200" />
+          <div className="h-3 w-1/2 animate-pulse rounded bg-slate-200" />
+        </div>
+      </div>
+      <div className="mt-4 h-5 w-4/5 animate-pulse rounded bg-slate-200" />
+      <div className="mt-3 h-4 w-full animate-pulse rounded bg-slate-200" />
+      <div className="mt-2 h-4 w-3/4 animate-pulse rounded bg-slate-200" />
+      <div className="mt-auto h-10 w-full animate-pulse rounded-lg bg-slate-200" />
+    </li>
+  )
+}
+
 export default function HomeFeedSection() {
   const { t } = useTranslation()
-  const { data: items = [], isLoading: loading } = useHomeFeedQuery()
+  const { data: items = [], isPending, isFetching } = useHomeFeedQuery()
+  const loading = isPending || (isFetching && items.length === 0)
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
-  /** Guests default to talent (freelancer listings); logged-in users default to the opposite role’s content. */
-  const [feedFilter, setFeedFilter] = useState<"all" | "freelancer" | "hirer">("freelancer")
+  /** Guests default to All; signed-in users switch to the opposite role’s content. */
+  const [feedFilter, setFeedFilter] = useState<"all" | "freelancer" | "hirer">("all")
   const appliedRoleDefaultTab = useRef(false)
+  const [freelancerContext, setFreelancerContext] = useState<{
+    freelancerId: string
+    skillCount: number
+  } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -282,20 +307,44 @@ export default function HomeFeedSection() {
         return
       }
       const {
-        data: { user },
-      } = await supabase.auth.getUser()
+        data: { session },
+      } = await supabase.auth.getSession()
       if (cancelled || appliedRoleDefaultTab.current) return
+      const user = session?.user
       if (!user) {
-        setFeedFilter("freelancer")
+        setFeedFilter("all")
+        setFreelancerContext(null)
         appliedRoleDefaultTab.current = true
         return
       }
       const { data: profile } = await supabase.from("profiles").select("user_type").eq("id", user.id).maybeSingle()
       if (cancelled || appliedRoleDefaultTab.current) return
       const ut = profile?.user_type
-      if (ut === "freelancer") setFeedFilter("hirer")
-      else if (ut === "hirer") setFeedFilter("freelancer")
-      else setFeedFilter("freelancer")
+      if (ut === "freelancer") {
+        setFeedFilter("hirer")
+        const { data: fp } = await supabase
+          .from("freelancer_profiles")
+          .select("id")
+          .eq("user_id", user.id)
+          .maybeSingle()
+        if (cancelled) return
+        if (fp?.id) {
+          const { count } = await supabase
+            .from("freelancer_skills")
+            .select("id", { count: "exact", head: true })
+            .eq("freelancer_profile_id", fp.id)
+          if (cancelled) return
+          setFreelancerContext({ freelancerId: fp.id, skillCount: count ?? 0 })
+        } else {
+          setFreelancerContext(null)
+        }
+      } else if (ut === "hirer") {
+        setFeedFilter("freelancer")
+        setFreelancerContext(null)
+      } else {
+        setFeedFilter("all")
+        setFreelancerContext(null)
+      }
       appliedRoleDefaultTab.current = true
     }
     void syncDefaultTabWithRole()
@@ -303,6 +352,11 @@ export default function HomeFeedSection() {
       cancelled = true
     }
   }, [])
+
+  const hasSkills = (freelancerContext?.skillCount ?? 0) > 0
+  const { data: recommendedPayload } = useRecommendedJobs(freelancerContext?.freelancerId, hasSkills)
+  const recommendedJobs = recommendedPayload?.jobs ?? []
+  const showRecommended = hasSkills && recommendedJobs.length > 0
 
   const filteredItems =
     feedFilter === "all"
@@ -319,6 +373,17 @@ export default function HomeFeedSection() {
   return (
     <section className="border-y border-slate-200 bg-white">
       <div className="mx-auto w-full max-w-[1200px] px-4 py-10 md:px-6 md:py-14">
+        {showRecommended ? (
+          <div className="mb-10">
+            <h2 className="text-2xl font-bold text-[#0088FF] md:text-[28px]">{t("home.recommendedForYou")}</h2>
+            <ul className="mt-6 grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {recommendedJobs.map((item) => (
+                <JobListingFeedCard key={`rec-${item.id}`} item={item} />
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
           <div className="min-w-0 flex-1">
             <h2 className="mt-2 text-2xl font-bold text-[#0088FF] md:text-[28px]">{t("home.servicesAndJobs")}</h2>
@@ -363,9 +428,9 @@ export default function HomeFeedSection() {
         </div>
 
         {loading ? (
-          <ul className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="mt-8 grid min-h-[18rem] gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
-              <li key={i} className="h-72 animate-pulse rounded-2xl border border-slate-200 bg-slate-200/60" />
+              <FeedCardSkeleton key={i} />
             ))}
           </ul>
         ) : visible.length === 0 ? (

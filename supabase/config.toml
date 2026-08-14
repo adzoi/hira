@@ -26,3 +26,15 @@ verify_jwt = false
 
 [functions.auth-rate-limit]
 verify_jwt = false
+
+[functions.content-rate-limit]
+verify_jwt = false
+
+[db]
+major_version = 15
+
+[db.migrations]
+enabled = true
+
+[db.seed]
+enabled = false

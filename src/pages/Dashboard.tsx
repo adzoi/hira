@@ -9,11 +9,12 @@ import { subscribeToDashboardMessaging } from "../lib/dashboardMessagingRealtime
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import type { Database } from "../lib/database.types"
 import { jobVacancyStats } from "../lib/jobVacancies.ts"
-import { validateReviewComment } from "../lib/validation.ts"
+import { assertField, validateReviewComment } from "../lib/validation.ts"
 import { fetchDashboard } from "../lib/queries/fetchDashboard.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { assertContentRateLimit, formatContentRateLimitError } from "../lib/contentRateLimit.ts"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
 
 type TranslateFn = (key: string, params?: Record<string, string | number>) => string
@@ -1167,9 +1168,7 @@ export default function DashboardPage() {
     try {
       if (withReview) {
         if (!modal.hirerUserId) throw new Error("დამქირავებლის პროფილი ვერ მოიძებნა.")
-        const commentResult = validateReviewComment(freelancerListingReviewComment)
-        if (!commentResult.ok) throw new Error(commentResult.message)
-        const comment = commentResult.value
+        const comment = assertField(validateReviewComment(freelancerListingReviewComment))
         if (freelancerListingReviewStars < 1 || freelancerListingReviewStars > 5) {
           throw new Error("აირჩიე შეფასება.")
         }
@@ -1326,7 +1325,7 @@ export default function DashboardPage() {
       return
     }
     const commentResult = validateReviewComment(hirerListingReviewComment)
-    if (!commentResult.ok) {
+    if (commentResult.ok === false) {
       setHirerListingReviewError(commentResult.message)
       return
     }
@@ -1566,9 +1565,7 @@ export default function DashboardPage() {
       if (!completedJobId) throw new Error("დასრულების ჩანაწერი ვერ შეიქმნა.")
 
       if (withReview) {
-        const commentResult = validateReviewComment(reviewComment)
-        if (!commentResult.ok) throw new Error(commentResult.message)
-        const comment = commentResult.value
+        const comment = assertField(validateReviewComment(reviewComment))
         if (reviewStars < 1 || reviewStars > 5) {
           throw new Error("აირჩიე შეფასება.")
         }
@@ -1648,7 +1645,7 @@ export default function DashboardPage() {
     const modal = freelancerHirerReviewModal
     if (!supabase || !profile || !modal) return
     const commentResult = validateReviewComment(reviewComment)
-    if (!commentResult.ok) {
+    if (commentResult.ok === false) {
       setFreelancerHirerReviewError(commentResult.message)
       return
     }
@@ -1774,6 +1771,7 @@ export default function DashboardPage() {
             .eq("freelancer_profile_id", freelancerProfile.id)
           if (updateError) throw updateError
         } else {
+          await assertContentRateLimit("listing-post")
           const { error: insertError } = await supabase.from("services").insert({
             freelancer_profile_id: freelancerProfile.id,
             title: item.title,
@@ -1819,7 +1817,10 @@ export default function DashboardPage() {
       setInitialServiceIds(rows.map((item) => item.id))
       setServicesSuccess("სერვისები წარმატებით განახლდა.")
     } catch (saveError) {
-      setServicesError(saveError instanceof Error ? saveError.message : "სერვისების შენახვა ვერ მოხერხდა.")
+      const rateMsg = formatContentRateLimitError(saveError, t)
+      setServicesError(
+        rateMsg ?? (saveError instanceof Error ? saveError.message : "სერვისების შენახვა ვერ მოხერხდა."),
+      )
     } finally {
       setServicesSaving(false)
     }

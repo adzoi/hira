@@ -23,6 +23,7 @@ import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
 import { OptimizedImage } from "../components/OptimizedImage.tsx"
 import { compressImageForUpload } from "../lib/compressImageForUpload.ts"
+import { assertContentRateLimit, formatContentRateLimitError } from "../lib/contentRateLimit.ts"
 
 type ListingMeta = {
   categoryId: string | null
@@ -332,6 +333,8 @@ export default function ListingFormPage() {
           .eq("freelancer_profile_id", freelancerProfileId)
         if ((count ?? 0) >= 3) throw new Error(t("listingForm.maxListings"))
 
+        await assertContentRateLimit("listing-post")
+
         const { data: inserted, error: insertError } = await supabase.from("services").insert(payload).select("id").single()
         if (insertError || !inserted) throw insertError ?? new Error(t("listingForm.createFailed"))
         listingId = inserted.id
@@ -374,7 +377,8 @@ export default function ListingFormPage() {
         state: { successMessage: isEdit ? t("listingForm.updatedSuccess") : t("listingForm.addedSuccess") },
       })
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : t("listingForm.saveFailed"))
+      const rateMsg = formatContentRateLimitError(saveError, t)
+      setError(rateMsg ?? (saveError instanceof Error ? saveError.message : t("listingForm.saveFailed")))
     } finally {
       setSaving(false)
     }

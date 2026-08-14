@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import { useInfiniteQuery } from "@tanstack/react-query"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { OptimizedImage } from "../components/OptimizedImage.tsx"
@@ -32,6 +32,7 @@ import { ViewCountEyeIcon } from "../components/ViewCountEyeIcon.tsx"
 import VipBadge from "../components/VipBadge.tsx"
 import { normalizeSearchInput, validateInquiryMessage, validateMoneyAmount } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { assertContentRateLimit, formatContentRateLimitError } from "../lib/contentRateLimit.ts"
 import { localizedNameFromMap, pickCategoryName, type LocalizedNameEntry } from "../lib/categoryLocale.ts"
 import { pickListingDescription, pickListingTitle } from "../lib/listingLocale.ts"
 type ListingMeta = { categoryId: string | null; subcategoryId: string | null; tags: string[] }
@@ -226,7 +227,10 @@ type ListingsCatalogPage = {
   total: number
 }
 
-async function loadListingsCatalogPage(page: number): Promise<ListingsCatalogPage> {
+async function loadListingsCatalogPage(
+  page: number,
+  searchQuery: string | null = null,
+): Promise<ListingsCatalogPage> {
   if (!isSupabaseConfigured || !supabase) {
     return {
       listings: mockListings,
@@ -239,7 +243,7 @@ async function loadListingsCatalogPage(page: number): Promise<ListingsCatalogPag
   }
 
   const client = supabase
-  const payload = (await fetchListingsPagePayload(page)) as null | {
+  const payload = (await fetchListingsPagePayload(page, searchQuery)) as null | {
     services?: unknown
     categories?: unknown
     skills?: unknown
@@ -400,6 +404,8 @@ export default function ListingsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { pushToast } = useToast()
   const [searchText, setSearchText] = useState("")
+  const deferredSearchText = useDeferredValue(searchText)
+  const serverSearchQuery = deferredSearchText.trim()
   const [filterRootCategoryId, setFilterRootCategoryId] = useState("")
   const [filterMidCategoryId, setFilterMidCategoryId] = useState("")
   const [filterSpecializationId, setFilterSpecializationId] = useState("")
@@ -415,8 +421,8 @@ export default function ListingsPage() {
     isFetchingNextPage: listingsLoadingMore,
     refetch,
   } = useInfiniteQuery({
-    queryKey: queryKeys.listingsCatalog,
-    queryFn: ({ pageParam }) => loadListingsCatalogPage(pageParam),
+    queryKey: queryKeys.listingsCatalog(serverSearchQuery),
+    queryFn: ({ pageParam }) => loadListingsCatalogPage(pageParam, serverSearchQuery || null),
     initialPageParam: 1,
     staleTime: 30_000,
     getNextPageParam: (lastPage, _allPages, lastPageParam) => {
@@ -590,6 +596,7 @@ export default function ListingsPage() {
         setInquiryFormError("საკუთარ ლისტინგზე შეთავაზება ვერ გაიგზავნება.")
         return
       }
+      await assertContentRateLimit("service-inquiry")
       const { error: insErr } = await supabase.from("service_inquiries").insert({
         service_id: inquiryListing.id,
         hirer_profile_id: hp.id,
@@ -602,7 +609,10 @@ export default function ListingsPage() {
       setInquiryListing(null)
       pushToast({ type: "success", message: "შეთავაზება გაიგზავნა. ფრილანსერს შეტყობინება მივიდა." })
     } catch (e) {
-      const m = e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "გაგზავნა ვერ მოხერხდა."
+      const rateMsg = formatContentRateLimitError(e, t)
+      const m =
+        rateMsg ??
+        (e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "გაგზავნა ვერ მოხერხდა.")
       setInquiryFormError(m)
     } finally {
       setInquirySubmitting(false)
@@ -722,7 +732,6 @@ export default function ListingsPage() {
   }, [selectedSkillIds, availabilityFilters, minimumRating, minPrice, maxPrice, locationFilter])
 
   const filteredSorted = useMemo(() => {
-    const q = searchText.trim().toLowerCase()
     const minPriceNumber = minPrice ? Number(minPrice) : null
     const maxPriceNumber = maxPrice ? Number(maxPrice) : null
 
@@ -773,17 +782,12 @@ export default function ListingsPage() {
         return false
       }
 
-      if (!q) return true
-      const subEntry = item.subcategoryId ? subcategoryNamesById.get(item.subcategoryId) : undefined
-      const subQ = subEntry ? `${subEntry.name_ka} ${subEntry.name_en}`.trim().toLowerCase() : ""
-      const catRow = item.categoryId ? categories.find((c) => c.id === item.categoryId) : undefined
-      const catQ = catRow ? `${catRow.name_ka} ${catRow.name_en ?? ""}`.trim().toLowerCase() : ""
-      const hay = `${item.title} ${item.titleEn ?? ""} ${item.tags.join(" ")} ${item.professionalTitle} ${description} ${item.descriptionEn ?? ""} ${subQ} ${catQ}`
-        .toLowerCase()
-      return hay.includes(q)
+      return true
     })
 
     list = [...list].sort((a, b) => {
+      // Preserve server VIP + FTS rank + recency when searching with default sort.
+      if (serverSearchQuery && sortBy === "newest") return 0
       const vipOrder = (b.vipActive ? 1 : 0) - (a.vipActive ? 1 : 0)
       if (vipOrder !== 0) return vipOrder
       if (sortBy === "price_asc") return a.price - b.price
@@ -793,7 +797,6 @@ export default function ListingsPage() {
     return list
   }, [
     listings,
-    searchText,
     catalogFilterEffectiveId,
     sortBy,
     selectedSkillIds,
@@ -803,9 +806,9 @@ export default function ListingsPage() {
     minPrice,
     maxPrice,
     locationFilter,
-    subcategoryNamesById,
     subcategoryParentById,
     categories,
+    serverSearchQuery,
   ])
 
   const openListingQueryId = searchParams.get("open")

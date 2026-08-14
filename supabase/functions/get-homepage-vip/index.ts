@@ -1,6 +1,8 @@
 import { enforceRateLimit, getRedis } from "../_shared/rateLimit.ts"
+// @ts-ignore: URL imports are resolved at Supabase Edge runtime (Deno), not by local TS server.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
 import { corsHeadersFor } from "../_shared/cors.ts"
+import { serveWithSentry } from "../_shared/sentry.ts"
 
 declare const Deno: {
   serve: (handler: (req: Request) => Response | Promise<Response>) => void
@@ -25,6 +27,58 @@ type VipFeedItem = {
   avatarUrl: string | null
   rating: number
   href: string
+}
+
+type ProfileEmbed = {
+  full_name: string | null
+  avatar_url: string | null
+}
+
+type HirerProfileEmbed = {
+  id: string | null
+  user_id: string | null
+  company_name: string | null
+  average_rating_given: number | null
+  profiles: ProfileEmbed | null
+}
+
+type VipJobRow = {
+  id: string
+  title: string | null
+  description: string | null
+  vip_expires_at: string | null
+  hirer_profiles: HirerProfileEmbed | HirerProfileEmbed[] | null
+}
+
+type FreelancerProfileEmbed = {
+  user_id: string | null
+  slug: string | null
+  professional_title: string | null
+  average_rating: number | null
+  profiles: ProfileEmbed | null
+}
+
+type VipServiceRow = {
+  id: string
+  title: string | null
+  description: string | null
+  freelancer_profiles: FreelancerProfileEmbed | FreelancerProfileEmbed[] | null
+}
+
+type VipPaymentRow = {
+  listing_id: string | null
+  completed_at: string | null
+  vip_days: number | null
+}
+
+type ReviewRow = {
+  reviewee_id: string | null
+  rating_overall: number | null
+}
+
+function firstRelation<T>(value: T | T[] | null | undefined): T | undefined {
+  if (Array.isArray(value)) return value[0]
+  return value ?? undefined
 }
 
 function oneLine(raw: unknown, max = 120): string {
@@ -99,6 +153,7 @@ async function fetchHomepageVipData(
   if (jobsErr) {
     return { ok: false, error: jobsErr.message }
   }
+  const jobs = (vipJobs ?? []) as VipJobRow[]
 
   const { data: vipPayments, error: payErr } = await admin
     .from("vip_payments")
@@ -109,15 +164,15 @@ async function fetchHomepageVipData(
   if (payErr) {
     return { ok: false, error: payErr.message }
   }
+  const payments = (vipPayments ?? []) as VipPaymentRow[]
 
   const hirerReviewKeys = [
     ...new Set(
-      (vipJobs ?? [])
+      jobs
         .map((row) => {
-          const hp = (row as { hirer_profiles?: unknown }).hirer_profiles
-          const hirer = Array.isArray(hp) ? hp[0] : hp
-          const userId = String((hirer as { user_id?: string | null } | undefined)?.user_id ?? "").trim()
-          const profileId = String((hirer as { id?: string | null } | undefined)?.id ?? "").trim()
+          const hirer = firstRelation(row.hirer_profiles)
+          const userId = String(hirer?.user_id ?? "").trim()
+          const profileId = String(hirer?.id ?? "").trim()
           return [userId, profileId]
         })
         .flat()
@@ -132,10 +187,10 @@ async function fetchHomepageVipData(
       .in("reviewee_id", hirerReviewKeys)
       .limit(5000)
     if (!reviewErr) {
-      for (const r of reviewRows ?? []) {
-        const revieweeId = String((r as { reviewee_id?: string | null }).reviewee_id ?? "").trim()
+      for (const r of (reviewRows ?? []) as ReviewRow[]) {
+        const revieweeId = String(r.reviewee_id ?? "").trim()
         if (!revieweeId) continue
-        const rating = Number((r as { rating_overall?: number | null }).rating_overall ?? 0)
+        const rating = Number(r.rating_overall ?? 0)
         if (!Number.isFinite(rating)) continue
         const prev = hirerRatingTotals.get(revieweeId) ?? { sum: 0, count: 0 }
         prev.sum += rating
@@ -147,10 +202,10 @@ async function fetchHomepageVipData(
 
   const activeServiceExpiry = new Map<string, string>()
   const nowMs = Date.now()
-  for (const row of vipPayments ?? []) {
-    const listingId = String((row as { listing_id?: string }).listing_id ?? "")
-    const completedAtRaw = String((row as { completed_at?: string | null }).completed_at ?? "")
-    const vipDays = Number((row as { vip_days?: number | null }).vip_days ?? 0)
+  for (const row of payments) {
+    const listingId = String(row.listing_id ?? "")
+    const completedAtRaw = String(row.completed_at ?? "")
+    const vipDays = Number(row.vip_days ?? 0)
     if (!listingId || !completedAtRaw || !Number.isFinite(vipDays) || vipDays <= 0) continue
     const expiresMs = new Date(completedAtRaw).getTime() + vipDays * 24 * 60 * 60 * 1000
     if (!Number.isFinite(expiresMs) || expiresMs <= nowMs) continue
@@ -161,28 +216,7 @@ async function fetchHomepageVipData(
   }
 
   const serviceIds = [...activeServiceExpiry.keys()].slice(0, 500)
-  let vipServices:
-    | Array<{
-        id: string
-        title: string | null
-        description: string | null
-        freelancer_profiles:
-          | {
-              user_id: string | null
-              slug: string | null
-              professional_title: string | null
-              average_rating: number | null
-              profiles: { full_name: string | null; avatar_url: string | null } | null
-            }
-          | Array<{
-              user_id: string | null
-              slug: string | null
-              professional_title: string | null
-              average_rating: number | null
-              profiles: { full_name: string | null; avatar_url: string | null } | null
-            }>
-      }>
-    | null = null
+  let vipServices: VipServiceRow[] = []
 
   if (serviceIds.length > 0) {
     const { data: servicesRows, error: servicesErr } = await admin
@@ -210,15 +244,14 @@ async function fetchHomepageVipData(
     if (servicesErr) {
       return { ok: false, error: servicesErr.message }
     }
-    vipServices = servicesRows as typeof vipServices
+    vipServices = (servicesRows ?? []) as VipServiceRow[]
   }
 
   const freelancerUserIds = [
     ...new Set(
-      (vipServices ?? [])
+      vipServices
         .map((row) => {
-          const fp = row.freelancer_profiles
-          const freelancer = Array.isArray(fp) ? fp[0] : fp
+          const freelancer = firstRelation(row.freelancer_profiles)
           return String(freelancer?.user_id ?? "").trim()
         })
         .filter(Boolean),
@@ -232,10 +265,10 @@ async function fetchHomepageVipData(
       .in("reviewee_id", freelancerUserIds)
       .limit(5000)
     if (!reviewErr) {
-      for (const r of reviewRows ?? []) {
-        const revieweeId = String((r as { reviewee_id?: string | null }).reviewee_id ?? "").trim()
+      for (const r of (reviewRows ?? []) as ReviewRow[]) {
+        const revieweeId = String(r.reviewee_id ?? "").trim()
         if (!revieweeId) continue
-        const rating = Number((r as { rating_overall?: number | null }).rating_overall ?? 0)
+        const rating = Number(r.rating_overall ?? 0)
         if (!Number.isFinite(rating)) continue
         const prev = freelancerRatingTotals.get(revieweeId) ?? { sum: 0, count: 0 }
         prev.sum += rating
@@ -247,39 +280,33 @@ async function fetchHomepageVipData(
 
   const out: VipFeedItem[] = []
 
-  for (const row of vipJobs ?? []) {
-    const hp = (row as { hirer_profiles?: unknown }).hirer_profiles
-    const hirer = Array.isArray(hp) ? hp[0] : hp
-    const displayName = String(
-      (hirer as { company_name?: string | null; profiles?: { full_name?: string | null } | null } | undefined)?.company_name ??
-        (hirer as { profiles?: { full_name?: string | null } | null } | undefined)?.profiles?.full_name ??
-        "დამქირავებელი",
-    ).trim()
-    const avatarUrl =
-      (hirer as { profiles?: { avatar_url?: string | null } | null } | undefined)?.profiles?.avatar_url ?? null
-    const ownerUid = String((hirer as { user_id?: string | null } | undefined)?.user_id ?? "").trim()
-    const hirerProfileId = String((hirer as { id?: string | null } | undefined)?.id ?? "").trim()
-    const fallbackRating = Number((hirer as { average_rating_given?: number | null } | undefined)?.average_rating_given ?? 0)
+  for (const row of jobs) {
+    const hirer = firstRelation(row.hirer_profiles)
+    const displayName = String(hirer?.company_name ?? hirer?.profiles?.full_name ?? "დამქირავებელი").trim()
+    const avatarUrl = hirer?.profiles?.avatar_url ?? null
+    const ownerUid = String(hirer?.user_id ?? "").trim()
+    const hirerProfileId = String(hirer?.id ?? "").trim()
+    const fallbackRating = Number(hirer?.average_rating_given ?? 0)
     const totals = (ownerUid && hirerRatingTotals.get(ownerUid)) || (hirerProfileId && hirerRatingTotals.get(hirerProfileId))
     const ratingRaw =
       totals && totals.count > 0 && Number.isFinite(totals.sum / totals.count) ? totals.sum / totals.count : fallbackRating
+    const jobId = String(row.id ?? "")
     out.push({
       type: "job",
-      id: String((row as { id?: string }).id ?? ""),
-      title: String((row as { title?: string | null }).title ?? "VIP Job").trim() || "VIP Job",
+      id: jobId,
+      title: String(row.title ?? "VIP Job").trim() || "VIP Job",
       name: displayName,
-      vip_expires_at: String((row as { vip_expires_at?: string | null }).vip_expires_at ?? nowIso),
+      vip_expires_at: String(row.vip_expires_at ?? nowIso),
       subtitle: "დამქირავებელი",
-      description: oneLine((row as { description?: string | null }).description),
+      description: oneLine(row.description),
       avatarUrl,
       rating: Number.isFinite(ratingRaw) ? ratingRaw : 0,
-      href: `/job/${encodeURIComponent(String((row as { id?: string }).id ?? ""))}`,
+      href: `/job/${encodeURIComponent(jobId)}`,
     })
   }
 
-  for (const row of vipServices ?? []) {
-    const fp = row.freelancer_profiles
-    const freelancer = Array.isArray(fp) ? fp[0] : fp
+  for (const row of vipServices) {
+    const freelancer = firstRelation(row.freelancer_profiles)
     const slug = String(freelancer?.slug ?? "").trim()
     if (!slug) continue
     const serviceId = String(row.id ?? "")
@@ -321,7 +348,7 @@ function isCachedVipPayload(v: unknown): v is { ok: true; items: VipFeedItem[] }
   return o.ok === true && Array.isArray(o.items)
 }
 
-Deno.serve(async (req) => {
+serveWithSentry("get-homepage-vip", async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeadersFor(req) })
   }

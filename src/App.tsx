@@ -4,10 +4,11 @@ import CookieBanner from "./components/CookieBanner.tsx"
 import Navbar from "./components/Navbar.tsx"
 import PageLoader from "./components/ui/PageLoader.tsx"
 import ProtectedRoute from "./components/ProtectedRoute.tsx"
+import HomePage from "./pages/Home.tsx"
 import { buildSiteOrganizationSchema, buildSiteWebSiteSchema, JsonLd } from "./lib/structuredData.tsx"
 import { trackPageView } from "./lib/analytics.ts"
+import { syncSentryRoute } from "./lib/sentry.ts"
 
-const HomePage = lazy(() => import("./pages/Home.tsx"))
 const LoginPage = lazy(() => import("./pages/Login.tsx"))
 const RegisterPage = lazy(() => import("./pages/Register.tsx"))
 const NotFoundPage = lazy(() => import("./pages/NotFound.tsx"))
@@ -81,7 +82,9 @@ function GoogleAnalyticsPageViews() {
   const location = useLocation()
 
   useEffect(() => {
-    trackPageView(location.pathname + location.search + location.hash)
+    const pagePath = location.pathname + location.search + location.hash
+    trackPageView(pagePath)
+    syncSentryRoute(pagePath)
   }, [location.pathname, location.search, location.hash])
 
   return null
