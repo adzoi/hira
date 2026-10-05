@@ -1,5 +1,5 @@
 import { jobVacancyStats } from "../jobVacancies.ts"
-import { jobVipIsActive } from "../vipJobTiers.ts"
+import { jobVipIsActive } from "../vipStatus.ts"
 import { isSupabaseConfigured, supabase } from "../supabase.ts"
 
 export type JobData = {

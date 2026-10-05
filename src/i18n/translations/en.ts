@@ -179,8 +179,6 @@ export const en: T = {
     section2Heading: "2. Data we collect",
     section2P1:
       "Account data — name, email address, phone number (if provided), profile photo, and account type (freelancer or hirer).",
-    section2P2:
-      "Payment data — billing details processed by payment providers (such as PayPal) when you purchase VIP or other premium features. Hira does not store full card numbers.",
     section2P3:
       "Usage data — pages visited, actions on the platform, device and browser type, IP address, and timestamps of activity.",
     section2P4:
@@ -188,13 +186,11 @@ export const en: T = {
     section3Heading: "3. Why we collect data",
     section3P1:
       "To create and manage your account, authenticate sign-in, and provide core platform features.",
-    section3P2:
-      "To process payments for premium features and maintain transaction records.",
     section3P3:
       "To improve the platform, ensure security, prevent abuse, and understand how users interact with Hira.",
     section4Heading: "4. Data sharing",
     section4P1:
-      "We do not sell your personal data to third parties. Data is shared only with service providers necessary to operate Hira (such as Supabase for hosting and PayPal for payments), and only to the extent required.",
+      "We do not sell your personal data to third parties. Data is shared only with service providers necessary to operate Hira (such as Supabase for hosting), and only to the extent required.",
     section5Heading: "5. Your rights",
     section5P1:
       "You may request access to, correction of, or deletion of your personal data by contacting us at info@hira.ge.",
@@ -266,8 +262,6 @@ export const en: T = {
     section4P3:
       "Your language choice is stored in localStorage and is not shared with third parties.",
     section5Heading: "5. Third-party cookies",
-    section5P1:
-      "When you pay for VIP or premium features, PayPal may set its own cookies to process the transaction securely. These are governed by PayPal's privacy policy.",
     section5P2:
       "Hira does not control third-party cookies. We recommend reviewing the privacy policies of any external services you use through our platform.",
     section6Heading: "6. Contact",
@@ -689,7 +683,6 @@ export const en: T = {
     notFound: "Job not found",
     noOtherJobs: "No other listings.",
     applicationClosed: "Cannot send a new offer on this listing — all spots are filled or the listing is closed.",
-    vipUpgrade: "VIP / Featured upgrade",
     postedListingsCount: "Posted listings: {count}",
   },
   hirers: {
@@ -1017,18 +1010,9 @@ export const en: T = {
   cv: {
     generatorTitle: "CV generator — Hira",
     publicTitle: "Public CV — Hira",
-    checkoutE2eTitle: "PayPal checkout (E2E) — Hira",
-    checkoutE2eMetaDescription: "Internal PayPal checkout test page for Hira.",
     generatorMetaDescription: "Build and download a professional CV from your Hira profile.",
     publicMetaDescription: "View a public CV shared from Hira.",
     loadFailed: "Could not load CV.",
-  },
-  vip: {
-    heading: "VIP / Featured listing",
-    choosePlan: "1. Choose a plan",
-    payPaypal: "2. Pay with PayPal",
-    daysFeatured: "{days} days featured",
-    success: "VIP activated successfully!",
   },
   offers: {
     fromHirer: "You have an offer from this hirer",

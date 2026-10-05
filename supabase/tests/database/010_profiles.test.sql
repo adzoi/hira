@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS "pgtap";
 CREATE EXTENSION IF NOT EXISTS "supabase_test_helpers";
 
-SELECT plan(12);
+SELECT plan(15);
 
 SELECT tests.create_supabase_user('prof_owner', 'owner@test.com');
 SELECT tests.create_supabase_user('prof_public_fl', 'publicfl@test.com');
@@ -106,6 +106,24 @@ SELECT results_eq(
   $$ SELECT city FROM public.profiles WHERE id = auth.uid() $$,
   ARRAY['Tbilisi'::text],
   'owner UPDATE: change persisted'
+);
+
+SELECT throws_ok(
+  $$ UPDATE public.profiles SET is_verified = true WHERE id = auth.uid() $$,
+  '42501',
+  'owner UPDATE is_verified: denied (column grant)'
+);
+
+SELECT throws_ok(
+  $$ UPDATE public.profiles SET user_type = 'hirer' WHERE id = auth.uid() $$,
+  '42501',
+  'owner UPDATE user_type: denied (column grant)'
+);
+
+SELECT throws_ok(
+  $$ UPDATE public.profiles SET email = 'victim@test.com' WHERE id = auth.uid() $$,
+  '42501',
+  'owner UPDATE email: denied (column grant)'
 );
 
 SELECT throws_ok(

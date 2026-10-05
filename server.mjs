@@ -1,6 +1,6 @@
 import { createServer } from "node:http"
 import { createReadStream, existsSync, readFileSync, statSync } from "node:fs"
-import { join, extname } from "node:path"
+import { join, extname, resolve, sep } from "node:path"
 import { fileURLToPath } from "node:url"
 import {
   buildSecurityHeaders,
@@ -10,7 +10,7 @@ import {
   injectScriptNonces,
 } from "./security/csp.mjs"
 
-const root = join(fileURLToPath(new URL(".", import.meta.url)), "dist")
+const root = resolve(fileURLToPath(new URL(".", import.meta.url)), "dist")
 const host = process.env.HOST ?? "0.0.0.0"
 const port = Number.parseInt(process.env.PORT ?? "3000", 10)
 const staticSecurityHeaders = buildSecurityHeaders()
@@ -59,7 +59,12 @@ function sendFile(res, filePath, urlPath, headers = staticSecurityHeaders) {
   res.setHeader("Content-Type", MIME[ext] ?? "application/octet-stream")
   const cacheControl = cacheControlForPath(urlPath)
   if (cacheControl) res.setHeader("Cache-Control", cacheControl)
-  createReadStream(filePath).pipe(res)
+  createReadStream(filePath)
+    .on("error", () => {
+      if (!res.headersSent) res.statusCode = 500
+      res.end()
+    })
+    .pipe(res)
 }
 
 function sendSpaIndex(res) {
@@ -105,9 +110,32 @@ async function proxySitemapDynamic(res) {
   }
 }
 
+function sendBadRequest(res) {
+  applySecurityHeaders(res, staticSecurityHeaders)
+  res.statusCode = 400
+  res.setHeader("Content-Type", "text/plain; charset=utf-8")
+  res.end("Bad request")
+}
+
+/** Resolves a URL path inside `root`, or null when it would escape it (e.g. `..` segments). */
+function resolveInsideRoot(urlPath) {
+  const candidate = resolve(root, `.${urlPath}`)
+  return candidate === root || candidate.startsWith(root + sep) ? candidate : null
+}
+
 const server = createServer(async (req, res) => {
-  const urlPath = decodeURIComponent((req.url ?? "/").split("?")[0] ?? "/")
-  const safePath = urlPath.replace(/\0/g, "")
+  let urlPath
+  try {
+    urlPath = decodeURIComponent((req.url ?? "/").split("?")[0] ?? "/")
+  } catch {
+    sendBadRequest(res)
+    return
+  }
+  if (urlPath.includes("\0") || !urlPath.startsWith("/")) {
+    sendBadRequest(res)
+    return
+  }
+  const safePath = urlPath
 
   if (safePath === "/sitemap-dynamic.xml") {
     await proxySitemapDynamic(res)
@@ -127,7 +155,11 @@ const server = createServer(async (req, res) => {
     }
   }
 
-  const candidate = join(root, safePath)
+  const candidate = resolveInsideRoot(safePath)
+  if (candidate === null) {
+    sendBadRequest(res)
+    return
+  }
   const isStaticAsset = /\.(?:webp|png|jpe?g|gif|svg|ico|js|css|woff2?|ttf|map|xml|txt)$/i.test(safePath)
 
   if (safePath !== "/" && existsSync(candidate) && statSync(candidate).isFile()) {
@@ -152,6 +184,10 @@ const server = createServer(async (req, res) => {
   res.statusCode = 404
   res.setHeader("Content-Type", "text/plain; charset=utf-8")
   res.end("Not found")
+})
+
+process.on("unhandledRejection", (err) => {
+  console.error("[unhandledRejection]", err)
 })
 
 server.on("error", (err) => {

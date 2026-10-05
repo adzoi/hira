@@ -7,11 +7,11 @@ const sections: readonly InfoSection[] = [
   },
   {
     heading: "privacy.section2Heading",
-    paragraphs: ["privacy.section2P1", "privacy.section2P2", "privacy.section2P3", "privacy.section2P4"],
+    paragraphs: ["privacy.section2P1", "privacy.section2P3", "privacy.section2P4"],
   },
   {
     heading: "privacy.section3Heading",
-    paragraphs: ["privacy.section3P1", "privacy.section3P2", "privacy.section3P3"],
+    paragraphs: ["privacy.section3P1", "privacy.section3P3"],
   },
   {
     heading: "privacy.section4Heading",

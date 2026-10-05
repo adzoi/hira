@@ -16,7 +16,7 @@ import { isSupabaseConfigured, supabase, formatSupabaseClientError } from "../li
 import { usePageMeta } from "../lib/usePageMeta.tsx"
 import { jobVacancyStats } from "../lib/jobVacancies.ts"
 import { formatCityForDisplay, jobMatchesUnifiedLocation } from "../lib/marketplaceFilters.ts"
-import { jobVipIsActive } from "../lib/vipJobTiers.ts"
+import { jobVipIsActive } from "../lib/vipStatus.ts"
 import VipBadge from "../components/VipBadge.tsx"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import {

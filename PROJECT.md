@@ -19,7 +19,7 @@ This document explains what the system does, how it works, and why key design ch
 9. [Row Level Security (RLS)](#row-level-security-rls)
 10. [Supabase Edge Functions](#supabase-edge-functions)
 11. [Realtime and notifications](#realtime-and-notifications)
-12. [VIP / featured placement (PayPal)](#vip--featured-placement-paypal)
+12. [VIP / featured placement](#vip--featured-placement)
 13. [Messaging (chat)](#messaging-chat)
 14. [Community forum](#community-forum)
 15. [Internationalization (i18n)](#internationalization-i18n)
@@ -44,7 +44,7 @@ Freelance work in Georgia lacks a dedicated, localized platform where:
 - Trust is built through **reviews**, **completed work history**, profile visits, and optional VIP promotion.
 - A **community forum** lets freelancers and hirers share advice, ask questions, and discuss the local market.
 
-Hira addresses this with a **Georgian-first, English-capable** UI (`ka` default, optional `en` locale), bilingual marketplace content (`title` / `title_en`, `description` / `description_en` on jobs and services), and flows tuned for the local market (cities, GEL pricing display, PayPal USD capture where GEL checkout is unavailable).
+Hira addresses this with a **Georgian-first, English-capable** UI (`ka` default, optional `en` locale), bilingual marketplace content (`title` / `title_en`, `description` / `description_en` on jobs and services), and flows tuned for the local market (cities, GEL pricing display).
 
 ---
 
@@ -53,14 +53,14 @@ Hira addresses this with a **Georgian-first, English-capable** UI (`ka` default,
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Browser (React SPA)                       │
-│  Vite + React 19 + React Router + Tailwind CSS + PayPal SDK     │
-└───────────────┬───────────────────────────────┬─────────────────┘
-                │ Supabase JS (anon key)          │ PayPal checkout
-                ▼                               ▼
-┌───────────────────────────┐         ┌──────────────────────────┐
-│      Supabase Backend      │         │   PayPal REST API        │
-│  • Postgres + RLS          │         │   (sandbox / live)       │
-│  • Auth                    │         └──────────────────────────┘
+│  Vite + React 19 + React Router + Tailwind CSS                  │
+└───────────────┬─────────────────────────────────────────────────┘
+                │ Supabase JS (anon key)
+                ▼
+┌───────────────────────────┐
+│      Supabase Backend      │
+│  • Postgres + RLS          │
+│  • Auth                    │
 │  • Storage (avatars, images, chat attachments)│
 │  • Realtime (notifications,│
 │    chat, dashboard events) │
@@ -79,7 +79,7 @@ Hira addresses this with a **Georgian-first, English-capable** UI (`ka` default,
 **Why this shape?**
 
 - **Supabase as BaaS** keeps auth, database, file storage, and realtime in one place with Postgres RLS enforcing authorization at the data layer — not only in the frontend.
-- **Edge Functions** handle secrets (PayPal, service role, rate limiting via Upstash Redis) that must never ship in the browser bundle.
+- **Edge Functions** handle secrets (service role, rate limiting via Upstash Redis) that must never ship in the browser bundle.
 - **RPC functions** (`get_listings_page`, `get_home_feed`, `get_jobs_page`, `get_recommended_jobs_for_freelancer`) reduce round-trips and let the server assemble complex marketplace payloads in one query.
 - **Static SPA + Node server** gives fast CDN-friendly assets, SPA routing via `index.html` fallback, and consistent CSP/security headers in production.
 
@@ -92,7 +92,6 @@ Hira addresses this with a **Georgian-first, English-capable** UI (`ka` default,
 | Frontend | React 19, TypeScript, Vite 8, React Router 7, Tailwind CSS 4 |
 | Data fetching | TanStack React Query 5 (`@tanstack/react-query`) |
 | Backend | Supabase (PostgreSQL, Auth, Storage, Realtime, Edge Functions) |
-| Payments | PayPal (`@paypal/react-paypal-js` + server-side order verification) |
 | Email | Resend / Gmail SMTP via `send-notification-email` Edge Function |
 | Rate limiting | Upstash Redis (Edge Functions) + custom auth rate-limit endpoints |
 | Analytics | Google Analytics 4 (`G-HT76VNZHG5`), consent-gated in production |
@@ -152,7 +151,6 @@ Each type gets an extended profile:
 | `/cv/:slug` | Public | Public CV page |
 | `/about`, `/guide`, `/faq` | Public | Product info and help |
 | `/terms`, `/privacy`, `/cookies` | Public | Legal and cookie policy |
-| `/checkout` | Dev/E2E only | PayPal checkout diagnostics |
 
 Protected routes use `ProtectedRoute`, which checks `supabase.auth.getUser()` and redirects to `/login` if unauthenticated.
 
@@ -265,7 +263,7 @@ Hira runs two parallel marketplaces that mirror each other:
 | `follows` | Social follow graph |
 | `user_saved_items` | Bookmarks |
 | `profile_visits` | Freelancer profile view analytics |
-| `vip_payments` | PayPal payment audit trail for VIP purchases |
+| `vip_payments` | Legacy PayPal payment records (no longer written) |
 | `reports` | User-submitted reports on content |
 
 ### Important RPCs and triggers
@@ -304,7 +302,7 @@ Authorization is enforced in PostgreSQL, not only in React:
 **Why RLS matters here**
 
 - The Supabase anon key is public in the browser. RLS is the real security boundary.
-- Edge Functions use the service role only where necessary (public feeds, PayPal activation, email), with rate limits and input validation.
+- Edge Functions use the service role only where necessary (public feeds, email), with rate limits and input validation.
 
 ---
 
@@ -319,8 +317,6 @@ Authorization is enforced in PostgreSQL, not only in React:
 | `get-home-feed` | Homepage feed |
 | `get-homepage-vip` | VIP-highlighted items for homepage |
 | `sitemap` | Dynamic XML sitemap for SEO (static pages + public profiles, jobs, listings, CVs) |
-| `activate-vip` | Verify PayPal order, set VIP on job or listing |
-| `paypal-capture` | PayPal capture helper |
 | `send-notification-email` | Email delivery for notifications |
 | `cv-get` / `cv-update` | CV slug read/update (server-side) |
 | `cv-generate` | Legacy stub — returns HTTP 410 (AI generation removed) |
@@ -366,30 +362,11 @@ Shared modules in `supabase/functions/_shared/`:
 
 ---
 
-## VIP / featured placement (PayPal)
+## VIP / featured placement
 
 VIP promotes jobs or service listings for increased visibility (badges, feed priority, homepage VIP section).
 
-### Pricing (customer-facing GEL, PayPal charged in USD)
-
-| Tier | GEL | Duration | USD (÷ 2.75) |
-|------|-----|----------|----------------|
-| Bronze | ₾10 | 7 days | ~$3.64 |
-| Silver | ₾20 | 14 days | ~$7.27 |
-| Gold | ₾30 | 30 days | ~$10.91 |
-
-Defined in `src/lib/vipJobTiers.ts` and mirrored in `supabase/functions/activate-vip/index.ts`.
-
-### Flow
-
-1. User initiates PayPal checkout in the browser (PayPal JS SDK).
-2. On approval, client calls `activate-vip` with order ID and target (job or listing) + tier.
-3. Edge Function verifies payment with PayPal API, records `vip_payments`, sets `is_vip` + `vip_expires_at` on `jobs` or `services`.
-4. `jobVipIsActive()` / listing equivalent gates UI badges and sort priority.
-
-**Why USD via PayPal while displaying GEL?**
-
-- PayPal sandbox/production GEL support is limited; fixed conversion keeps client display and server validation aligned.
+There is no in-app purchase flow. VIP is granted manually in Supabase by setting `is_vip = true` and a future `vip_expires_at` on a row in `jobs` or `services` (catalog ranking and the homepage VIP feed ignore rows without a future `vip_expires_at`). `jobVipIsActive()` in `src/lib/vipStatus.ts` gates UI badges and sort priority.
 
 ---
 
@@ -465,8 +442,8 @@ Hira ships with a custom i18n layer (no third-party i18n framework):
 
 | Location | Allowed |
 |----------|---------|
-| `VITE_*` env vars | Supabase URL, anon key, PayPal **client ID** only |
-| Supabase Edge secrets | Service role, PayPal secret, SMTP, Redis, webhook secrets |
+| `VITE_*` env vars | Supabase URL, anon key, Sentry DSN only |
+| Supabase Edge secrets | Service role, SMTP, Redis, webhook secrets |
 
 Never commit `.env`. See `.env.example` for the full list.
 
@@ -484,7 +461,7 @@ Never commit `.env`. See `.env.example` for the full list.
 - Production `server.mjs`
 - Generated `dist/_headers` for static hosts
 
-PayPal domains are allowlisted in CSP for scripts, frames, and connect. Google Analytics domains (`googletagmanager.com`, `google-analytics.com`) are allowlisted when analytics is enabled.
+Google Analytics domains (`googletagmanager.com`, `google-analytics.com`) are allowlisted when analytics is enabled.
 
 ### Cookie consent and analytics
 
@@ -605,7 +582,6 @@ startCommand = "npm start"
 1. Copy `.env.example` → `.env` and set:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
-   - `VITE_PAYPAL_CLIENT_ID` (optional; VIP checkout disabled without it)
 
 2. Install and run:
 
@@ -631,7 +607,7 @@ npm start
 
 | Tool | Command | Purpose |
 |------|---------|---------|
-| Playwright | `npm run test:e2e` | E2E flows including PayPal sandbox (`PayPalCheckoutE2E.tsx`, `/checkout` in dev) |
+| Playwright | `npm run test:e2e` | E2E harness (no specs currently) |
 | k6 | `k6 run -e SUPABASE_FUNCTIONS_URL=... -e SUPABASE_ANON_KEY=... load-test.js` | Edge Function load testing |
 
 ---
@@ -680,7 +656,6 @@ hira/
 
 6. **Trust and discovery loops** — Reviews, completed jobs, profile visits, follows, saves, VIP promotion, view counts, full-text search, and skill-based recommendations reinforce quality and engagement.
 
-7. **Pragmatic payments** — PayPal USD capture with GEL display matches regional payment reality without blocking the VIP monetization path.
 
 ---
 
@@ -689,7 +664,6 @@ hira/
 - **Environment variables**: `.env.example`
 - **Existing readme stub**: `README.md` (Vite template + env notes)
 - **Type definitions**: `src/types/database.types.ts`
-- **VIP pricing sync**: `src/lib/vipJobTiers.ts` ↔ `supabase/functions/activate-vip/index.ts`
 - **Analytics**: `src/lib/analytics.ts`, `.cursor/rules/google-analytics.mdc`
 - **i18n**: `src/i18n/translations/ka.ts`, `src/i18n/translations/en.ts`
 

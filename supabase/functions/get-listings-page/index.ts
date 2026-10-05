@@ -3,6 +3,7 @@ import { normalizeCategory, parsePage, readJsonBody } from "../_shared/validatio
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
 import { corsHeadersFor } from "../_shared/cors.ts"
 import { serveWithSentry } from "../_shared/sentry.ts"
+import { requestLog } from "../_shared/structuredLog.ts"
 
 declare const Deno: {
   serve: (handler: (req: Request) => Response | Promise<Response>) => void
@@ -112,7 +113,8 @@ serveWithSentry("get-listings-page", async (req) => {
   })
 
   if (error) {
-    return jsonResponse(req, { ok: false, error: error.message }, 500)
+    requestLog(req)?.event("listings_page_rpc_failed", { error: error.message }, "error")
+    return jsonResponse(req, { ok: false, error: "Internal server error" }, 500)
   }
 
   const body: SuccessPayload = { ok: true, data }

@@ -45,7 +45,8 @@ serveWithSentry("health", async (req) => {
     if (val !== "pong") throw new Error("Redis ping failed")
     checks.redis = "ok"
   } catch (e) {
-    checks.redis = `error: ${e instanceof Error ? e.message : String(e)}`
+    console.error("[health] redis check failed", e)
+    checks.redis = "error"
     allOk = false
   }
 

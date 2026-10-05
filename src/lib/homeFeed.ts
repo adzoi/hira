@@ -1,7 +1,7 @@
 import { fetchHomeFeedPayload } from "./marketplaceEdge.ts"
 import { isSupabaseConfigured, supabase } from "./supabase"
 import { jobVacancyStats } from "./jobVacancies.ts"
-import { jobVipIsActive } from "./vipJobTiers.ts"
+import { jobVipIsActive } from "./vipStatus.ts"
 import { parseListingPreview } from "./listingDescription.ts"
 
 export type HomeFreelancerServiceItem = {

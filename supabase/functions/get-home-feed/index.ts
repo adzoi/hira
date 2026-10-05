@@ -4,6 +4,7 @@ import { enforceRateLimit, getRedis } from "../_shared/rateLimit.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
 import { corsHeadersFor } from "../_shared/cors.ts"
 import { serveWithSentry } from "../_shared/sentry.ts"
+import { requestLog } from "../_shared/structuredLog.ts"
 
 declare const Deno: {
   serve: (handler: (req: Request) => Response | Promise<Response>) => void
@@ -91,12 +92,15 @@ serveWithSentry("get-home-feed", async (req) => {
   try {
     await deleteExpiredJobs(admin)
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Expired jobs cleanup failed"
-    return jsonResponse(req, { ok: false, error: msg }, 500)
+    requestLog(req)?.event("expired_jobs_cleanup_failed", { error: e instanceof Error ? e.message : String(e) }, "error")
+    return jsonResponse(req, { ok: false, error: "Internal server error" }, 500)
   }
 
   const { data, error } = await admin.rpc("get_home_feed")
-  if (error) return jsonResponse(req, { ok: false, error: error.message }, 500)
+  if (error) {
+    requestLog(req)?.event("home_feed_rpc_failed", { error: error.message }, "error")
+    return jsonResponse(req, { ok: false, error: "Internal server error" }, 500)
+  }
 
   const body: SuccessPayload = { ok: true, data }
 

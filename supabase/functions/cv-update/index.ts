@@ -142,7 +142,10 @@ serveWithSentry("cv-update", async (req: Request) => {
         .select("full_name,email")
         .eq("user_id", authData.user.id)
         .maybeSingle()
-      if (existingError) return jsonResponse(req, { errors: [existingError.message] }, 500)
+      if (existingError) {
+        requestLog(req)?.event("cv_existing_lookup_failed", { error: existingError.message }, "error")
+        return jsonResponse(req, { errors: ["Internal server error"] }, 500)
+      }
 
       const merged = {
         full_name: sanitizedBody.full_name ?? existingCv?.full_name ?? "",
@@ -162,14 +165,12 @@ serveWithSentry("cv-update", async (req: Request) => {
 
     if (updateError) {
       requestLog(req)?.event("cv_upsert_failed", { error: updateError.message }, "error")
-      return jsonResponse(req, { errors: [updateError.message] }, 500)
+      return jsonResponse(req, { errors: ["Internal server error"] }, 500)
     }
     return jsonResponse(req, { success: true, cv: updatedCV }, 200)
   } catch (error) {
-    return jsonResponse(req, 
-      { errors: [error instanceof Error ? error.message : "Unknown error"] },
-      500,
-    )
+    requestLog(req)?.event("unhandled_error", { error: error instanceof Error ? error.message : String(error) }, "error")
+    return jsonResponse(req, { errors: ["Internal server error"] }, 500)
   }
 })
 

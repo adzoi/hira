@@ -53,7 +53,10 @@ serveWithSentry("cv-get", async (req: Request) => {
         .eq("is_public", true)
         .maybeSingle()
 
-      if (publicError) return jsonResponse(req, { errors: [publicError.message] }, 500)
+      if (publicError) {
+        requestLog(req)?.event("cv_public_lookup_failed", { error: publicError.message }, "error")
+        return jsonResponse(req, { errors: ["Internal server error"] }, 500)
+      }
       if (!publicCV) return jsonResponse(req, { errors: ["CV not found"] }, 404)
       return jsonResponse(req, { cv: publicCV }, 200)
     }
@@ -67,7 +70,10 @@ serveWithSentry("cv-get", async (req: Request) => {
         .eq("is_public", true)
         .eq("is_visible_on_profile", true)
         .maybeSingle()
-      if (publicVisibleError) return jsonResponse(req, { errors: [publicVisibleError.message] }, 500)
+      if (publicVisibleError) {
+        requestLog(req)?.event("cv_profile_lookup_failed", { error: publicVisibleError.message }, "error")
+        return jsonResponse(req, { errors: ["Internal server error"] }, 500)
+      }
       return jsonResponse(req, { cv: publicVisibleCv ?? null }, 200)
     }
 
@@ -86,15 +92,14 @@ serveWithSentry("cv-get", async (req: Request) => {
     if (ownError) {
       const code = typeof ownError.code === "string" ? ownError.code : ""
       if (code === "PGRST116") return jsonResponse(req, { cv: null }, 200)
-      return jsonResponse(req, { errors: [ownError.message] }, 500)
+      requestLog(req)?.event("cv_own_lookup_failed", { error: ownError.message }, "error")
+      return jsonResponse(req, { errors: ["Internal server error"] }, 500)
     }
 
     return jsonResponse(req, { cv: ownCV ?? null }, 200)
   } catch (error) {
-    return jsonResponse(req, 
-      { errors: [error instanceof Error ? error.message : "Unknown error"] },
-      500,
-    )
+    requestLog(req)?.event("unhandled_error", { error: error instanceof Error ? error.message : String(error) }, "error")
+    return jsonResponse(req, { errors: ["Internal server error"] }, 500)
   }
 })
 

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { OptimizedImage } from "../components/OptimizedImage.tsx"
-import VIPUpgrade from "../components/VIPUpgrade.tsx"
 import { ViewCountEyeIcon } from "../components/ViewCountEyeIcon.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
 import { useToast } from "../components/ui/ToastProvider.tsx"
@@ -104,7 +103,6 @@ export default function JobDetailPage() {
   const [submitting, setSubmitting] = useState(false)
   const [viewerUserId, setViewerUserId] = useState<string | null>(null)
   const [hirerContact, setHirerContact] = useState<{ email: string; phone: string | null } | null>(null)
-  const [vipModalOpen, setVipModalOpen] = useState(false)
   const [selectedImage, setSelectedImage] = useState(0)
   const trackedJobViewRef = useRef<string | null>(null)
 
@@ -488,18 +486,6 @@ export default function JobDetailPage() {
               </p>
             </div>
 
-            {isJobOwner ? (
-              <div className="mt-4 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setVipModalOpen(true)}
-                  className="inline-flex h-10 w-full items-center justify-center rounded-lg border border-[#D4A843] bg-amber-50 px-4 text-sm font-semibold text-[#1B2B4B] transition hover:bg-[#D4A843]/50"
-                >
-                  {t("jobDetail.vipUpgrade")}
-                </button>
-              </div>
-            ) : null}
-
             {!isJobOwner ? (
               <div className="mt-4 flex shrink-0 flex-wrap gap-2">
                 {job.hirer_user_id ? (
@@ -621,16 +607,6 @@ export default function JobDetailPage() {
           </aside>
         </div>
       </main>
-
-      {job && isJobOwner ? (
-        <VIPUpgrade
-          open={vipModalOpen}
-          jobId={job.id}
-          jobTitle={job.title}
-          onClose={() => setVipModalOpen(false)}
-          onSuccess={() => void refetch()}
-        />
-      ) : null}
     </div>
   </>
   )

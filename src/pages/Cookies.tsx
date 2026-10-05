@@ -19,7 +19,7 @@ const sections: readonly InfoSection[] = [
   },
   {
     heading: "cookies.section5Heading",
-    paragraphs: ["cookies.section5P1", "cookies.section5P2"],
+    paragraphs: ["cookies.section5P2"],
   },
   {
     heading: "cookies.section6Heading",

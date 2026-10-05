@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 import { jobVacancyStats } from "../jobVacancies.ts"
 import { queryKeys } from "../queryKeys.ts"
 import { isSupabaseConfigured, supabase } from "../supabase.ts"
-import { jobVipIsActive } from "../vipJobTiers.ts"
+import { jobVipIsActive } from "../vipStatus.ts"
 import type { HomeJobListingItem } from "../homeFeed.ts"
 
 export type RecommendedJobsPayload = {

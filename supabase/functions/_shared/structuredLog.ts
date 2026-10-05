@@ -57,7 +57,7 @@ export class RequestLogContext {
     return { ...this.fields }
   }
 
-  /** Log a sub-event within the same request (e.g. PayPal verification attempt). */
+  /** Log a sub-event within the same request (e.g. a downstream API call). */
   event(message: string, fields?: StructuredLogFields, level: LogLevel = "info"): void {
     logStructured(level, this.functionName, message, {
       request_id: this.requestId,

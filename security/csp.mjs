@@ -26,14 +26,10 @@ export function buildContentSecurityPolicy(opts = {}) {
   if (nonce) {
     scriptSrc.push(`'nonce-${nonce}'`)
   }
-  scriptSrc.push(
-    "https://*.paypal.com",
-    "https://*.paypalobjects.com",
-    "https://www.googletagmanager.com",
-  )
+  scriptSrc.push("https://www.googletagmanager.com")
   if (dev) scriptSrc.push("'unsafe-eval'")
 
-  const styleSrc = ["'self'", "https://*.paypal.com", "https://*.paypalobjects.com"]
+  const styleSrc = ["'self'"]
   const styleSrcElem = [...styleSrc]
   if (dev) {
     // Vite dev server injects `<style>` tags for CSS hot-module replacement.
@@ -46,13 +42,13 @@ export function buildContentSecurityPolicy(opts = {}) {
     `style-src ${styleSrc.join(" ")}`,
     `style-src-elem ${styleSrcElem.join(" ")}`,
     "font-src 'self' data:",
-    "img-src 'self' data: blob: https://*.supabase.co https://*.paypal.com https://*.paypalobjects.com",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.paypal.com https://*.paypalobjects.com https://www.google-analytics.com https://analytics.google.com https://*.google-analytics.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io",
-    "frame-src 'self' https://*.paypal.com https://*.paypalobjects.com",
+    "img-src 'self' data: blob: https://*.supabase.co",
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://www.google-analytics.com https://analytics.google.com https://*.google-analytics.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io",
+    "frame-src 'self'",
     "manifest-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",
-    "form-action 'self' https://*.paypal.com",
+    "form-action 'self'",
     "frame-ancestors 'none'",
     "upgrade-insecure-requests",
   ]
@@ -73,13 +69,12 @@ export function buildSecurityHeaders(opts = {}) {
     "X-Frame-Options": "DENY",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin",
-    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(self)",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
-    // PayPal Smart Buttons open a popup; strict same-origin COOP breaks checkout.
-    "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+    "Cross-Origin-Opener-Policy": "same-origin",
     "Cross-Origin-Resource-Policy": "same-origin",
   }
-  // COEP require-corp breaks Supabase storage images and PayPal iframes unless every
+  // COEP require-corp breaks Supabase storage images unless every
   // cross-origin asset sends Cross-Origin-Resource-Policy. Opt in via SECURITY_COEP=1.
   if (opts.coep || process.env.SECURITY_COEP === "1") {
     headers["Cross-Origin-Embedder-Policy"] = "require-corp"

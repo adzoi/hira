@@ -3,6 +3,7 @@ import { enforceRateLimit, getRedis } from "../_shared/rateLimit.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
 import { corsHeadersFor } from "../_shared/cors.ts"
 import { serveWithSentry } from "../_shared/sentry.ts"
+import { requestLog } from "../_shared/structuredLog.ts"
 
 declare const Deno: {
   serve: (handler: (req: Request) => Response | Promise<Response>) => void
@@ -62,13 +63,8 @@ type VipServiceRow = {
   id: string
   title: string | null
   description: string | null
+  vip_expires_at: string | null
   freelancer_profiles: FreelancerProfileEmbed | FreelancerProfileEmbed[] | null
-}
-
-type VipPaymentRow = {
-  listing_id: string | null
-  completed_at: string | null
-  vip_days: number | null
 }
 
 type ReviewRow = {
@@ -155,17 +151,6 @@ async function fetchHomepageVipData(
   }
   const jobs = (vipJobs ?? []) as VipJobRow[]
 
-  const { data: vipPayments, error: payErr } = await admin
-    .from("vip_payments")
-    .select("listing_id, completed_at, vip_days")
-    .eq("status", "completed")
-    .order("completed_at", { ascending: false })
-    .limit(500)
-  if (payErr) {
-    return { ok: false, error: payErr.message }
-  }
-  const payments = (vipPayments ?? []) as VipPaymentRow[]
-
   const hirerReviewKeys = [
     ...new Set(
       jobs
@@ -200,52 +185,35 @@ async function fetchHomepageVipData(
     }
   }
 
-  const activeServiceExpiry = new Map<string, string>()
-  const nowMs = Date.now()
-  for (const row of payments) {
-    const listingId = String(row.listing_id ?? "")
-    const completedAtRaw = String(row.completed_at ?? "")
-    const vipDays = Number(row.vip_days ?? 0)
-    if (!listingId || !completedAtRaw || !Number.isFinite(vipDays) || vipDays <= 0) continue
-    const expiresMs = new Date(completedAtRaw).getTime() + vipDays * 24 * 60 * 60 * 1000
-    if (!Number.isFinite(expiresMs) || expiresMs <= nowMs) continue
-    const prev = activeServiceExpiry.get(listingId)
-    if (!prev || expiresMs > new Date(prev).getTime()) {
-      activeServiceExpiry.set(listingId, new Date(expiresMs).toISOString())
-    }
-  }
-
-  const serviceIds = [...activeServiceExpiry.keys()].slice(0, 500)
-  let vipServices: VipServiceRow[] = []
-
-  if (serviceIds.length > 0) {
-    const { data: servicesRows, error: servicesErr } = await admin
-      .from("services")
-      .select(
-        `
-        id,
-        title,
-        description,
-        freelancer_profiles (
-          user_id,
-          slug,
-          professional_title,
-          average_rating,
-          profiles:profiles!freelancer_profiles_user_id_fkey (
-            full_name,
-            avatar_url
-          )
+  const { data: servicesRows, error: servicesErr } = await admin
+    .from("services")
+    .select(
+      `
+      id,
+      title,
+      description,
+      vip_expires_at,
+      freelancer_profiles (
+        user_id,
+        slug,
+        professional_title,
+        average_rating,
+        profiles:profiles!freelancer_profiles_user_id_fkey (
+          full_name,
+          avatar_url
         )
-      `,
       )
-      .eq("is_active", true)
-      .in("id", serviceIds)
-      .limit(500)
-    if (servicesErr) {
-      return { ok: false, error: servicesErr.message }
-    }
-    vipServices = (servicesRows ?? []) as VipServiceRow[]
+    `,
+    )
+    .eq("is_active", true)
+    .eq("is_vip", true)
+    .gt("vip_expires_at", nowIso)
+    .order("vip_expires_at", { ascending: false })
+    .limit(limit)
+  if (servicesErr) {
+    return { ok: false, error: servicesErr.message }
   }
+  const vipServices = (servicesRows ?? []) as VipServiceRow[]
 
   const freelancerUserIds = [
     ...new Set(
@@ -310,7 +278,7 @@ async function fetchHomepageVipData(
     const slug = String(freelancer?.slug ?? "").trim()
     if (!slug) continue
     const serviceId = String(row.id ?? "")
-    const expiresAt = activeServiceExpiry.get(serviceId) ?? nowIso
+    const expiresAt = String(row.vip_expires_at ?? nowIso)
     const displayName = String(freelancer?.profiles?.full_name ?? "ფრილანსერი").trim()
     const ownerUid = String(freelancer?.user_id ?? "").trim()
     const fallbackRating = Number(freelancer?.average_rating ?? 0)
@@ -417,13 +385,14 @@ serveWithSentry("get-homepage-vip", async (req) => {
   try {
     await deleteExpiredJobs(admin)
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Expired jobs cleanup failed"
-    return jsonResponse(req, { ok: false, error: msg }, 500)
+    requestLog(req)?.event("expired_jobs_cleanup_failed", { error: e instanceof Error ? e.message : String(e) }, "error")
+    return jsonResponse(req, { ok: false, error: "Internal server error" }, 500)
   }
 
   const data = await fetchHomepageVipData(admin, limit)
   if (!data.ok) {
-    return jsonResponse(req, { ok: false, error: data.error }, 500)
+    requestLog(req)?.event("homepage_vip_query_failed", { error: data.error }, "error")
+    return jsonResponse(req, { ok: false, error: "Internal server error" }, 500)
   }
 
   if (redis) {

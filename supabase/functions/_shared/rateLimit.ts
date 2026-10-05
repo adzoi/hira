@@ -15,12 +15,15 @@ export type RateLimitOptions = {
   failClosed?: boolean
 }
 
+/**
+ * Client IP for rate-limit keys. Prefer headers that the edge proxy overwrites
+ * (`cf-connecting-ip`, `x-real-ip`) — the leftmost `x-forwarded-for` entry can be set by the caller,
+ * so it is only a last resort.
+ */
 export function getClientIp(req: Request): string {
-  return (
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    req.headers.get("x-real-ip") ??
-    "anonymous"
-  )
+  const trusted = req.headers.get("cf-connecting-ip")?.trim() || req.headers.get("x-real-ip")?.trim()
+  if (trusted) return trusted
+  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "anonymous"
 }
 
 export function getRedis(): Redis | null {

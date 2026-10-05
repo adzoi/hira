@@ -16,10 +16,6 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_URL: string
   /** Supabase publishable/anon key (public; RLS enforces access). */
   readonly VITE_SUPABASE_ANON_KEY: string
-  /** PayPal client ID for Smart Buttons (public). */
-  readonly VITE_PAYPAL_CLIENT_ID?: string
-  /** Set to "1" for Playwright diagnostics only. */
-  readonly VITE_PAYPAL_E2E_DIAG?: string
   /** Sentry browser DSN (public). */
   readonly VITE_SENTRY_DSN?: string
   /** Set to "1" to throw a deliberate error on load for Sentry verification. */
