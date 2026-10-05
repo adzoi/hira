@@ -449,7 +449,8 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
         .set({
           margin: 0,
           filename: cvPdfFilename(fullName),
-          pagebreak: { mode: ["avoid-all", "css", "legacy"] },
+          // "avoid-all" injects spacer divs into the .cv-shell grid, which shifts the sidebar/main columns.
+          pagebreak: { mode: ["css"] },
           image: { type: "jpeg", quality: 0.98 },
           html2canvas: {
             scale: 2,
