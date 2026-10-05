@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import CVPreview from "../../components/cv/CVPreview.jsx"
+import CVPreview from "../components/cv/CVPreview.jsx"
 import { fetchCvGenerator } from "../lib/queries/fetchCvGenerator.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"

@@ -1,18 +1,14 @@
-* {
+/* Every rule is scoped under .cv-shell: this sheet is loaded into the main document for PDF export. */
+.cv-shell,
+.cv-shell * {
   -webkit-print-color-adjust: exact !important;
   print-color-adjust: exact !important;
   box-sizing: border-box;
 }
 
-html,
-body {
-  margin: 0;
-  padding: 0;
+.cv-shell {
   background: #ffffff;
   font-family: "Arial", "Helvetica", sans-serif;
-}
-
-.cv-shell {
   width: 794px;
   min-height: 1123px;
   margin: 0;
@@ -21,7 +17,7 @@ body {
   border: none;
 }
 
-.sidebar {
+.cv-shell .sidebar {
   width: 260px;
   overflow: hidden;
   flex-shrink: 0;
@@ -30,18 +26,18 @@ body {
   padding: 24px;
 }
 
-.sidebar * {
+.cv-shell .sidebar * {
   word-break: break-word;
   overflow-wrap: break-word;
 }
 
-.main {
+.cv-shell .main {
   background: #ffffff;
   color: #111827;
   padding: 32px;
 }
 
-.avatar {
+.cv-shell .avatar {
   display: block;
   width: 96px;
   height: 96px;
@@ -51,7 +47,7 @@ body {
   border: 2px solid rgba(255, 255, 255, 0.3);
 }
 
-.avatar-fallback {
+.cv-shell .avatar-fallback {
   width: 96px;
   height: 96px;
   margin: 0 auto 14px;
@@ -65,7 +61,7 @@ body {
   font-size: 22px;
 }
 
-.name {
+.cv-shell .name {
   font-weight: 700;
   margin: 0 0 12px;
   word-break: break-word;
@@ -73,21 +69,21 @@ body {
   color: #ffffff;
 }
 
-.name--short {
+.cv-shell .name--short {
   font-size: 32px;
 }
 
-.name--long {
+.cv-shell .name--long {
   font-size: 20px;
 }
 
-.contact p {
+.cv-shell .contact p {
   margin: 0 0 4px;
   font-size: 14px;
   color: #cbd5e1;
 }
 
-.print-link a {
+.cv-shell .print-link a {
   color: #cbd5e1;
   text-decoration: none;
   font-size: 14px;
@@ -95,37 +91,37 @@ body {
   margin: 4px 0;
 }
 
-.sec {
+.cv-shell .sec {
   margin-top: 20px;
   padding-top: 16px;
   border-top: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-.sec--first {
+.cv-shell .sec--first {
   border-top: none;
   margin-top: 0;
   padding-top: 0;
 }
 
-.sec--links {
+.cv-shell .sec--links {
   border-top: 1px solid rgba(255, 255, 255, 0.2);
   margin-top: 16px;
   padding-top: 12px;
 }
 
-.main .sec {
+.cv-shell .main .sec {
   border-top: 1px solid #e5e7eb;
   margin-top: 18px;
   padding-top: 18px;
 }
 
-.main .sec--first {
+.cv-shell .main .sec--first {
   border-top: none;
   margin-top: 0;
   padding-top: 0;
 }
 
-.sec-title {
+.cv-shell .sec-title {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -134,35 +130,35 @@ body {
   color: #94a3b8;
 }
 
-.main .sec-title {
+.cv-shell .main .sec-title {
   color: #4b5563;
 }
 
-.sidebar ul {
+.cv-shell .sidebar ul {
   margin: 6px 0 0 18px;
   padding: 0;
 }
 
-.sidebar li {
+.cv-shell .sidebar li {
   margin: 0 0 6px;
   line-height: 1.5;
   font-size: 14px;
   color: #ffffff;
 }
 
-.main ul {
+.cv-shell .main ul {
   margin: 6px 0 0 18px;
   padding: 0;
 }
 
-.main li {
+.cv-shell .main li {
   margin: 0 0 6px;
   line-height: 1.5;
   font-size: 14px;
   color: #374151;
 }
 
-.summary {
+.cv-shell .summary {
   margin: 0;
   line-height: 1.7;
   font-size: 15px;
@@ -170,26 +166,26 @@ body {
   color: #374151;
 }
 
-.work-card {
+.cv-shell .work-card {
   border: 1px solid #f1f5f9;
   border-radius: 8px;
   padding: 14px;
   margin-bottom: 12px;
 }
 
-.work-title {
+.cv-shell .work-title {
   font-weight: 700;
   margin-bottom: 2px;
   color: #111827;
 }
 
-.work-date {
+.cv-shell .work-date {
   color: #6b7280;
   font-size: 12px;
   margin-bottom: 8px;
 }
 
-.edu-card {
+.cv-shell .edu-card {
   border: 1px solid #f1f5f9;
   border-radius: 8px;
   padding: 12px;
@@ -197,19 +193,19 @@ body {
   background: #ffffff;
 }
 
-.edu-degree {
+.cv-shell .edu-degree {
   font-weight: 700;
   font-size: 14px;
   color: #111827;
 }
 
-.edu-school {
+.cv-shell .edu-school {
   color: #374151;
   font-size: 13px;
   margin-top: 2px;
 }
 
-.edu-year {
+.cv-shell .edu-year {
   color: #6b7280;
   font-size: 12px;
   margin-top: 2px;

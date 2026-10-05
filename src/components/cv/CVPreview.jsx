@@ -1,17 +1,15 @@
-"use client"
-
 import { useEffect, useMemo, useRef, useState } from "react"
-import { supabase } from "../../src/lib/supabase"
-import { avatarImageUrl, avatarPublicUrl } from "../../src/lib/storageImageUrl.ts"
+import { supabase } from "../../lib/supabase"
+import { avatarImageUrl, avatarPublicUrl } from "../../lib/storageImageUrl.ts"
 import {
   formatGeorgianExperienceRange,
   formatGeorgianMonthYear,
   initialsFromName,
   sanitizeCvProfessionalSummary,
   stripUrlForDisplay,
-} from "../../src/lib/cvFromProfile.ts"
-import { OptimizedImage } from "../../src/components/OptimizedImage.tsx"
-import { compressImageForUpload } from "../../src/lib/compressImageForUpload.ts"
+} from "../../lib/cvFromProfile.ts"
+import { OptimizedImage } from "../OptimizedImage.tsx"
+import { compressImageForUpload } from "../../lib/compressImageForUpload.ts"
 import "./cv-preview.css"
 
 const A4_WIDTH = 794
@@ -43,23 +41,21 @@ async function waitForElementImages(root) {
   )
 }
 
-async function waitForIframeReady(iframe) {
-  const doc = iframe.contentDocument
-  if (!doc) return
-  const win = iframe.contentWindow
-  await new Promise((resolve) => {
-    if (doc.readyState === "complete") resolve()
-    else win?.addEventListener("load", () => resolve(), { once: true })
+/** Must be a <link>: the production CSP blocks inline <style>. cv-print.css is scoped to .cv-shell, so it is safe to keep loaded. */
+function ensureCvPrintStylesheet() {
+  const existing = document.querySelector("link[data-cv-print]")
+  if (existing?.sheet) return Promise.resolve()
+  return new Promise((resolve) => {
+    const link = existing ?? document.createElement("link")
+    link.addEventListener("load", () => resolve(), { once: true })
+    link.addEventListener("error", () => resolve(), { once: true })
+    if (!existing) {
+      link.rel = "stylesheet"
+      link.href = CV_PRINT_CSS
+      link.setAttribute("data-cv-print", "")
+      document.head.appendChild(link)
+    }
   })
-  const link = doc.querySelector('link[rel="stylesheet"]')
-  if (link && !link.sheet) {
-    await new Promise((resolve) => {
-      link.addEventListener("load", () => resolve(), { once: true })
-      link.addEventListener("error", () => resolve(), { once: true })
-    })
-  }
-  const shell = doc.querySelector(".cv-shell")
-  if (shell) await waitForElementImages(shell)
 }
 
 function truthyStr(v) {
@@ -407,35 +403,25 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
     const eduSec = education.length > 0 ? `<section class="sec"><h3 class="sec-title">განათლება</h3>${education}</section>` : ""
 
     return `
-      <!doctype html>
-      <html lang="ka">
-        <head>
-          <meta charset="utf-8" />
-          <title>CV</title>
-          <link rel="stylesheet" href="${CV_PRINT_CSS}" />
-        </head>
-        <body>
-          <div class="cv-shell">
-            <aside class="sidebar">
-              ${avatarBlock}
-              <h1 class="name ${longName ? "name--long" : "name--short"}" lang="ka">${esc(localCV.full_name || "")}</h1>
-              ${contactBlocks.length ? `<div class="contact">${contactBlocks.join("")}</div>` : ""}
-              ${printLinks ? `<div class="sec sec--links">${printLinks}</div>` : ""}
-              ${skillsSec}
-              ${langSec}
-            </aside>
-            <main class="main">
-              ${summaryBlock}
-              ${
-                work.length > 0
-                  ? `<section class="sec"><h3 class="sec-title">გამოცდილება</h3>${work}</section>`
-                  : ""
-              }
-              ${eduSec}
-            </main>
-          </div>
-        </body>
-      </html>
+      <div class="cv-shell">
+        <aside class="sidebar">
+          ${avatarBlock}
+          <h1 class="name ${longName ? "name--long" : "name--short"}" lang="ka">${esc(localCV.full_name || "")}</h1>
+          ${contactBlocks.length ? `<div class="contact">${contactBlocks.join("")}</div>` : ""}
+          ${printLinks ? `<div class="sec sec--links">${printLinks}</div>` : ""}
+          ${skillsSec}
+          ${langSec}
+        </aside>
+        <main class="main">
+          ${summaryBlock}
+          ${
+            work.length > 0
+              ? `<section class="sec"><h3 class="sec-title">გამოცდილება</h3>${work}</section>`
+              : ""
+          }
+          ${eduSec}
+        </main>
+      </div>
     `
   }
 
@@ -446,19 +432,18 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
       return
     }
     setIsPrinting(true)
-    const iframe = document.createElement("iframe")
-    iframe.setAttribute("aria-hidden", "true")
-    iframe.style.cssText = `position:fixed;left:-10000px;top:0;width:${A4_WIDTH}px;height:${A4_HEIGHT}px;border:0;`
-    document.body.appendChild(iframe)
+    // Rendered in the main document: html2pdf clones the element into the main
+    // document, so styles that only exist in a separate iframe document are lost.
+    const container = document.createElement("div")
+    container.setAttribute("aria-hidden", "true")
+    container.style.cssText = `position:fixed;left:-10000px;top:0;width:${A4_WIDTH}px;`
+    document.body.appendChild(container)
     try {
-      const doc = iframe.contentDocument
-      if (!doc) throw new Error("PDF მომზადება ვერ მოხერხდა.")
-      doc.open()
-      doc.write(buildPrintableHtml())
-      doc.close()
-      await waitForIframeReady(iframe)
-      const shell = doc.querySelector(".cv-shell")
+      await ensureCvPrintStylesheet()
+      container.innerHTML = buildPrintableHtml()
+      const shell = container.querySelector(".cv-shell")
       if (!shell) throw new Error("CV შაბლონი ვერ მოიძებნა.")
+      await waitForElementImages(shell)
       const html2pdf = (await import("html2pdf.js")).default
       await html2pdf()
         .set({
@@ -481,7 +466,7 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
     } catch (error) {
       notify("error", error instanceof Error ? error.message : "PDF ჩამოტვირთვა ვერ მოხერხდა.")
     } finally {
-      iframe.remove()
+      container.remove()
       setIsPrinting(false)
     }
   }
