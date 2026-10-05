@@ -1,7 +1,8 @@
 /**
  * Supabase Storage image URLs for display.
- * Plain /object/public/ URLs are converted to /render/image/public/ with transforms.
- * DB storage should keep plain paths/URLs via avatarPublicUrl (no transform).
+ * Always serves the plain /object/public/ URL. The /render/image/ transform endpoint returns 403
+ * on this project (Image Transformations not enabled), which broke every avatar and listing image.
+ * Uploads are already compressed client-side (compressImageForUpload).
  */
 
 export type AppSupabaseClient = {
@@ -12,8 +13,6 @@ export type AppSupabaseClient = {
   }
 }
 
-const IMAGE_TRANSFORM_QUERY = "width=800&quality=75&format=webp"
-
 function isSupabaseStorageUrl(url: string): boolean {
   return (
     url.includes("/storage/v1/object/public/") ||
@@ -21,16 +20,14 @@ function isSupabaseStorageUrl(url: string): boolean {
   )
 }
 
-/** Convert a Supabase object or render URL into a transformed render URL. */
+/** Normalize a Supabase object or render URL to the plain public object URL (no transform query). */
 export function applyImageTransform(url: string): string {
   const trimmed = url.trim()
   if (!trimmed || !isSupabaseStorageUrl(trimmed)) return trimmed
 
-  const base = trimmed
+  return trimmed
     .split("?")[0]!
-    .replace("/storage/v1/object/public/", "/storage/v1/render/image/public/")
-
-  return `${base}?${IMAGE_TRANSFORM_QUERY}`
+    .replace("/storage/v1/render/image/public/", "/storage/v1/object/public/")
 }
 
 /** Extract object path from a Supabase Storage public object or render URL for `bucket`. */
