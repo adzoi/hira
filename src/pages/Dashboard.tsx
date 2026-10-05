@@ -1247,7 +1247,7 @@ export default function DashboardPage() {
     try {
       const { error } = await supabaseAny
         .from("service_inquiries")
-        .update({ deleted_by_hirer: true, updated_at: new Date().toISOString() })
+        .update({ deleted_by_hirer: true })
         .eq("id", inquiryId)
       if (error) throw error
       await reloadHirerListingInquiries()
@@ -1471,7 +1471,7 @@ export default function DashboardPage() {
     try {
       const { error } = await supabaseAny
         .from("job_applications")
-        .update({ deleted_by_hirer: true, updated_at: new Date().toISOString() })
+        .update({ deleted_by_hirer: true })
         .eq("id", item.applicationId)
         .eq("status", "rejected")
       if (error) throw error

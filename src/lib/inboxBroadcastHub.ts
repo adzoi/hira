@@ -2,6 +2,7 @@ import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js"
 import type { ChatBroadcastPayload } from "./chatBroadcast.ts"
 import { subscribeRealtimeChannel } from "./realtimeAuth.ts"
 
+/** Private topic; `realtime.messages` RLS only lets the owner join. */
 export function inboxBroadcastTopic(userId: string): string {
   return `inbox-broadcast:${userId}`
 }
@@ -21,7 +22,7 @@ export function subscribeInboxBroadcastHub(
 ): () => void {
   let hub = hubs.get(userId)
   if (!hub) {
-    const channel = client.channel(inboxBroadcastTopic(userId))
+    const channel = client.channel(inboxBroadcastTopic(userId), { config: { private: true } })
     const listeners = new Set<(payload: ChatBroadcastPayload) => void>()
     channel.on("broadcast", { event: "chat_message" }, ({ payload }) => {
       const row = payload as Partial<ChatBroadcastPayload> | null

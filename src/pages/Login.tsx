@@ -19,7 +19,8 @@ function sanitizeLoginRedirect(raw: string | null): string | null {
   } catch {
     return null
   }
-  if (!decoded.startsWith("/") || decoded.startsWith("//")) return null
+  // Backslashes are normalised to `/` by browsers, so `/\evil.com` would become `//evil.com`.
+  if (!decoded.startsWith("/") || decoded.startsWith("//") || decoded.includes("\\")) return null
   if (decoded.startsWith("/login")) return null
   if (decoded.startsWith("/register")) return null
   return decoded

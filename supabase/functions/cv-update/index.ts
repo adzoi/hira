@@ -48,25 +48,24 @@ function validateCvPayload(cv: Record<string, unknown>): string[] {
 }
 
 function sanitizeCvField(key: string, value: unknown): unknown {
+  // URL fields must pass the http(s) check, not just the plain-text one (blocks javascript:/data: links).
+  if (key.endsWith("_url")) {
+    const urlResult = validateOptionalUrl(value)
+    return urlResult.ok ? urlResult.value : null
+  }
   if (typeof value === "string") {
     const max =
       key === "professional_summary"
         ? LIMITS.cvSummary
-        : key.endsWith("_url")
-          ? LIMITS.url
-          : key === "custom_slug"
-            ? LIMITS.slug
-            : LIMITS.fullName
+        : key === "custom_slug"
+          ? LIMITS.slug
+          : LIMITS.fullName
     const textResult = validateTextField(value, { max, required: false, label: key })
     return textResult.ok ? textResult.value : sanitizePlainText(value).slice(0, max)
   }
   if (key === "work_experience" || key === "education" || key === "technical_skills" || key === "soft_skills") {
     const arrResult = validateJsonArrayField(value, key)
     return arrResult.ok ? arrResult.value : null
-  }
-  if (key.endsWith("_url")) {
-    const urlResult = validateOptionalUrl(value)
-    return urlResult.ok ? urlResult.value : null
   }
   return value
 }

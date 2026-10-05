@@ -324,6 +324,7 @@ DECLARE
   v_jobs_trgm_plan text;
   v_listings_fts_plan text;
   v_listings_trgm_plan text;
+  v_plan_line text;
 BEGIN
   IF search_trim IS NULL THEN
     RETURN json_build_object(
@@ -358,16 +359,20 @@ BEGIN
         )
         AND j.search_vector @@ q;
 
-      SELECT coalesce(string_agg(plan_line, E'\n'), '') INTO v_jobs_fts_plan
-      FROM (
-        EXPLAIN (FORMAT TEXT)
+      -- EXPLAIN cannot be a subquery; collect its rows via dynamic SQL.
+      v_jobs_fts_plan := '';
+      FOR v_plan_line IN EXECUTE format(
+        $q$EXPLAIN (FORMAT TEXT)
         SELECT j.id
         FROM public.jobs j
         WHERE j.status = 'open'
           AND (j.expires_at IS NULL OR j.expires_at > now())
-          AND j.search_vector @@ websearch_to_tsquery('simple', search_trim)
-        LIMIT 20
-      ) plans(plan_line);
+          AND j.search_vector @@ websearch_to_tsquery('simple', %L)
+        LIMIT 20$q$,
+        search_trim
+      ) LOOP
+        v_jobs_fts_plan := v_jobs_fts_plan || v_plan_line || E'\n';
+      END LOOP;
     END IF;
 
     SELECT count(*)::int INTO v_trgm
@@ -411,16 +416,19 @@ BEGIN
       v_trgm_only := v_trgm;
     END IF;
 
-    SELECT coalesce(string_agg(plan_line, E'\n'), '') INTO v_jobs_trgm_plan
-    FROM (
-      EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
+    v_jobs_trgm_plan := '';
+    FOR v_plan_line IN EXECUTE format(
+      $q$EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
       SELECT j.id
       FROM public.jobs j
       WHERE j.status = 'open'
         AND (j.expires_at IS NULL OR j.expires_at > now())
-        AND public.text_substring_trgm_match(j.title, search_trim)
-      LIMIT 20
-    ) plans(plan_line);
+        AND public.text_substring_trgm_match(j.title, %L)
+      LIMIT 20$q$,
+      search_trim
+    ) LOOP
+      v_jobs_trgm_plan := v_jobs_trgm_plan || v_plan_line || E'\n';
+    END LOOP;
 
     RETURN json_build_object(
       'catalog', 'jobs',
@@ -448,15 +456,18 @@ BEGIN
       AND fp.is_public = true
       AND sv.search_vector @@ q;
 
-    SELECT coalesce(string_agg(plan_line, E'\n'), '') INTO v_listings_fts_plan
-    FROM (
-      EXPLAIN (FORMAT TEXT)
+    v_listings_fts_plan := '';
+    FOR v_plan_line IN EXECUTE format(
+      $q$EXPLAIN (FORMAT TEXT)
       SELECT sv.id
       FROM public.services sv
       WHERE sv.is_active = true
-        AND sv.search_vector @@ websearch_to_tsquery('simple', search_trim)
-      LIMIT 20
-    ) plans(plan_line);
+        AND sv.search_vector @@ websearch_to_tsquery('simple', %L)
+      LIMIT 20$q$,
+      search_trim
+    ) LOOP
+      v_listings_fts_plan := v_listings_fts_plan || v_plan_line || E'\n';
+    END LOOP;
   END IF;
 
   SELECT count(*)::int INTO v_trgm
@@ -492,15 +503,18 @@ BEGIN
     v_trgm_only := v_trgm;
   END IF;
 
-  SELECT coalesce(string_agg(plan_line, E'\n'), '') INTO v_listings_trgm_plan
-  FROM (
-    EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
+  v_listings_trgm_plan := '';
+  FOR v_plan_line IN EXECUTE format(
+    $q$EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
     SELECT sv.id
     FROM public.services sv
     WHERE sv.is_active = true
-      AND public.text_substring_trgm_match(sv.title, search_trim)
-    LIMIT 20
-  ) plans(plan_line);
+      AND public.text_substring_trgm_match(sv.title, %L)
+    LIMIT 20$q$,
+    search_trim
+  ) LOOP
+    v_listings_trgm_plan := v_listings_trgm_plan || v_plan_line || E'\n';
+  END LOOP;
 
   RETURN json_build_object(
     'catalog', 'listings',

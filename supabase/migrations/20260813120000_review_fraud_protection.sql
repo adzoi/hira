@@ -351,7 +351,7 @@ BEGIN
     PERFORM cron.schedule(
       'trust-flag-detection-weekly',
       '0 4 * * 0',
-      $$SELECT public.run_trust_flag_detection();$$
+      'SELECT public.run_trust_flag_detection();'
     );
   END IF;
 EXCEPTION

@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS "pgtap";
 CREATE EXTENSION IF NOT EXISTS "supabase_test_helpers";
 
-SELECT plan(15);
+SELECT plan(16);
 
 SELECT tests.create_supabase_user('rev_hirer');
 SELECT tests.create_supabase_user('rev_freelancer');
@@ -176,12 +176,18 @@ SELECT results_eq(
   'freelancer owner SELECT notifications: own row visible'
 );
 
-SELECT results_eq(
-  $$ WITH u AS (
-       UPDATE public.completed_jobs SET freelancer_confirmed = false RETURNING 1
-     ) SELECT count(*)::int FROM u $$,
-  ARRAY[1],
-  'freelancer participant UPDATE completed_jobs: allowed'
+SELECT throws_ok(
+  $$ UPDATE public.completed_jobs SET hirer_profile_id = hirer_profile_id $$,
+  '42501',
+  'freelancer participant UPDATE completed_jobs (re-point hirer): denied'
+);
+
+SELECT tests.authenticate_as('rev_hirer');
+
+SELECT throws_ok(
+  $$ UPDATE public.completed_jobs SET completed_at = now() + interval '1 year' $$,
+  '42501',
+  'hirer participant UPDATE completed_jobs: denied'
 );
 
 SELECT tests.authenticate_as('rev_stranger');

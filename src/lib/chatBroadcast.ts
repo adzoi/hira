@@ -1,8 +1,8 @@
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js"
 import type { ChatMessage } from "./chat.ts"
 import type { AppNotification } from "./notifications.ts"
-import { inboxBroadcastTopic, subscribeInboxBroadcastHub } from "./inboxBroadcastHub.ts"
-import { ensureRealtimeAuth, subscribeRealtimeChannel } from "./realtimeAuth.ts"
+import { subscribeInboxBroadcastHub } from "./inboxBroadcastHub.ts"
+import { subscribeRealtimeChannel } from "./realtimeAuth.ts"
 import { chatMessagePreviewText } from "./validation.ts"
 
 export type ChatBroadcastPayload = {
@@ -18,6 +18,7 @@ export type ChatBroadcastPayload = {
   attachmentSizeBytes?: number | null
 }
 
+/** Private topic; `realtime.messages` RLS only lets conversation participants join. */
 function conversationBroadcastTopic(conversationId: string): string {
   return `chat-broadcast:${conversationId}`
 }
@@ -70,61 +71,13 @@ function isValidBroadcastPayload(row: Partial<ChatBroadcastPayload> | null): row
   return hasBody || hasAttachment
 }
 
-async function sendBroadcast(
-  client: SupabaseClient,
-  topic: string,
-  event: string,
-  payload: ChatBroadcastPayload,
-): Promise<void> {
-  if (!(await ensureRealtimeAuth(client))) return
-
-  const channel = client.channel(topic)
-  await new Promise<void>((resolve, reject) => {
-    channel.subscribe((status, err) => {
-      if (status === "SUBSCRIBED") resolve()
-      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-        reject(err ?? new Error(`Broadcast channel ${status}`))
-      }
-    })
-  })
-  await channel.send({ type: "broadcast", event, payload })
-  channel.unsubscribe()
-  void client.removeChannel(channel)
-}
-
-/** Push message to open thread + recipient inbox without relying on postgres_changes. */
-export async function broadcastChatMessage(
-  client: SupabaseClient,
-  message: ChatMessage,
-  senderName: string,
-  recipientId: string,
-): Promise<void> {
-  const payload: ChatBroadcastPayload = {
-    messageId: message.id,
-    conversationId: message.conversationId,
-    senderId: message.senderId,
-    senderName,
-    body: message.body,
-    createdAt: message.createdAt,
-    attachmentUrl: message.attachmentUrl,
-    attachmentName: message.attachmentName,
-    attachmentType: message.attachmentType,
-    attachmentSizeBytes: message.attachmentSizeBytes,
-  }
-
-  await sendBroadcast(client, conversationBroadcastTopic(message.conversationId), "message", payload)
-  if (recipientId && recipientId !== message.senderId) {
-    await sendBroadcast(client, inboxBroadcastTopic(recipientId), "chat_message", payload)
-  }
-}
-
 export function subscribeToConversationBroadcast(
   client: SupabaseClient,
   conversationId: string,
   meId: string,
   onMessage: (message: ChatMessage) => void,
 ): RealtimeChannel {
-  const channel = client.channel(conversationBroadcastTopic(conversationId))
+  const channel = client.channel(conversationBroadcastTopic(conversationId), { config: { private: true } })
   channel.on("broadcast", { event: "message" }, ({ payload }) => {
     const row = payload as Partial<ChatBroadcastPayload> | null
     if (!isValidBroadcastPayload(row)) return

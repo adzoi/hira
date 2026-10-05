@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS "pgtap";
 CREATE EXTENSION IF NOT EXISTS "supabase_test_helpers";
 
-SELECT plan(23);
+SELECT plan(24);
 
 SELECT tests.create_supabase_user('inq_hirer');
 SELECT tests.create_supabase_user('inq_freelancer');
@@ -193,10 +193,14 @@ SELECT results_eq(
   'applicant SELECT job_applications: own application visible'
 );
 
-SELECT lives_ok(
-  $$ UPDATE public.job_applications SET cover_note = 'Updated note'
-     WHERE freelancer_profile_id IN (SELECT id FROM public.freelancer_profiles WHERE user_id = auth.uid()) $$,
-  'applicant UPDATE job_applications: allowed'
+SELECT results_eq(
+  $$ WITH u AS (
+       UPDATE public.job_applications SET status = 'accepted'
+       WHERE freelancer_profile_id IN (SELECT id FROM public.freelancer_profiles WHERE user_id = auth.uid())
+       RETURNING 1
+     ) SELECT count(*)::int FROM u $$,
+  ARRAY[0],
+  'applicant UPDATE job_applications (self-accept): no rows affected'
 );
 
 -- job hirer sees applications on own job
@@ -216,6 +220,12 @@ SELECT lives_ok(
        WHERE hp.user_id = auth.uid()
      ) $$,
   'hirer UPDATE job_applications on own job: allowed'
+);
+
+SELECT throws_ok(
+  $$ UPDATE public.job_applications SET cover_note = 'Rewritten by hirer' $$,
+  '42501',
+  'hirer UPDATE job_applications non-status column: denied (column grant)'
 );
 
 SELECT throws_ok(

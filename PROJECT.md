@@ -356,7 +356,7 @@ Shared modules in `supabase/functions/_shared/`:
 
 ### Other realtime channels
 
-- **Chat** — new messages, read receipts, and inbox broadcast events (`src/lib/chatRealtime.ts`, `src/lib/chatBroadcast.ts`, `src/lib/inboxBroadcastHub.ts`)
+- **Chat** — new messages, read receipts, and inbox broadcast events (`src/lib/chatRealtime.ts`, `src/lib/chatBroadcast.ts`, `src/lib/inboxBroadcastHub.ts`). Broadcasts are sent only by the `notify_recipient_new_chat_message` trigger on **private** channels (`inbox-broadcast:{user_id}`, `chat-broadcast:{conversation_id}`); `realtime.messages` RLS limits subscribers to the inbox owner / conversation participants.
 - **Dashboard messaging** — inquiry/application updates (`src/lib/dashboardMessagingRealtime.ts`)
 - **Service inquiries / job applications** — realtime subscriptions for live dashboard tabs
 
@@ -427,7 +427,7 @@ Hira ships with a custom i18n layer (no third-party i18n framework):
 - CVs are assembled from existing profile data (no AI generation).
 - **`/cv-generator`** (auth): freelancer edits CV sections derived from profile, experience, education, skills.
 - **`/cv/:slug`**: public shareable CV; also available via Next-style route stub at `app/cv/[slug]/page.jsx` for SSR/SEO experiments.
-- **`cv-get` / `cv-update` Edge Functions** and `profiles.cv_url` store the public slug/URL.
+- **`cv-get` / `cv-update` Edge Functions** store the public CV slug. Uploaded PDF CVs live in the private `cvs` bucket at `{user_id}/cv.pdf`; `profiles.cv_url` holds that path and the profile page serves a signed URL (`src/lib/cvStorage.ts`).
 
 **Why profile-driven CVs?**
 
@@ -517,7 +517,7 @@ Migrations `20260519160000_security_hardening.sql` and `20260519170000_security_
 | `queries/useRecommendedJobs.ts` | Skill-based job recommendations |
 | `queries/useJobsCatalogQuery.ts` / `useListingsCatalogQuery.ts` | Paginated marketplace catalogs |
 | `chat.ts` / `chatRealtime.ts` / `chatAttachments.ts` / `chatBroadcast.ts` | Messaging and attachments |
-| `inboxBroadcastHub.ts` | Cross-tab inbox sync via BroadcastChannel |
+| `inboxBroadcastHub.ts` | Shared private Realtime channel for the signed-in user's inbox |
 | `notifications.ts` / `hooks/useLiveNotifications.ts` | Notification fetch + realtime |
 | `savedItems.ts` / `follows.ts` | Engagement features |
 | `storageImageUrl.ts` / `compressImageForUpload.ts` | Supabase Storage URLs and upload compression |

@@ -88,6 +88,8 @@ export function parseSupabaseRedirectTo(raw: string | null | undefined): string 
   }
   // Ignore accidental hash fragments (e.g. trailing `#` from implicit-flow cleanup).
   decoded = decoded.replace(/#.*$/, "")
+  // Browsers treat `\` as `/`, so `/\evil.com` would resolve off-site.
+  if (decoded.includes("\\")) return null
 
   if (decoded.startsWith("/") && !decoded.startsWith("//")) {
     return decoded

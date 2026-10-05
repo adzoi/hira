@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS "pgtap";
 CREATE EXTENSION IF NOT EXISTS "supabase_test_helpers";
 
-SELECT plan(19);
+SELECT plan(20);
 
 SELECT tests.create_supabase_user('soc_a');
 SELECT tests.create_supabase_user('soc_b');
@@ -164,6 +164,16 @@ SELECT lives_ok(
   $$ INSERT INTO public.forum_posts (author_id, author_name, category, subcategory, title, body)
      VALUES (auth.uid(), 'Soc A', 'general', 'intro', 'Second post', 'More') $$,
   'forum author INSERT forum_posts: allowed'
+);
+
+SELECT results_eq(
+  $$ WITH ins AS (
+       INSERT INTO public.forum_posts (author_id, author_name, category, subcategory, title, body)
+       VALUES (auth.uid(), 'Hira Support', 'general', 'intro', 'Spoof attempt', 'x')
+       RETURNING author_name
+     ) SELECT count(*)::int FROM ins WHERE author_name = 'Hira Support' $$,
+  ARRAY[0],
+  'forum author_name: client-supplied name ignored (taken from profile)'
 );
 
 SELECT results_eq(

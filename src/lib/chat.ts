@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { avatarImageUrl } from "./storageImageUrl.ts"
-import { broadcastChatMessage } from "./chatBroadcast.ts"
 import {
   removeChatAttachment,
   uploadChatAttachment,
@@ -483,34 +482,9 @@ export async function sendMessage(
     throw error
   }
 
-  const message = mapMessageRow(data, user.id, null)
-
-  void (async () => {
-    try {
-      const { data: conv } = await client
-        .from("conversations")
-        .select("participant_low, participant_high")
-        .eq("id", convId)
-        .maybeSingle()
-      if (!conv) return
-
-      const recipientId =
-        conv.participant_low === user.id ? conv.participant_high : conv.participant_low
-
-      const { data: profile } = await client
-        .from("profiles")
-        .select("full_name")
-        .eq("id", user.id)
-        .maybeSingle()
-
-      const senderName = profile?.full_name?.trim() || "მომხმარებელი"
-      await broadcastChatMessage(client, message, senderName, recipientId)
-    } catch (e) {
-      console.warn("[chat] broadcast:", e instanceof Error ? e.message : e)
-    }
-  })()
-
-  return message
+  // Realtime fan-out (open thread + recipient inbox) is done server-side by the
+  // notify_recipient_new_chat_message trigger on private channels.
+  return mapMessageRow(data, user.id, null)
 }
 
 export async function fetchUnreadConversationCount(client: SupabaseClient): Promise<number> {

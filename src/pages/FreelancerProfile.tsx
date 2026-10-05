@@ -37,6 +37,7 @@ import {
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { validateCvUpload } from "../lib/uploadValidation.ts"
+import { createCvSignedUrl, cvStoragePath } from "../lib/cvStorage.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
 import { buildPersonStructuredData, JsonLd } from "../lib/structuredData.tsx"
@@ -110,6 +111,7 @@ export default function FreelancerProfilePage() {
   })
   const error = isError ? queryErrorMessage(queryError, "მონაცემები ვერ ჩაიტვირთა.") : ""
   const [profile, setProfile] = useState<ProfileData | null>(null)
+  const [cvSignedUrl, setCvSignedUrl] = useState<string | null>(null)
   const [freelancer, setFreelancer] = useState<FreelancerData | null>(null)
   const [skills, setSkills] = useState<SkillData[]>([])
   const [services, setServices] = useState<ServiceData[]>([])
@@ -510,9 +512,24 @@ export default function FreelancerProfilePage() {
     pushToast({ type: "info", message: `${label} კოპირებულია` })
   }
 
+  useEffect(() => {
+    const profileId = profile?.id
+    if (!supabase || !profileId || !profile?.cv_url) {
+      setCvSignedUrl(null)
+      return
+    }
+    let cancelled = false
+    void createCvSignedUrl(supabase, profileId).then((url) => {
+      if (!cancelled) setCvSignedUrl(url)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [profile?.id, profile?.cv_url])
+
   const copyCvLink = async () => {
-    if (profile?.cv_url) {
-      await navigator.clipboard.writeText(profile.cv_url)
+    if (cvSignedUrl) {
+      await navigator.clipboard.writeText(cvSignedUrl)
       pushToast({ type: "info", message: "CV-ის ბმული კოპირებულია" })
       return
     }
@@ -540,18 +557,15 @@ export default function FreelancerProfilePage() {
         return
       }
 
-      const filePath = `${user.id}/cv.pdf`
+      const filePath = cvStoragePath(user.id)
       const { error: uploadError } = await supabase.storage.from("cvs").upload(filePath, file, { upsert: true })
       if (uploadError) throw uploadError
 
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("cvs").getPublicUrl(filePath)
-
-      const { error: updateError } = await supabase.from("profiles").update({ cv_url: publicUrl }).eq("id", user.id)
+      const { error: updateError } = await supabase.from("profiles").update({ cv_url: filePath }).eq("id", user.id)
       if (updateError) throw updateError
 
-      setProfile((prev) => (prev ? { ...prev, cv_url: publicUrl } : prev))
+      setProfile((prev) => (prev ? { ...prev, cv_url: filePath } : prev))
+      setCvSignedUrl(await createCvSignedUrl(supabase, user.id))
       pushToast({ type: "success", message: "CV დამატებულია პროფილზე." })
     } catch (e) {
       pushToast({ type: "error", message: e instanceof Error ? e.message : "CV ატვირთვა ვერ მოხერხდა." })
@@ -782,9 +796,9 @@ export default function FreelancerProfilePage() {
                     </Link>
                   </>
                 ) : null}
-                {profile.cv_url ? (
+                {cvSignedUrl ? (
                   <a
-                    href={profile.cv_url}
+                    href={cvSignedUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className={`${primaryBtnClass} shrink-0`}
@@ -796,7 +810,7 @@ export default function FreelancerProfilePage() {
                     {t("common.openCv")}
                   </Link>
                 ) : null}
-                {profile.cv_url || publicCvSlug ? (
+                {cvSignedUrl || publicCvSlug ? (
                   <button type="button" onClick={() => void copyCvLink()} className={`${outlineBtnClass} shrink-0`}>
                     {t("common.copyLink")}
                   </button>

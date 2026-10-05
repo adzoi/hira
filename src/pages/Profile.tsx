@@ -28,6 +28,7 @@ import { pickCategoryName } from "../lib/categoryLocale.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
 import { assertContentRateLimit, formatContentRateLimitError } from "../lib/contentRateLimit.ts"
+import { cvStoragePath } from "../lib/cvStorage.ts"
 
 type SkillCategoryRow = { id: string; name_ka: string; name_en?: string | null; parent_id: string | null }
 
@@ -722,7 +723,7 @@ export default function ProfilePage() {
         `${user.id}/avatar.png`,
         `${user.id}/avatar.webp`,
       ])
-      await client.storage.from("cvs").remove([`${user.id}/cv.pdf`])
+      await client.storage.from("cvs").remove([cvStoragePath(user.id)])
 
       await client.from("profiles").delete().eq("id", user.id)
 
