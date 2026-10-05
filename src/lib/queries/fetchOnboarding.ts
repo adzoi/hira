@@ -65,7 +65,7 @@ export async function fetchOnboarding(userId: string): Promise<OnboardingQueryDa
     throw new Error("AUTH_REQUIRED")
   }
 
-  const { data: profile } = await supabase.from("profiles").select("*").eq("id", userId).single()
+  const { data: profile } = await supabase.rpc("get_my_profile").single()
   if (!profile) throw new Error("პროფილი ვერ მოიძებნა.")
 
   const base: OnboardingQueryData = {

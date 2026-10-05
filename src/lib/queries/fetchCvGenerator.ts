@@ -18,9 +18,18 @@ export async function loadMergedCvForUser(
     throw new Error("User id is required.")
   }
 
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  const isOwnCv = session?.user.id === uid
+
+  // email/phone are not selectable on profiles; the owner reads them via get_my_profile,
+  // other viewers (public CV) get them from the saved CV row only.
   const [fpRes, profileRes] = await Promise.all([
     supabase.from("freelancer_profiles").select("*").eq("user_id", uid).maybeSingle(),
-    supabase.from("profiles").select("*").eq("id", uid).maybeSingle(),
+    isOwnCv
+      ? supabase.rpc("get_my_profile").maybeSingle()
+      : supabase.from("profiles").select("id,full_name,city,avatar_url,user_type").eq("id", uid).maybeSingle(),
   ])
 
   const fpRow = fpRes.data as Record<string, unknown> | null

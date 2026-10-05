@@ -100,20 +100,6 @@ function stripServiceMeta(raw: unknown): string {
 
 const CACHE_TTL = 60 // seconds
 
-async function deleteExpiredJobs(admin: ReturnType<typeof createClient>): Promise<void> {
-  const nowIso = new Date().toISOString()
-  const todayIso = nowIso.slice(0, 10)
-
-  const { error } = await admin
-    .from("jobs")
-    .delete()
-    .eq("status", "open")
-    .or(`application_deadline.lt.${todayIso},expires_at.lte.${nowIso}`)
-
-  if (error) {
-    throw new Error(`Expired jobs cleanup failed: ${error.message}`)
-  }
-}
 
 async function fetchHomepageVipData(
   admin: ReturnType<typeof createClient>,
@@ -382,12 +368,6 @@ serveWithSentry("get-homepage-vip", async (req) => {
     auth: { persistSession: false },
   })
 
-  try {
-    await deleteExpiredJobs(admin)
-  } catch (e) {
-    requestLog(req)?.event("expired_jobs_cleanup_failed", { error: e instanceof Error ? e.message : String(e) }, "error")
-    return jsonResponse(req, { ok: false, error: "Internal server error" }, 500)
-  }
 
   const data = await fetchHomepageVipData(admin, limit)
   if (!data.ok) {

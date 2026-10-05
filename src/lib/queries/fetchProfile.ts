@@ -99,7 +99,7 @@ export async function fetchProfile(): Promise<ProfileQueryData> {
   if (!user) throw new Error("მომხმარებელი ვერ მოიძებნა.")
 
   const [{ data: profile, error: profileError }, { data: fp }, { data: hp }] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", user.id).single(),
+    supabase.rpc("get_my_profile").single(),
     supabase.from("freelancer_profiles").select("*").eq("user_id", user.id).maybeSingle(),
     supabase.from("hirer_profiles").select("*").eq("user_id", user.id).maybeSingle(),
   ])

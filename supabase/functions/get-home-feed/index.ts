@@ -32,20 +32,6 @@ function isCachedSuccessPayload(v: unknown): v is SuccessPayload {
   return o.ok === true && "data" in o
 }
 
-async function deleteExpiredJobs(admin: ReturnType<typeof createClient>): Promise<void> {
-  const nowIso = new Date().toISOString()
-  const todayIso = nowIso.slice(0, 10)
-
-  const { error } = await admin
-    .from("jobs")
-    .delete()
-    .eq("status", "open")
-    .or(`application_deadline.lt.${todayIso},expires_at.lte.${nowIso}`)
-
-  if (error) {
-    throw new Error(`Expired jobs cleanup failed: ${error.message}`)
-  }
-}
 
 serveWithSentry("get-home-feed", async (req) => {
   if (req.method === "OPTIONS") {
@@ -89,12 +75,6 @@ serveWithSentry("get-home-feed", async (req) => {
     auth: { persistSession: false },
   })
 
-  try {
-    await deleteExpiredJobs(admin)
-  } catch (e) {
-    requestLog(req)?.event("expired_jobs_cleanup_failed", { error: e instanceof Error ? e.message : String(e) }, "error")
-    return jsonResponse(req, { ok: false, error: "Internal server error" }, 500)
-  }
 
   const { data, error } = await admin.rpc("get_home_feed")
   if (error) {

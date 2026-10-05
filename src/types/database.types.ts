@@ -1482,6 +1482,14 @@ export interface Database {
         Args: { p_job_id: string }
         Returns: { email: string; phone: string | null }[]
       }
+      get_my_profile: {
+        Args: Record<PropertyKey, never>
+        Returns: Database["public"]["Tables"]["profiles"]["Row"][]
+      }
+      get_profile_contact: {
+        Args: { p_user_id: string }
+        Returns: { email: string | null; phone: string | null }[]
+      }
       get_home_feed: {
         Args: Record<PropertyKey, never>
         Returns: Json

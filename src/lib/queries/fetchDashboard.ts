@@ -372,9 +372,7 @@ export async function fetchDashboard(actions: DashboardFetchActions): Promise<st
         }
 
         const { data: profileData, error: profileError } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", user.id)
+          .rpc("get_my_profile")
           .single()
 
         if (profileError || !profileData) {

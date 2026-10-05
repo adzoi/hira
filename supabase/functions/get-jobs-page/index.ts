@@ -42,20 +42,6 @@ function getEnv(name: string): string {
   return denoRuntime?.env?.get(name) ?? ""
 }
 
-async function deleteExpiredJobs(admin: ReturnType<typeof createClient>): Promise<void> {
-  const nowIso = new Date().toISOString()
-  const todayIso = nowIso.slice(0, 10)
-
-  const { error } = await admin
-    .from("jobs")
-    .delete()
-    .eq("status", "open")
-    .or(`application_deadline.lt.${todayIso},expires_at.lte.${nowIso}`)
-
-  if (error) {
-    throw new Error(`Expired jobs cleanup failed: ${error.message}`)
-  }
-}
 
 function normalizeSearch(raw: unknown): string | null {
   if (typeof raw !== "string") return null
@@ -133,11 +119,6 @@ serveWithSentry("get-jobs-page", async (req) => {
     auth: { persistSession: false },
   })
 
-  try {
-    await deleteExpiredJobs(admin)
-  } catch {
-    /* Non-fatal: catalog should still load if cleanup fails */
-  }
 
   const p_category_id = category === "all" ? null : category
   const p_offset = (page - 1) * PAGE_SIZE

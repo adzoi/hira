@@ -293,10 +293,8 @@ export default function FreelancerProfilePage() {
       if (!sessionPayload.session) return
 
       const { data: row, error: fetchError } = await supabase
-        .from("profiles")
-        .select("phone,email")
-        .eq("id", freelancer.user_id)
-        .single()
+        .rpc("get_profile_contact", { p_user_id: freelancer.user_id })
+        .maybeSingle()
 
       if (cancelled || fetchError || !row) return
 
@@ -469,10 +467,8 @@ export default function FreelancerProfilePage() {
     setContactLoading(true)
     try {
       const { data: row, error: fetchError } = await supabase
-        .from("profiles")
-        .select("phone,email")
-        .eq("id", freelancer.user_id)
-        .single()
+        .rpc("get_profile_contact", { p_user_id: freelancer.user_id })
+        .maybeSingle()
 
       if (fetchError || !row) {
         pushToast({
