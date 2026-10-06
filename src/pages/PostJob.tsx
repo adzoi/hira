@@ -262,7 +262,7 @@ export default function PostJobPage() {
     return cat ? pickCategoryName(cat, locale) : t("postJob.notSelected")
   }, [categories, rootCategoryId, locale, t])
   const midCategoryLabel = useMemo(() => {
-    if (categoryMidsList.length === 0) return "—"
+    if (categoryMidsList.length === 0) return "-"
     const cat = categories.find((c) => c.id === categoryId)
     return cat ? pickCategoryName(cat, locale) : t("postJob.notSelected")
   }, [categories, categoryId, categoryMidsList.length, locale, t])

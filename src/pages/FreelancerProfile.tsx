@@ -995,7 +995,7 @@ export default function FreelancerProfilePage() {
                         <div key={item.id} className="rounded-[10px] border border-[#E5E7EB] bg-[#F9FAFB] p-4">
                           <p className="font-semibold text-gray-900">
                             {formatFreelancerEducationDegreeLevel(item.degree_level)}
-                            {item.field_of_study?.trim() ? ` — ${item.field_of_study.trim()}` : ""}
+                            {item.field_of_study?.trim() ? ` - ${item.field_of_study.trim()}` : ""}
                           </p>
                           <p className="text-sm text-gray-600">{item.institution}</p>
                           {item.end_date ? (

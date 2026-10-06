@@ -165,7 +165,7 @@ const mockListings: ListingRow[] = [
   {
     id: "mock-1",
     freelancerProfileId: "00000000-0000-4000-8000-000000000001",
-    title: "React პაკეტი — პატარა ფიჩერების შექმნა",
+    title: "React პაკეტი - პატარა ფიჩერების შექმნა",
     titleEn: null,
     descriptionRaw:
       '<!--hira-meta:{"categoryId":null,"subcategoryId":null,"tags":["React","TypeScript"]}-->ლეიაუტის აწყობა, ფორმების დაკავშირება API-თან.',

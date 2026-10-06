@@ -23,7 +23,7 @@ export default function LanguageToggle({ locale, onChange, variant = "menu" }: L
         type="button"
         onClick={() => onChange(other)}
         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#E8F4FF] text-base leading-none ring-2 ring-[#0088FF] ring-offset-1 transition hover:bg-[#D4EEFF]"
-        aria-label={`${LOCALE_LABELS[locale]} — ${t("nav.language")}`}
+        aria-label={`${LOCALE_LABELS[locale]} - ${t("nav.language")}`}
         title={`${LOCALE_LABELS[other]}`}
       >
         <span aria-hidden>{LOCALE_FLAGS[locale]}</span>

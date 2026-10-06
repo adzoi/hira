@@ -208,7 +208,7 @@ export async function acceptJobApplication(
   }
 
   if (!incremented) {
-    throw new Error("განახლება ვერ დასრულდა — განაახლე გვერდი და სცადე თავიდან.")
+    throw new Error("განახლება ვერ დასრულდა - განაახლე გვერდი და სცადე თავიდან.")
   }
 
   if (vacancyNowFull) {

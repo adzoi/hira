@@ -15,8 +15,6 @@ const CACHE_TTL_SECONDS = 3600
 const PAGE_SIZE = 1000
 /** Category × city pages need at least this many freelancers to be listed (avoids thin pages). */
 const MIN_FREELANCERS_PER_CITY_PAGE = 2
-/** In-person service roots; mirrors LOCAL_ROOTS in src/pages/LocalServices.tsx. */
-const LOCAL_ROOT_SLUGS = new Set(["home-services", "tutoring-education", "photography", "automotive", "lifestyle-personal"])
 
 type SitemapEntry = {
   loc: string
@@ -32,7 +30,6 @@ const STATIC_PAGES: ReadonlyArray<{ path: string; changefreq: string; priority: 
   { path: "/jobs", changefreq: "daily", priority: "0.9" },
   { path: "/hirers", changefreq: "daily", priority: "0.8" },
   { path: "/freelancers", changefreq: "weekly", priority: "0.8" },
-  { path: "/local", changefreq: "weekly", priority: "0.8" },
   { path: "/internships", changefreq: "daily", priority: "0.7" },
   { path: "/about", changefreq: "monthly", priority: "0.6" },
   { path: "/guide", changefreq: "monthly", priority: "0.7" },
@@ -187,18 +184,6 @@ async function fetchLandingEntries(admin: ReturnType<typeof createClient>): Prom
       changefreq: "weekly",
       priority: "0.7",
     })
-  }
-  // /local/:city hubs for cities with in-person service providers.
-  const localCityTotals = new Map<string, number>()
-  for (const combo of index.combos ?? []) {
-    if (LOCAL_ROOT_SLUGS.has(combo.slug)) {
-      localCityTotals.set(combo.city, (localCityTotals.get(combo.city) ?? 0) + combo.count)
-    }
-  }
-  for (const [city, count] of localCityTotals) {
-    const citySlug = CITY_SLUGS[city]
-    if (!citySlug || count < MIN_FREELANCERS_PER_CITY_PAGE) continue
-    entries.push({ loc: absoluteUrl(`/local/${citySlug}`), changefreq: "weekly", priority: "0.6" })
   }
   for (const combo of index.combos ?? []) {
     const citySlug = CITY_SLUGS[combo.city]

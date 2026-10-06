@@ -32,7 +32,7 @@ const supabaseProjectUrl = (
   process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? supabaseFunctionsBase.replace(/\/functions\/v1$/, "")
 ).replace(/\/$/, "")
 const supabaseRestBase = supabaseProjectUrl ? `${supabaseProjectUrl}/rest/v1` : ""
-/** Static files other sites may embed (the "Hire me on Hira" badge). */
+/** Responses other sites may embed (link-preview images). */
 const EMBEDDABLE_HEADERS = { ...staticSecurityHeaders, "Cross-Origin-Resource-Policy": "cross-origin" }
 
 const MIME = {
@@ -312,7 +312,7 @@ const server = createServer(async (req, res) => {
   const isStaticAsset = /\.(?:webp|png|jpe?g|gif|svg|ico|js|css|woff2?|ttf|map|xml|txt)$/i.test(safePath)
 
   if (safePath !== "/" && existsSync(candidate) && statSync(candidate).isFile()) {
-    await sendFile(req, res, candidate, safePath, safePath.startsWith("/badges/") ? EMBEDDABLE_HEADERS : staticSecurityHeaders)
+    await sendFile(req, res, candidate, safePath)
     return
   }
 

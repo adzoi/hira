@@ -37,7 +37,7 @@ export function notificationFromChatBroadcast(payload: ChatBroadcastPayload): Ap
   return {
     id: chatBroadcastNotificationId(payload.messageId),
     type: "chat_message",
-    title: `ახალი შეტყობინება — ${payload.senderName}`,
+    title: `ახალი შეტყობინება - ${payload.senderName}`,
     body: previewBody(payload),
     link: `/messages/${payload.conversationId}`,
     is_read: false,

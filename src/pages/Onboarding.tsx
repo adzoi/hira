@@ -632,7 +632,7 @@ export default function OnboardingPage() {
                 <div className="space-y-4">
                   <div className="space-y-3">
                     <p className="text-xs font-medium text-slate-600">
-                      უნარები — ჯერ აირჩიე კატეგორია, შემდეგ დაამატე ტეგები ამ კატეგორიიდან (არასავალდებულო).
+                      უნარები - ჯერ აირჩიე კატეგორია, შემდეგ დაამატე ტეგები ამ კატეგორიიდან (არასავალდებულო).
                     </p>
                     <p className="text-xs text-slate-500">
                       არჩეულია <span className="font-semibold tabular-nums text-slate-700">{selectedSkillIds.length}</span> უნარი
@@ -695,7 +695,7 @@ export default function OnboardingPage() {
                                 <p className="mb-2 text-xs text-slate-500">ამ კატეგორიიდან ჯერ არაფერი არ არის არჩეული.</p>
                               )}
                               <label className="sr-only" htmlFor="onboarding-skill-add-active">
-                                უნარის დამატება — {skillFocusCategoryLabel}
+                                უნარის დამატება - {skillFocusCategoryLabel}
                               </label>
                               <select
                                 id="onboarding-skill-add-active"
@@ -723,7 +723,7 @@ export default function OnboardingPage() {
                       })()
                     ) : (
                       <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-3 py-3 text-xs text-slate-500">
-                        კატეგორიის ასარჩევად გამოიყენე ზემოთ სია — აქ გამოჩნდება შესაბამისი ტეგები.
+                        კატეგორიის ასარჩევად გამოიყენე ზემოთ სია - აქ გამოჩნდება შესაბამისი ტეგები.
                       </p>
                     )}
 

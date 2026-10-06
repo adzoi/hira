@@ -27,16 +27,16 @@ import { displayJobDescription } from "../lib/jobDescriptionDisplay.ts"
 import { assertContentRateLimit, formatContentRateLimitError } from "../lib/contentRateLimit.ts"
 
 function formatDate(dateString: string) {
-  if (!dateString.trim()) return "—"
+  if (!dateString.trim()) return "-"
   const t = new Date(dateString).getTime()
-  if (!Number.isFinite(t)) return "—"
+  if (!Number.isFinite(t)) return "-"
   return new Date(dateString).toLocaleDateString("ka-GE")
 }
 
 function formatRelativeTime(dateString: string) {
-  if (!dateString.trim()) return "—"
+  if (!dateString.trim()) return "-"
   const parsed = new Date(dateString).getTime()
-  if (!Number.isFinite(parsed)) return "—"
+  if (!Number.isFinite(parsed)) return "-"
   const now = Date.now()
   const diffMs = now - parsed
   const minute = 60 * 1000

@@ -10,7 +10,7 @@ const EXCERPT_LENGTH = 160
 
 function formatForumDate(iso: string, locale: string): string {
   const t = new Date(iso).getTime()
-  if (!Number.isFinite(t)) return "—"
+  if (!Number.isFinite(t)) return "-"
   return new Date(iso).toLocaleDateString(locale === "en" ? "en-US" : "ka-GE", {
     year: "numeric",
     month: "short",

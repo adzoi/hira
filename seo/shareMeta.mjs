@@ -64,8 +64,8 @@ async function buildTags(pathname, restBase, anonKey) {
     if (!m) return null
     const headline = [m.title, displayCity(m.city)].filter(Boolean).join(" · ")
     return {
-      title: `${clip(m.name, 60)}${m.title ? ` — ${clip(m.title, 60)}` : ""} | ჰირა`,
-      description: clip(m.bio || `${headline}. დაიქირავე ჰირაზე — ქართულ ფრილანს პლატფორმაზე.`, 200),
+      title: `${clip(m.name, 60)}${m.title ? ` - ${clip(m.title, 60)}` : ""} | ჰირა`,
+      description: clip(m.bio || `${headline}. დაიქირავე ჰირაზე - ქართულ ფრილანს პლატფორმაზე.`, 200),
       image: `${SITE_URL}/og/freelancer/${encodeURIComponent(slug)}.png`,
       url: `${SITE_URL}/freelancer/${encodeURIComponent(slug)}`,
       type: "profile",
@@ -89,7 +89,7 @@ async function buildTags(pathname, restBase, anonKey) {
     const m = await rpc(restBase, anonKey, "get_share_meta", { p_kind: "listing", p_id: match[1] })
     if (!m) return null
     return {
-      title: `${clip(m.title, 80)}${m.name ? ` — ${clip(m.name, 40)}` : ""} | ჰირა`,
+      title: `${clip(m.title, 80)}${m.name ? ` - ${clip(m.name, 40)}` : ""} | ჰირა`,
       description: clip(m.description || m.title, 200),
       image: `${SITE_URL}/og/listing/${match[1]}.png`,
       url: `${SITE_URL}/listing/${match[1]}`,
@@ -110,11 +110,11 @@ async function buildTags(pathname, restBase, anonKey) {
     const name = m.category.name_ka
     const count = Number(m.total_count ?? 0)
     return {
-      title: `${name}${place} — ფრილანსერები | ჰირა`,
+      title: `${name}${place} - ფრილანსერები | ჰირა`,
       description:
         count > 0
           ? `${name}${place}: ${count} ფრილანსერი ჰირაზე. ნახე პროფილები, შეფასებები და ფასები და დაუკავშირდი პირდაპირ.`
-          : `${name}${place} — იპოვე ფრილანსერი ან გამოაქვეყნე სამუშაო ჰირაზე.`,
+          : `${name}${place} - იპოვე ფრილანსერი ან გამოაქვეყნე სამუშაო ჰირაზე.`,
       url: `${SITE_URL}${pathname.replace(/\/$/, "")}`,
       noindex: count === 0,
     }

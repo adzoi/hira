@@ -119,7 +119,7 @@ function buildEmail(row: DigestRow, unsubscribeUrl: string): { subject: string; 
     `გამარჯობა${firstName ? `, ${firstName}` : ""}!`,
     `ამ კვირაში ჰირაზე ${jobCountPhrase(row.job_count)} გამოქვეყნდა შენს სფეროში:`,
     "",
-    ...jobs.map((job) => `• ${job.title} — ${budget(job)}\n  ${SITE_URL}/job/${job.id}`),
+    ...jobs.map((job) => `• ${job.title} - ${budget(job)}\n  ${SITE_URL}/job/${job.id}`),
     "",
     `ყველა სამუშაო: ${SITE_URL}/jobs`,
     `გამოწერის გაუქმება: ${unsubscribeUrl}`,

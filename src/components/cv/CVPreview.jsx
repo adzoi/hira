@@ -355,7 +355,7 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
     const education = (localCV.education || [])
       .filter((edu) => truthyStr(edu.school) || truthyStr(edu.degree) || truthyStr(edu.field_of_study) || truthyStr(edu.end_date))
       .map((edu) => {
-        const line1 = [edu.degree, edu.field_of_study].filter(truthyStr).join(" — ")
+        const line1 = [edu.degree, edu.field_of_study].filter(truthyStr).join(" - ")
         const school = truthyStr(edu.school) ? edu.school : ""
         const end = edu.end_date ? formatGeorgianMonthYear(String(edu.end_date)) : ""
         return `
@@ -374,7 +374,7 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
         const desc = String(job.description || "").trim()
         const bullets = desc ? `<li>${esc(desc)}</li>` : ""
         const dates = formatGeorgianExperienceRange(job.start_date, job.end_date, Boolean(job.is_current))
-        const title = [job.role, job.company].filter(truthyStr).join(" — ")
+        const title = [job.role, job.company].filter(truthyStr).join(" - ")
         return `
           <div class="work-card">
             ${title ? `<div class="work-title">${esc(title)}</div>` : ""}
@@ -546,21 +546,21 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
                     value={localCV.linkedin_url}
                     onChange={(e) => setLocalCV((p) => ({ ...p, linkedin_url: e.target.value }))}
                     placeholder=""
-                    aria-label="LinkedIn — https:// დაწყებით"
+                    aria-label="LinkedIn - https:// დაწყებით"
                   />
                   <input
                     className={SIDEBAR_FIELD_CLASS}
                     value={localCV.github_url}
                     onChange={(e) => setLocalCV((p) => ({ ...p, github_url: e.target.value }))}
                     placeholder=""
-                    aria-label="GitHub — https:// დაწყებით"
+                    aria-label="GitHub - https:// დაწყებით"
                   />
                   <input
                     className={SIDEBAR_FIELD_CLASS}
                     value={localCV.portfolio_url}
                     onChange={(e) => setLocalCV((p) => ({ ...p, portfolio_url: e.target.value }))}
                     placeholder=""
-                    aria-label="პორტფოლიო — https:// დაწყებით"
+                    aria-label="პორტფოლიო - https:// დაწყებით"
                   />
                   <AvatarEditor
                     fullName={localCV.full_name}
@@ -728,10 +728,10 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
                               <>
                                 {(truthyStr(job.role) || truthyStr(job.company)) ? (
                                   <p className="font-semibold text-gray-900">
-                                    {[job.role, job.company].filter(truthyStr).join(" — ")}
+                                    {[job.role, job.company].filter(truthyStr).join(" - ")}
                                   </p>
                                 ) : (
-                                  <p className="text-sm italic text-gray-400">ახალი ჩანაწერი — დააჭირეთ რედაქტორს</p>
+                                  <p className="text-sm italic text-gray-400">ახალი ჩანაწერი - დააჭირეთ რედაქტორს</p>
                                 )}
                                 {dates ? <p className="mb-1 text-xs text-gray-500">{dates}</p> : null}
                                 {truthyStr(job.description) ? <p className="text-sm text-gray-800">{job.description}</p> : null}
@@ -829,7 +829,7 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
                           <>
                             {(truthyStr(job.role) || truthyStr(job.company)) ? (
                               <p className="font-semibold text-gray-900">
-                                {[job.role, job.company].filter(truthyStr).join(" — ")}
+                                {[job.role, job.company].filter(truthyStr).join(" - ")}
                               </p>
                             ) : null}
                             {dates ? <p className="mb-2 text-xs text-gray-500">{dates}</p> : null}
@@ -934,7 +934,7 @@ export default function CVPreview({ cv, readOnly = false, showActions = true, on
                         ) : (
                           <>
                             {truthyStr(edu.degree) || truthyStr(edu.field_of_study) ? (
-                              <p className="font-semibold text-gray-900">{[edu.degree, edu.field_of_study].filter(truthyStr).join(" — ")}</p>
+                              <p className="font-semibold text-gray-900">{[edu.degree, edu.field_of_study].filter(truthyStr).join(" - ")}</p>
                             ) : null}
                             {truthyStr(edu.school) ? <p className="text-sm text-gray-700">{edu.school}</p> : null}
                             {truthyStr(edu.end_date) ? (

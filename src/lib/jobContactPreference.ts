@@ -37,10 +37,10 @@ export function formatHirerContactForApplicant(params: {
     const parts: string[] = []
     if (email.trim()) parts.push(`ელფოსტა: ${email.trim()}`)
     if (phone?.trim()) parts.push(`ტელეფონი: ${phone.trim()}`)
-    return parts.length > 0 ? parts.join(", ") : "—"
+    return parts.length > 0 ? parts.join(", ") : "-"
   }
   if (contactPreference === "phone" && phone?.trim()) return `ტელეფონი: ${phone.trim()}`
-  return email.trim() ? `ელფოსტა: ${email.trim()}` : "—"
+  return email.trim() ? `ელფოსტა: ${email.trim()}` : "-"
 }
 
 export function hirerContactCopyText(params: {

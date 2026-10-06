@@ -72,7 +72,7 @@ const MOCK_SERVICES: HomeFreelancerServiceItem[] = [
     kind: "freelancer_service",
     id: "mock-s1",
     createdAt: new Date().toISOString(),
-    title: "React პაკეტი — პატარა ფიჩერები",
+    title: "React პაკეტი - პატარა ფიჩერები",
     titleEn: null,
     descriptionPreview: "ლეიაუთი, ფორმები და API ინტეგრაცია სწრაფად.",
     descriptionEnPreview: null,
@@ -118,7 +118,7 @@ const MOCK_JOB_LISTINGS: HomeJobListingItem[] = [
     title: "React Developer საჭიროა საპროექტო ჯგუფისთვის",
     titleEn: null,
     descriptionPreview:
-      "გამოცდილი React დეველოპერი კომერციული პროექტისთვის — კომპონენტები, მდგომარეობის მართვა და API.",
+      "გამოცდილი React დეველოპერი კომერციული პროექტისთვის - კომპონენტები, მდგომარეობის მართვა და API.",
     descriptionEnPreview: null,
     imagePath: null,
     companyName: "TechStart Georgia",

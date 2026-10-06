@@ -58,7 +58,7 @@ function formatSupabaseErr(e: unknown): string {
   ) {
     const pe = e as Error & { details?: string; hint?: string; code?: string }
     const parts = [pe.message, pe.details, pe.hint].filter((p) => typeof p === "string" && p.length > 0)
-    const body = parts.join(" — ")
+    const body = parts.join(" - ")
     return pe.code && body ? `${body} (${pe.code})` : body || pe.message || "შენახვა ვერ მოხერხდა."
   }
   if (typeof e === "object" && e !== null && "message" in e) {
@@ -68,7 +68,7 @@ function formatSupabaseErr(e: unknown): string {
     const hint = typeof o.hint === "string" ? o.hint : ""
     const code = typeof o.code === "string" ? o.code : ""
     const parts = [msg, details, hint].filter(Boolean)
-    if (parts.length > 0) return code ? `${parts.join(" — ")} (${code})` : parts.join(" — ")
+    if (parts.length > 0) return code ? `${parts.join(" - ")} (${code})` : parts.join(" - ")
   }
   if (e instanceof Error) return e.message || "შენახვა ვერ მოხერხდა."
   return "შენახვა ვერ მოხერხდა."
@@ -1207,7 +1207,7 @@ export default function DashboardPage() {
             : "შეფასება გაიგზავნა. დასრულება ელოდება დამქირავებლის დადასტურებას."
           : nextStatus === "completed"
             ? "შეთავაზება დასრულდა."
-            : "დასრულება მონიშნულია — ელოდება დამქირავებლის დადასტურებას.",
+            : "დასრულება მონიშნულია - ელოდება დამქირავებლის დადასტურებას.",
       )
       await reloadFreelancerListingInquiries()
     } catch (e) {
@@ -2447,7 +2447,7 @@ export default function DashboardPage() {
                     <div>
                       <h3 className="text-lg font-bold text-[#1B2B4B]">შეთავაზების დასრულება</h3>
                       <p className="mt-1 text-sm text-slate-600">
-                        {freelancerListingCompleteModal.listingTitle} — {freelancerListingCompleteModal.hirerLabel}
+                        {freelancerListingCompleteModal.listingTitle} - {freelancerListingCompleteModal.hirerLabel}
                       </p>
                     </div>
                     <button
@@ -2534,7 +2534,7 @@ export default function DashboardPage() {
                     <div>
                       <h3 className="text-lg font-bold text-[#1B2B4B]">დამქირავებლის შეფასება</h3>
                       <p className="mt-1 text-sm text-slate-600">
-                        {freelancerHirerReviewModal.jobTitle} — {freelancerHirerReviewModal.hirerDisplayName}
+                        {freelancerHirerReviewModal.jobTitle} - {freelancerHirerReviewModal.hirerDisplayName}
                       </p>
                     </div>
                     <button
@@ -3235,7 +3235,7 @@ export default function DashboardPage() {
                 <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
                   <h3 className="text-lg font-bold text-[#1B2B4B]">ფრილანსერის შეფასება</h3>
                   <p className="mt-1 text-sm text-slate-600">
-                    {hirerListingReviewModal.listingTitle} — {hirerListingReviewModal.freelancerName}
+                    {hirerListingReviewModal.listingTitle} - {hirerListingReviewModal.freelancerName}
                   </p>
                   <p className="mt-3 text-xs text-slate-500">
                     შეაფასე ფრილანსერი და დაწერე მოკლე კომენტარი (მინ. 10 სიმბოლო).
@@ -3310,7 +3310,7 @@ export default function DashboardPage() {
                     <div>
                       <h3 className="text-lg font-bold text-[#1B2B4B]">სამუშაოს დასრულება</h3>
                       <p className="mt-1 text-sm text-slate-600">
-                        {reviewModalItem.jobTitle} — {reviewModalItem.freelancerName}
+                        {reviewModalItem.jobTitle} - {reviewModalItem.freelancerName}
                       </p>
                     </div>
                     <button

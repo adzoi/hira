@@ -42,7 +42,6 @@ const AuthConfirmPage = lazy(() => import("./pages/AuthConfirm.tsx"))
 const SavedPage = lazy(() => import("./pages/Saved.tsx"))
 const MessagesPage = lazy(() => import("./pages/Messages.tsx"))
 const InternshipsPage = lazy(() => import("./pages/Internships.tsx"))
-const LocalServicesPage = lazy(() => import("./pages/LocalServices.tsx"))
 const FreelancerStatsPage = lazy(() => import("./pages/FreelancerStats.tsx"))
 const UnsubscribePage = lazy(() => import("./pages/Unsubscribe.tsx"))
 const FreelancersHubPage = lazy(() => import("./pages/FreelancersHub.tsx"))
@@ -138,8 +137,6 @@ function App() {
             <Route path="/freelancer/:slug" element={<FreelancerProfilePage />} />
             <Route path="/unsubscribe" element={<UnsubscribePage />} />
             <Route path="/internships" element={<InternshipsPage />} />
-            <Route path="/local" element={<LocalServicesPage />} />
-            <Route path="/local/:city" element={<LocalServicesPage />} />
             <Route path="/freelancers" element={<FreelancersHubPage />} />
             <Route path="/freelancers/:category" element={<FreelancerLandingPage />} />
             <Route path="/freelancers/:category/:city" element={<FreelancerLandingPage />} />

@@ -7,7 +7,6 @@ export const en: T = {
     taglineShort: "freelance platform",
   },
   nav: {
-    local: "Local",
     home: "Home",
     freelancers: "Freelancers",
     listings: "Listings",
@@ -55,9 +54,9 @@ export const en: T = {
     account: "Account",
     serviceListings: "Listings",
     tagline:
-      "Georgian freelance platform — connect talent and opportunity in one place.",
+      "Georgian freelance platform - connect talent and opportunity in one place.",
     description:
-      "Georgian freelance marketplace — find services, hire professionals, and discover jobs in one place.",
+      "Georgian freelance marketplace - find services, hire professionals, and discover jobs in one place.",
     services: "Services",
     categories: "Categories",
     freelancers: "Freelancers",
@@ -73,37 +72,37 @@ export const en: T = {
   },
   about: {
     title: "About us",
-    pageTitle: "About us — Hira",
+    pageTitle: "About us - Hira",
     metaDescription:
-      "Our mission is to connect Georgian talent with opportunity — so everyone can grow professionally in their own country.",
-    heroHeading: "Hira — Georgian freelance platform",
+      "Our mission is to connect Georgian talent with opportunity - so everyone can grow professionally in their own country.",
+    heroHeading: "Hira - Georgian freelance platform",
     heroMission:
-      "Our mission is to connect Georgian talent with opportunity — so everyone can grow professionally in their own country.",
+      "Our mission is to connect Georgian talent with opportunity - so everyone can grow professionally in their own country.",
     storyHeading: "Our story",
     storyP1:
-      "Hira was born from the idea that Georgian professionals need a space where their talent meets local projects and hirers — not only the international market.",
+      "Hira was born from the idea that Georgian professionals need a space where their talent meets local projects and hirers - not only the international market.",
     storyP2:
       "We saw talented freelancers and companies looking for each other, but no platform that truly reflected Georgian language, context, and needs.",
     storyP3:
-      "Today Hira brings freelancers, hirers, and projects into one ecosystem — where quality, transparency, and trust come first.",
+      "Today Hira brings freelancers, hirers, and projects into one ecosystem - where quality, transparency, and trust come first.",
     valuesHeading: "Mission & values",
     qualityTitle: "Quality",
     qualityDesc:
-      "Every service and profile should meet high standards — we build an environment where professionalism is the norm.",
+      "Every service and profile should meet high standards - we build an environment where professionalism is the norm.",
     trustTitle: "Trust",
     trustDesc:
-      "Transparent reviews, secure communication, and honest partnerships — trust is the foundation of our platform.",
+      "Transparent reviews, secure communication, and honest partnerships - trust is the foundation of our platform.",
     communityTitle: "Community",
     communityDesc:
-      "Hira is more than a marketplace — it is a Georgian freelance community growing together.",
+      "Hira is more than a marketplace - it is a Georgian freelance community growing together.",
     ctaHeading: "Join Hira today",
     ctaPostService: "Post a service",
     ctaFindFreelancer: "Find a freelancer",
   },
   terms: {
-    pageTitle: "Terms of use — Hira",
+    pageTitle: "Terms of use - Hira",
     metaDescription:
-      "Hira terms of use — rules for freelancers, hirers, and marketplace users in Georgia.",
+      "Hira terms of use - rules for freelancers, hirers, and marketplace users in Georgia.",
     heroHeading: "Terms of use",
     heroSubtitle: "Please read these terms carefully before using Hira.",
     lastUpdated: "Last updated: 7 June 2026",
@@ -125,7 +124,7 @@ export const en: T = {
     section3P2:
       "Spam, harassment, unauthorized use of personal data, and attempts to damage the platform's technical systems are prohibited.",
     section3P3:
-      "Freelancers and hirers are parties to their own agreements — Hira is not a party to transactions between users unless stated otherwise.",
+      "Freelancers and hirers are parties to their own agreements - Hira is not a party to transactions between users unless stated otherwise.",
     section3P4:
       "You are solely responsible for all content you publish on Hira, including profiles, listings, messages, and portfolio materials.",
     section4Heading: "4. Services and listings",
@@ -137,7 +136,7 @@ export const en: T = {
     section5P1:
       "Payments for VIP and other premium features are processed through supported payment providers. Prices and conditions are shown on the relevant pages.",
     section5P2:
-      "Payments between freelancers and hirers are made directly between them — Hira is not a payment intermediary unless explicitly stated.",
+      "Payments between freelancers and hirers are made directly between them - Hira is not a payment intermediary unless explicitly stated.",
     section6Heading: "6. Intellectual property",
     section6P1:
       "The platform design, logo, code, and brand belong to Hira. Content uploaded by users remains the property of those users.",
@@ -167,9 +166,9 @@ export const en: T = {
       "For questions about these terms, contact us at: info@hira.ge",
   },
   privacy: {
-    pageTitle: "Privacy — Hira",
+    pageTitle: "Privacy - Hira",
     metaDescription:
-      "Hira privacy policy — how we collect, use, and protect your personal data.",
+      "Hira privacy policy - how we collect, use, and protect your personal data.",
     heroHeading: "Privacy policy",
     heroSubtitle: "How Hira collects, uses, and protects your personal data.",
     lastUpdated: "Last updated: 7 June 2026",
@@ -180,11 +179,11 @@ export const en: T = {
       "By using Hira, you acknowledge this privacy policy. If you do not agree, please do not use the platform.",
     section2Heading: "2. Data we collect",
     section2P1:
-      "Account data — name, email address, phone number (if provided), profile photo, and account type (freelancer or hirer).",
+      "Account data - name, email address, phone number (if provided), profile photo, and account type (freelancer or hirer).",
     section2P3:
-      "Usage data — pages visited, actions on the platform, device and browser type, IP address, and timestamps of activity.",
+      "Usage data - pages visited, actions on the platform, device and browser type, IP address, and timestamps of activity.",
     section2P4:
-      "Content you provide — service listings, job posts, messages, CV information, and other materials you upload or publish.",
+      "Content you provide - service listings, job posts, messages, CV information, and other materials you upload or publish.",
     section3Heading: "3. Why we collect data",
     section3P1:
       "To create and manage your account, authenticate sign-in, and provide core platform features.",
@@ -212,11 +211,11 @@ export const en: T = {
     section8P1:
       "If you are located in the European Union, you have additional rights under the General Data Protection Regulation (GDPR).",
     section8P2:
-      "Right to erasure — you may request deletion of your personal data, subject to legal exceptions.",
+      "Right to erasure - you may request deletion of your personal data, subject to legal exceptions.",
     section8P3:
-      "Right to data portability — you may request a copy of your data in a structured, commonly used format.",
+      "Right to data portability - you may request a copy of your data in a structured, commonly used format.",
     section8P4:
-      "Consent — where required, we rely on your consent (for example, for non-essential cookies). You may withdraw consent at any time.",
+      "Consent - where required, we rely on your consent (for example, for non-essential cookies). You may withdraw consent at any time.",
     section9Heading: "9. Cookies",
     section9P1:
       "Hira uses cookies and similar technologies for authentication, preferences, and site functionality.",
@@ -233,7 +232,7 @@ export const en: T = {
     bannerLearnMore: "Learn more",
     bannerAcceptAll: "Accept all",
     bannerEssentialOnly: "Essential only",
-    pageTitle: "Cookies — Hira",
+    pageTitle: "Cookies - Hira",
     metaDescription:
       "How Hira uses cookies and local storage for sign-in, preferences, and site functionality.",
     heroHeading: "Cookies",
@@ -251,14 +250,14 @@ export const en: T = {
       "When you first visit, we ask for your consent before saving non-essential cookies. You can choose to accept all cookies or only essential ones.",
     section3Heading: "3. Types of cookies",
     section3P1:
-      "Essential cookies — required for sign-in, security, and core features. These cannot be disabled if you want to use authenticated features.",
+      "Essential cookies - required for sign-in, security, and core features. These cannot be disabled if you want to use authenticated features.",
     section3P2:
-      "Preference cookies — store your settings, such as language choice (saved in localStorage under the `hira-locale` key).",
+      "Preference cookies - store your settings, such as language choice (saved in localStorage under the `hira-locale` key).",
     section3P3:
-      "Analytics cookies — if used in the future, these would help us understand how users interact with the site. Hira does not currently use third-party analytics tools.",
+      "Analytics cookies - if used in the future, these would help us understand how users interact with the site. Hira does not currently use third-party analytics tools.",
     section4Heading: "4. Managing cookies",
     section4P1:
-      "You can change your choice at any time by clearing site data in your browser and revisiting Hira — the consent banner will appear again.",
+      "You can change your choice at any time by clearing site data in your browser and revisiting Hira - the consent banner will appear again.",
     section4P2:
       "You can also delete or block cookies in your browser settings. Note that disabling essential cookies may limit sign-in and other features.",
     section4P3:
@@ -271,30 +270,30 @@ export const en: T = {
       "For cookie-related questions, contact us at: info@hira.ge",
   },
   guide: {
-    pageTitle: "Guide — Hira",
+    pageTitle: "Guide - Hira",
     metaDescription:
       "Step-by-step guide to registering, posting listings, finding jobs, and messaging on Hira.",
     heroHeading: "Guide",
     heroSubtitle: "Step-by-step instructions for using Hira.",
     section1Heading: "1. Getting started",
     section1P1:
-      "Create an account on the register page and choose your type — freelancer or hirer. Fill in basic details and complete onboarding.",
+      "Create an account on the register page and choose your type - freelancer or hirer. Fill in basic details and complete onboarding.",
     section1P2:
       "After onboarding you get access to the dashboard, where you can add profile details, your CV, and more.",
     section2Heading: "2. For freelancers",
     section2P1:
-      "Complete your profile — photo, bio, skills, education, and social links. A full profile attracts more attention.",
+      "Complete your profile - photo, bio, skills, education, and social links. A full profile attracts more attention.",
     section2P2:
       "Publish a service from \"Add listing\". Set category, description, price, and location.",
     section2P3:
       "Browse jobs on the Jobs page, save interesting listings, and start conversations with hirers via Messages.",
     section3Heading: "3. For hirers",
     section3P1:
-      "Post a job from \"Post job\" — describe the project, budget, timeline, and required skills.",
+      "Post a job from \"Post job\" - describe the project, budget, timeline, and required skills.",
     section3P2:
       "Find freelancers on the Freelancers or Listings pages. Use filters for category, location, and price.",
     section3P3:
-      "Start a conversation from a profile or listing — all contacts stay in one place in Messages.",
+      "Start a conversation from a profile or listing - all contacts stay in one place in Messages.",
     section4Heading: "4. Messages",
     section4P1:
       "Hira's messaging lets you contact other users securely within the platform.",
@@ -302,24 +301,24 @@ export const en: T = {
       "The Messages page shows all conversations. New messages appear as a badge in the navbar.",
     section5Heading: "5. VIP and extras",
     section5P1:
-      "VIP status increases visibility — your profile or listing appears higher in search results.",
+      "VIP status increases visibility - your profile or listing appears higher in search results.",
     section5P2:
       "For more details, go to the VIP section in your dashboard.",
   },
   faq: {
-    pageTitle: "FAQ — Hira",
+    pageTitle: "FAQ - Hira",
     metaDescription:
-      "Answers to frequently asked questions about Hira — registration, listings, jobs, and payments.",
+      "Answers to frequently asked questions about Hira - registration, listings, jobs, and payments.",
     heroHeading: "FAQ",
     heroSubtitle: "Frequently asked questions about Hira.",
     q1: "What is Hira?",
     a1: "Hira is a Georgian freelance and marketplace platform where freelancers, hirers, and service providers find each other.",
     q2: "Is it free?",
-    a2: "Core features are free — registration, profile, listings, and messages. VIP and other premium features may require payment.",
+    a2: "Core features are free - registration, profile, listings, and messages. VIP and other premium features may require payment.",
     q3: "How do I register?",
     a3: "Click Register in the navbar, choose account type (freelancer or hirer), fill in the form, and complete onboarding.",
     q4: "Can I have both account types?",
-    a4: "At registration you choose one type — freelancer or hirer. That determines which features you get (posting jobs vs. publishing services).",
+    a4: "At registration you choose one type - freelancer or hirer. That determines which features you get (posting jobs vs. publishing services).",
     q5: "How do I publish a service?",
     a5: "Sign in, go to Add listing, fill in title, description, category, price, and publish.",
     q6: "How do I find work?",
@@ -327,7 +326,7 @@ export const en: T = {
     q7: "How does payment work?",
     a7: "VIP and premium features are paid through the platform. Payments between freelancers and hirers are usually made directly between them.",
     q8: "How do I contact support?",
-    a8: "Email us at info@hira.ge — we reply as quickly as we can.",
+    a8: "Email us at info@hira.ge - we reply as quickly as we can.",
   },
   common: {
     loading: "Loading…",
@@ -385,7 +384,7 @@ export const en: T = {
     pricePeriodHourly: "hr",
     pricePeriodMonthly: "mo",
     saved: "Saved",
-    savedRemove: "Saved — remove",
+    savedRemove: "Saved - remove",
     startConversation: "Start conversation",
     somethingWrong: "Something went wrong",
     noResults: "No results found",
@@ -409,7 +408,7 @@ export const en: T = {
     proposedAmount: "Proposed: {amount} ₾",
     areYouSure: "Are you sure?",
     dontHaveOne: "I don't have one",
-    pageNotFound: "Page not found — Hira",
+    pageNotFound: "Page not found - Hira",
     notFoundMetaDescription: "The page you requested was not found on Hira.",
     goHome: "Go to home",
     stepOf: "Step {step}/{total}",
@@ -473,9 +472,9 @@ export const en: T = {
     portfolioImageAlt: "{title} portfolio image",
     portfolioFullSize: "Portfolio full size",
     fullscreenAvatar: "Avatar",
-    fullscreenAvatarAlt: "{name} avatar — large",
+    fullscreenAvatarAlt: "{name} avatar - large",
     phoneNumber: "Phone number",
-    busyCanStillOffer: "Freelancer is busy — you can still send an offer.",
+    busyCanStillOffer: "Freelancer is busy - you can still send an offer.",
     loadMoreView: "View more",
     sending: "Sending...",
     sortApplicants: "Applicants",
@@ -496,9 +495,9 @@ export const en: T = {
     noEducationAdded: "No education added yet.",
     experienceUntilPresent: "Present",
     contactNotSet: "This freelancer has not added contact details yet.",
-    unavailableBanner: "This freelancer is temporarily unavailable for new work — you can still send offers from listings.",
+    unavailableBanner: "This freelancer is temporarily unavailable for new work - you can still send offers from listings.",
     completedWorkCount: "{count} completed jobs",
-    titleWithBrand: "{title} — {brand}",
+    titleWithBrand: "{title} - {brand}",
   },
   status: {
     pending: "Pending",
@@ -514,15 +513,15 @@ export const en: T = {
     reviewed: "Reviewed",
     review: "Review",
     filled: "Filled",
-    freelancerDonePending: "Freelancer finished — awaiting confirmation",
+    freelancerDonePending: "Freelancer finished - awaiting confirmation",
     hirerDone: "Hirer finished",
   },
   auth: {
-    loginTitle: "Log in — Hira",
-    registerTitle: "Sign up — Hira",
-    forgotTitle: "Reset password — Hira",
-    resetTitle: "New password — Hira",
-    confirmTitle: "Confirm email — Hira",
+    loginTitle: "Log in - Hira",
+    registerTitle: "Sign up - Hira",
+    forgotTitle: "Reset password - Hira",
+    resetTitle: "New password - Hira",
+    confirmTitle: "Confirm email - Hira",
     loginMetaDescription: "Sign in to your Hira account to manage listings, jobs, and messages.",
     registerMetaDescription: "Create a free Hira account as a freelancer or hirer on Georgia's freelance marketplace.",
     forgotMetaDescription: "Request a password reset link for your Hira account.",
@@ -547,7 +546,7 @@ export const en: T = {
     freelancerDesc: "Join as a specialist, get orders, and grow your income.",
     hirerDesc: "Post projects, find professional freelancers, and hire fast.",
     selectedType: "Selected type:",
-    registerStep: "Step {step}/2 — create your Hira account.",
+    registerStep: "Step {step}/2 - create your Hira account.",
     tryAgainIn: "Try again in {seconds}s",
     forgotHeading: "Reset password",
     forgotHint: "Enter the email you registered with. We'll send a link to set a new password.",
@@ -570,9 +569,9 @@ export const en: T = {
     supabaseNotConfigured: "Supabase is not configured.",
   },
   home: {
-    title: "Hira — Georgian freelance platform",
+    title: "Hira - Georgian freelance platform",
     metaDescription:
-      "Georgian freelance marketplace — find services, hire professionals, and discover jobs in one place.",
+      "Georgian freelance marketplace - find services, hire professionals, and discover jobs in one place.",
     heroBrand: "Hira",
     heroTagline: "Georgian freelance platform",
     searchPlaceholder: "What are you looking for?",
@@ -614,7 +613,7 @@ export const en: T = {
     registerFailed: "Registration failed. Please try again.",
   },
   browse: {
-    title: "Freelancers — Hira",
+    title: "Freelancers - Hira",
     metaDescription: "Browse Georgian freelancers by skill, rating, availability, and price on Hira.",
     availability: "Availability",
     minRating: "Min. rating",
@@ -624,8 +623,8 @@ export const en: T = {
     sortNewest: "Newest",
   },
   listings: {
-    title: "Service listings — Hira",
-    metaDescription: "Search service listings from Georgian freelancers — filter by category, price, and rating.",
+    title: "Service listings - Hira",
+    metaDescription: "Search service listings from Georgian freelancers - filter by category, price, and rating.",
     detailedSearch: "Detailed search",
     minFreelancerRating: "Min. rating (freelancer)",
     listingPriceRange: "Listing price range (₾)",
@@ -634,7 +633,7 @@ export const en: T = {
     proposedAmountOptional: "Proposed amount (₾, optional)",
     empty: "No active public services right now. Try a different search or check back later.",
     negotiablePriceHint: "Negotiable prices are not limited by the price range.",
-    inquiryModalHint: "Your message appears on the freelancer dashboard under listing offers. Completed work is tracked there (status \"Completed\") — no separate job posting.",
+    inquiryModalHint: "Your message appears on the freelancer dashboard under listing offers. Completed work is tracked there (status \"Completed\") - no separate job posting.",
     inquiryMessage: "Message",
     messagePlaceholder: "What you need, deadlines, context…",
     exampleAmount: "e.g. 500",
@@ -644,7 +643,7 @@ export const en: T = {
     makeOffer: "Make an offer",
   },
   jobs: {
-    title: "Jobs — Hira",
+    title: "Jobs - Hira",
     metaDescription: "Find freelance jobs and projects posted by Georgian hirers on Hira.",
     searchPlaceholder: "Title, description, skills, category…",
     budgetType: "Budget type",
@@ -674,7 +673,7 @@ export const en: T = {
   },
   jobDetail: {
     metaTitleNamed: "{title} | Job on Hira",
-    title: "Jobs — Hira",
+    title: "Jobs - Hira",
     metaDescription: "View job details, requirements, budget, and apply on Hira.",
     requiredSkills: "Required skills",
     oneTime: "One-time",
@@ -685,11 +684,11 @@ export const en: T = {
     postedListings: "Posted listings",
     notFound: "Job not found",
     noOtherJobs: "No other listings.",
-    applicationClosed: "Cannot send a new offer on this listing — all spots are filled or the listing is closed.",
+    applicationClosed: "Cannot send a new offer on this listing - all spots are filled or the listing is closed.",
     postedListingsCount: "Posted listings: {count}",
   },
   hirers: {
-    title: "Hirers — Hira",
+    title: "Hirers - Hira",
     metaDescription: "Discover companies and hirers posting freelance projects on Hira.",
     industry: "Industry",
     found: "Found {count} hirers",
@@ -699,7 +698,7 @@ export const en: T = {
     statsJobsCompleted: "Posted: {posted} · Completed: {completed}",
   },
   hirerPublic: {
-    title: "Hirer profile — Hira",
+    title: "Hirer profile - Hira",
     metaDescription: "View a hirer company profile, active job listings, and ratings on Hira.",
     backToHirers: "← Hirers",
     notFound: "Hirer not found",
@@ -713,7 +712,7 @@ export const en: T = {
   },
   freelancerProfile: {
     metaTitleNamed: "{name}, {title} | Hira",
-    title: "Freelancers — Hira",
+    title: "Freelancers - Hira",
     metaDescription: "View a freelancer profile, portfolio, skills, reviews, and services on Hira.",
     languages: "Languages",
     socialNetworks: "Social networks",
@@ -745,8 +744,8 @@ export const en: T = {
     notFound: "Listing not found.",
   },
   listingForm: {
-    newTitle: "New listing — Hira",
-    editTitle: "Edit listing — Hira",
+    newTitle: "New listing - Hira",
+    editTitle: "Edit listing - Hira",
     metaDescription: "Create or edit your service listing on Hira.",
     addNew: "Add new listing",
     editListing: "Edit listing",
@@ -771,7 +770,7 @@ export const en: T = {
     selectSubcategory: "Select subcategory",
     selectSpecializationOptional: "Select (optional)",
     selectSubcategoryOrCategoryFirst: "Select subcategory or category first",
-    tagsHint: "You can pick tags after choosing a category — optional.",
+    tagsHint: "You can pick tags after choosing a category - optional.",
     tagsAfterCategory: "Category tags (optional). Selected: {count}",
     descriptionPlaceholder: "Describe what you offer to clients",
     imagesHint: "PNG/JPG/WEBP. Max 10MB per file.",
@@ -793,8 +792,8 @@ export const en: T = {
     imageProcessFailed: "Image processing failed.",
   },
   postJob: {
-    postTitle: "Post a job — Hira",
-    editTitle: "Edit listing — Hira",
+    postTitle: "Post a job - Hira",
+    editTitle: "Edit listing - Hira",
     metaDescription: "Create or edit a job listing and find freelancers on Hira.",
     postHeading: "Post a job",
     editHeading: "Edit listing",
@@ -883,7 +882,7 @@ export const en: T = {
     imageProcessFailed: "Image processing failed.",
   },
   dashboard: {
-    title: "Dashboard — Hira",
+    title: "Dashboard - Hira",
     metaDescription: "Manage your listings, jobs, applications, offers, and reviews on Hira.",
     heading: "Dashboard",
     hello: "Hello, {name}!",
@@ -933,7 +932,7 @@ export const en: T = {
     },
   },
   profile: {
-    title: "Profile — Hira",
+    title: "Profile - Hira",
     metaDescription: "Edit your Hira profile, skills, experience, avatar, and portfolio.",
     heading: "My profile",
     emailPassword: "Email and password",
@@ -976,7 +975,7 @@ export const en: T = {
   },
   messages: {
     heading: "Chat",
-    title: "Messages — Hira",
+    title: "Messages - Hira",
     subtitle: "Messaging with hirers and freelancers",
     metaDescription: "Chat with hirers and freelancers on Hira.",
     conversations: "Conversations",
@@ -1002,7 +1001,7 @@ export const en: T = {
     attachmentPreview: "{name} · {size}",
   },
   saved: {
-    title: "Saved — Hira",
+    title: "Saved - Hira",
     metaDescription: "Freelancers, hirers, jobs, and services you saved on Hira.",
     heading: "Saved",
     description: "Freelancers, hirers, jobs, and services you want to revisit later.",
@@ -1016,9 +1015,9 @@ export const en: T = {
     loadFailed: "Could not load saved items.",
   },
   onboarding: {
-    title: "Onboarding — Hira",
+    title: "Onboarding - Hira",
     metaDescription:
-      "Complete your Hira profile — skills, experience, and languages for freelancers and hirers.",
+      "Complete your Hira profile - skills, experience, and languages for freelancers and hirers.",
     heading: "Onboarding",
     languagesMin: "Languages (min. 1)",
     experienceMax: "Experience (max. 10)",
@@ -1029,8 +1028,8 @@ export const en: T = {
     loadFailed: "Could not load onboarding.",
   },
   cv: {
-    generatorTitle: "CV generator — Hira",
-    publicTitle: "Public CV — Hira",
+    generatorTitle: "CV generator - Hira",
+    publicTitle: "Public CV - Hira",
     generatorMetaDescription: "Build and download a professional CV from your Hira profile.",
     publicMetaDescription: "View a public CV shared from Hira.",
     loadFailed: "Could not load CV.",
@@ -1048,8 +1047,8 @@ export const en: T = {
     redirecting: "Loading…",
   },
   forum: {
-    pageTitle: "Forum — Hira",
-    metaDescription: "Hira community forum — share experience, ask questions, and find useful information.",
+    pageTitle: "Forum - Hira",
+    metaDescription: "Hira community forum - share experience, ask questions, and find useful information.",
     heading: "Forum",
     subheading: "Share experience, ask questions, and find useful information.",
     addPost: "Add post",
@@ -1083,8 +1082,8 @@ export const en: T = {
     deleteCommentSuccess: "Comment deleted.",
     deleteCommentError: "Could not delete comment.",
     loginToComment: "to write a comment.",
-    newPageTitle: "New post — Forum",
-    editPageTitle: "Edit post — Forum",
+    newPageTitle: "New post - Forum",
+    editPageTitle: "Edit post - Forum",
     newHeading: "New post",
     editHeading: "Edit post",
     titleLabel: "Title",
@@ -1165,9 +1164,6 @@ export const en: T = {
       "Share your profile on Facebook, Instagram or in messengers. The link shows a preview card with your name, rating and skills.",
     profileText: "Hire me on Hira",
     freelancerText: "{name} on Hira",
-    badgeHeading: "\"Hire me on Hira\" badge",
-    badgeHint: "Paste this code into your website, blog or portfolio. Clicking the badge opens your Hira profile.",
-    copyEmbed: "Copy code",
   },
   similar: {
     freelancersHeading: "Similar freelancers",
@@ -1205,30 +1201,6 @@ export const en: T = {
     dashboardLinkTitle: "Detailed stats",
     dashboardLinkHint: "Views, search and category rank",
     seeStats: "Stats",
-  },
-  local: {
-    title: "Local services{place}: repairs, tutors, photographers | Hira",
-    metaDescription:
-      "Find a handyman, tutor, photographer, movers or cleaners{place}. Check reviews and contact them directly on Hira.",
-    heading: "Local services{place}",
-    intro:
-      "Repairs, tutoring, photography, moving, cleaning and more: specialists who come to you. Pick a city and a category.",
-    chooseCity: "Choose a city",
-    allGeorgia: "All of Georgia",
-    hireTitle: "Need someone{place}?",
-    hireBody: "Describe what you need and local specialists will get in touch.",
-    joinTitle: "Offer a service in your city?",
-    joinBody: "Create a free profile and get orders from people nearby.",
-    stripHeading: "Local services",
-    stripBody: "Handymen, tutors, photographers and more, in your city.",
-    stripAll: "All cities",
-    roots: {
-      "home-services": "Home services",
-      "tutoring-education": "Tutoring",
-      photography: "Photography",
-      automotive: "Automotive",
-      "lifestyle-personal": "Beauty & wellness",
-    },
   },
   entryLevel: {
     internship: "Internship",

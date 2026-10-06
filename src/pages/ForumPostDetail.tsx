@@ -19,7 +19,7 @@ import { assertContentRateLimit, formatContentRateLimitError } from "../lib/cont
 
 function formatForumDateTime(iso: string, locale: string): string {
   const t = new Date(iso).getTime()
-  if (!Number.isFinite(t)) return "—"
+  if (!Number.isFinite(t)) return "-"
   return new Date(iso).toLocaleString(locale === "en" ? "en-US" : "ka-GE", {
     year: "numeric",
     month: "short",
@@ -74,7 +74,7 @@ export default function ForumPostDetailPage() {
   const isAuthed = Boolean(userId)
 
   const pageMeta = usePageMeta(
-    post ? `${post.title} — ${t("forum.heading")}` : t("forum.pageTitle"),
+    post ? `${post.title} - ${t("forum.heading")}` : t("forum.pageTitle"),
     post ? post.body.slice(0, 160) : t("forum.metaDescription"),
   )
 

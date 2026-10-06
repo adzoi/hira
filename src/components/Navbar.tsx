@@ -27,7 +27,6 @@ function buildNavLinks(t: (key: string) => string) {
     { label: t("nav.home"), to: "/" },
     { label: t("nav.freelancers"), to: "/browse" },
     { label: t("nav.listings"), to: "/listings" },
-    { label: t("nav.local"), to: "/local" },
     { label: t("nav.jobs"), to: "/jobs" },
     { label: t("nav.hirers"), to: "/hirers" },
     { label: t("nav.forum"), to: "/forum" },
@@ -38,7 +37,6 @@ function navLinkUnderlineActive(pathname: string, to: string) {
   if (to === "/forum") return pathname === "/forum" || pathname.startsWith("/forum/")
   if (to === "/hirers") return pathname === "/hirers" || pathname.startsWith("/hirer/")
   if (to === "/listings") return pathname === "/listings"
-  if (to === "/local") return pathname === "/local" || pathname.startsWith("/local/")
   return pathname === to
 }
 
@@ -811,7 +809,7 @@ export default function Navbar() {
             <div>
               <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{t("nav.comment")}</p>
               <p className="min-h-[3rem] min-w-0 max-w-full whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-sm text-slate-800 [overflow-wrap:anywhere]">
-                {detailNoteParts.comment.trim() ? detailNoteParts.comment : "—"}
+                {detailNoteParts.comment.trim() ? detailNoteParts.comment : "-"}
               </p>
             </div>
 

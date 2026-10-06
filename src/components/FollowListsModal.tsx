@@ -239,7 +239,7 @@ export default function FollowListsModal({ open, onClose, profileId, initialTab 
                         {t("nav.profile")}
                       </Link>
                     ) : (
-                      <span className="text-xs text-slate-400">—</span>
+                      <span className="text-xs text-slate-400">-</span>
                     )}
                   </li>
                 )

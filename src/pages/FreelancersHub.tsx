@@ -5,7 +5,6 @@ import PageLoader from "../components/ui/PageLoader.tsx"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { pickCategoryName } from "../lib/categoryLocale.ts"
 import { landingPath } from "../lib/landingPaths.ts"
-import { citySlug, formatCityForDisplay } from "../lib/marketplaceFilters.ts"
 import { fetchFreelancerLandingIndex } from "../lib/queries/fetchFreelancerLanding.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
@@ -29,35 +28,12 @@ export default function FreelancersHubPage() {
     }))
   }, [data])
 
-  const topCities = useMemo(() => {
-    const totals = new Map<string, number>()
-    for (const combo of data?.combos ?? []) {
-      if (!citySlug(combo.city)) continue
-      totals.set(combo.city, Math.max(totals.get(combo.city) ?? 0, combo.count))
-    }
-    return [...totals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8)
-  }, [data])
-
   return (
     <>
       {pageMeta}
       <main className="mx-auto w-full max-w-[1200px] px-4 py-8 md:px-6 md:py-10">
         <h1 className="text-3xl font-bold text-[#1B2B4B] md:text-4xl">{t("landing.hubHeading")}</h1>
         <p className="mt-3 max-w-3xl text-slate-600">{t("landing.hubIntro")}</p>
-
-        {topCities.length > 0 ? (
-          <div className="mt-6 flex flex-wrap gap-2">
-            {topCities.map(([city]) => (
-              <Link
-                key={city}
-                to={`/local/${citySlug(city)}`}
-                className="rounded-full border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:border-[#0088FF] hover:text-[#0088FF]"
-              >
-                📍 {formatCityForDisplay(city, locale)}
-              </Link>
-            ))}
-          </div>
-        ) : null}
 
         {isLoading ? (
           <PageLoader />

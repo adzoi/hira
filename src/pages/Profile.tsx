@@ -38,7 +38,7 @@ function formatSaveError(err: unknown): string {
   if (typeof err === "object" && err !== null) {
     const o = err as { message?: string; details?: string; hint?: string }
     const parts = [o.message, o.details, o.hint].filter((x) => typeof x === "string" && x.trim())
-    if (parts.length) return parts.join(" — ")
+    if (parts.length) return parts.join(" - ")
   }
   return "შენახვა ვერ მოხერხდა."
 }
@@ -915,7 +915,7 @@ export default function ProfilePage() {
           <section className="mt-8 rounded-xl border border-slate-200 bg-slate-50 p-6">
             <h2 className="text-lg font-semibold text-[#0088FF]">{t("profile.emailPassword")}</h2>
             <p className="mt-1 text-sm text-[#1B2B4B]">
-              <span className="font-medium">{t("profile.currentEmail")}:</span> {accountEmail || "—"}
+              <span className="font-medium">{t("profile.currentEmail")}:</span> {accountEmail || "-"}
             </p>
 
             {accountErr ? (
@@ -1261,7 +1261,7 @@ export default function ProfilePage() {
                             <p className="mb-2 text-xs text-slate-500">ამ კატეგორიიდან ჯერ არაფერი არ არის არჩეული.</p>
                           )}
                           <label className="sr-only" htmlFor="profile-skill-add-active">
-                            უნარის დამატება — {skillFocusCategoryLabel}
+                            უნარის დამატება - {skillFocusCategoryLabel}
                           </label>
                           <select
                             id="profile-skill-add-active"
@@ -1289,7 +1289,7 @@ export default function ProfilePage() {
                   })()
                 ) : (
                   <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-3 py-3 text-xs text-slate-500">
-                    კატეგორიის ასარჩევად გამოიყენე ზემოთ სია — აქ გამოჩნდება შესაბამისი ტეგები.
+                    კატეგორიის ასარჩევად გამოიყენე ზემოთ სია - აქ გამოჩნდება შესაბამისი ტეგები.
                   </p>
                 )}
 

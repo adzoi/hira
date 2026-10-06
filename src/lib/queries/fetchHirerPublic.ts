@@ -64,7 +64,7 @@ export async function fetchHirerPublic(id: string): Promise<HirerPublicData> {
       hirer: null,
       openJobs: [],
       hirerReviews: [],
-      documentTitle: "დამქირავებლის პროფილი — ჰირა",
+      documentTitle: "დამქირავებლის პროფილი - ჰირა",
       invalidId: true,
     }
   }
@@ -87,7 +87,7 @@ export async function fetchHirerPublic(id: string): Promise<HirerPublicData> {
       openJobs: [
         {
           id: "demo-job",
-          title: "React Developer — კონტრაქტი",
+          title: "React Developer - კონტრაქტი",
           budgetMin: 800,
           budgetMax: 1200,
           budgetType: "fixed",
@@ -96,7 +96,7 @@ export async function fetchHirerPublic(id: string): Promise<HirerPublicData> {
         },
       ],
       hirerReviews: [],
-      documentTitle: "TechStart Georgia (დემო) — ჰირა",
+      documentTitle: "TechStart Georgia (დემო) - ჰირა",
     }
   }
 
@@ -128,7 +128,7 @@ export async function fetchHirerPublic(id: string): Promise<HirerPublicData> {
       hirer: null,
       openJobs: [],
       hirerReviews: [],
-      documentTitle: "დამქირავებელი არ იძებნება — ჰირა",
+      documentTitle: "დამქირავებელი არ იძებნება - ჰირა",
     }
   }
 
@@ -243,7 +243,7 @@ export async function fetchHirerPublic(id: string): Promise<HirerPublicData> {
     hirer,
     openJobs,
     hirerReviews,
-    documentTitle: `${company} — ჰირა`,
+    documentTitle: `${company} - ჰირა`,
   }
 }
 
