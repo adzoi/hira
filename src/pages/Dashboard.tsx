@@ -2533,9 +2533,17 @@ export default function DashboardPage() {
                       type="button"
                       disabled={freelancerListingReviewSubmitting}
                       onClick={() => void submitFreelancerListingCompletion(true)}
-                      className="w-full rounded-lg bg-[#1B2B4B] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:opacity-60"
+                      className="flex-1 rounded-lg bg-[#1B2B4B] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:opacity-60"
                     >
                       {freelancerListingReviewSubmitting ? "ინახება…" : "შეფასების გაგზავნა"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={freelancerListingReviewSubmitting}
+                      onClick={() => void closeFreelancerListingCompleteWithSkip()}
+                      className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      დასრულება შეფასების გარეშე
                     </button>
                   </div>
                 </div>
@@ -3392,10 +3400,20 @@ export default function DashboardPage() {
                       type="button"
                       disabled={reviewSubmitting}
                       onClick={() => void submitCompleteReview(!reviewModalAlreadyReviewed)}
-                      className="w-full rounded-lg bg-[#1B2B4B] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:opacity-60"
+                      className="flex-1 rounded-lg bg-[#1B2B4B] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:opacity-60"
                     >
                       {reviewSubmitting ? "ინახება…" : reviewModalAlreadyReviewed ? "დასრულება" : "შეფასება და დასრულება"}
                     </button>
+                    {reviewModalAlreadyReviewed ? null : (
+                      <button
+                        type="button"
+                        disabled={reviewSubmitting}
+                        onClick={() => void closeHirerCompleteModalWithSkip()}
+                        className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        დასრულება შეფასების გარეშე
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
