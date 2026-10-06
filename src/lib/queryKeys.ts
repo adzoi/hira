@@ -34,4 +34,5 @@ export const queryKeys = {
   similarJobs: (jobId: string) => ["similar-jobs", jobId] as const,
   freelancerStats: (userId: string, days: number) => ["freelancer-stats", userId, days] as const,
   entryLevelJobs: (kind: string) => ["entry-level-jobs", kind] as const,
+  referralSummary: (userId: string) => ["referral-summary", userId] as const,
 }

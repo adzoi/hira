@@ -7,6 +7,7 @@ import ProtectedRoute from "./components/ProtectedRoute.tsx"
 import HomePage from "./pages/Home.tsx"
 import { buildSiteOrganizationSchema, buildSiteWebSiteSchema, JsonLd } from "./lib/structuredData.tsx"
 import { trackPageView } from "./lib/analytics.ts"
+import { captureReferralFromUrl } from "./lib/referral.ts"
 import { syncSentryRoute } from "./lib/sentry.ts"
 
 const LoginPage = lazy(() => import("./pages/Login.tsx"))
@@ -89,6 +90,7 @@ function GoogleAnalyticsPageViews() {
     const pagePath = location.pathname + location.search + location.hash
     trackPageView(pagePath)
     syncSentryRoute(pagePath)
+    captureReferralFromUrl(location.search)
   }, [location.pathname, location.search, location.hash])
 
   return null

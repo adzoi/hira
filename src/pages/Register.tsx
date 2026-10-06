@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import {
@@ -18,10 +18,16 @@ import {
   validateTextField,
 } from "../lib/validation.ts"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
+import { captureReferralFromUrl, clearStoredReferralCode, storedReferralCode } from "../lib/referral.ts"
 
 export default function RegisterPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const location = useLocation()
+  const [referralCode] = useState(() => {
+    captureReferralFromUrl(location.search)
+    return storedReferralCode()
+  })
   const [step, setStep] = useState<1 | 2>(1)
   const [userType, setUserType] = useState<"freelancer" | "hirer" | null>(null)
   const [fullName, setFullName] = useState("")
@@ -139,6 +145,7 @@ export default function RegisterPage() {
           user_type: formData.user_type,
           city: formData.city,
           phone: formData.phone,
+          ...(referralCode ? { referral_code: referralCode } : {}),
         },
       },
     }
@@ -179,6 +186,7 @@ export default function RegisterPage() {
         return
       }
 
+      clearStoredReferralCode()
       const newUserId = signUpData.user?.id
       const session = signUpData.session
       const emailConfirmed = Boolean(signUpData.user?.email_confirmed_at ?? signUpData.user?.confirmed_at)
@@ -216,6 +224,9 @@ export default function RegisterPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-8">
             <h1 className="text-[28px] font-bold text-[#0088FF] md:text-4xl">{t("auth.registerHeading")}</h1>
             <p className="mt-2 text-sm text-slate-500">{t("auth.registerStep", { step })}</p>
+            {referralCode ? (
+              <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-[#1B2B4B]">{t("referral.invitedBanner")}</p>
+            ) : null}
 
             {step === 1 ? (
               <div className="mt-7 grid gap-4 md:grid-cols-2">

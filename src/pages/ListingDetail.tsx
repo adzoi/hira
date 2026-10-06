@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import ShareButtons from "../components/ShareButtons.tsx"
+import VipCoinsButton from "../components/VipCoinsButton.tsx"
 import FreelancerAvailabilityIndicator from "../components/FreelancerAvailabilityIndicator.tsx"
 import { OptimizedImage } from "../components/OptimizedImage.tsx"
 import { ViewCountEyeIcon } from "../components/ViewCountEyeIcon.tsx"
@@ -408,6 +409,12 @@ export default function ListingDetailPage() {
                   <SaveBookmarkButton variant="icon" resourceType="service" resourceId={item.id} />
                 ) : null}
               </div>
+
+              {viewerOwnsListing ? (
+                <div className="mt-4">
+                  <VipCoinsButton kind="service" id={item.id} invalidateKey={queryKeys.listingDetail(item.id)} />
+                </div>
+              ) : null}
 
               {imagePublicUrls.length > 0 ? (
                 <div className="mt-3 shrink-0">

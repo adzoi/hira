@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import FollowListsModal, { FollowStatPills, type FollowModalTab } from "../components/FollowListsModal.tsx"
 import ProfileCompletenessCard from "../components/ProfileCompletenessCard.tsx"
+import ReferralCard from "../components/ReferralCard.tsx"
 import ShareProfileCard from "../components/ShareProfileCard.tsx"
 import { META_SUFFIX, resolveListingMetaPrefix, stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { formatListingPrice, normalizeListingPriceType } from "../lib/listingPrice.ts"
@@ -1862,6 +1863,8 @@ export default function DashboardPage() {
               <ShareProfileCard slug={freelancerProfile.slug} />
             ) : null}
 
+            <ReferralCard />
+
             {visibleFreelancerHirerReviewQueue.length > 0 ? (
               <div className="rounded-xl border border-slate-200 bg-white p-6">
                 <h3 className="text-xl font-bold text-[#1B2B4B]">დამქირავებლის შეფასება</h3>
@@ -2638,6 +2641,8 @@ export default function DashboardPage() {
                 <p className="mt-2 text-2xl font-bold text-gray-900">{activeJobsCount}</p>
               </div>
             </div>
+
+            <ReferralCard />
 
             <div className="rounded-xl border border-slate-200 bg-white p-3 sm:p-4">
               <div className="flex flex-nowrap gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

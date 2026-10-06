@@ -8,6 +8,7 @@ import { useToast } from "../components/ui/ToastProvider.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
 import ShareButtons from "../components/ShareButtons.tsx"
 import SimilarJobs from "../components/SimilarJobs.tsx"
+import VipCoinsButton from "../components/VipCoinsButton.tsx"
 import StartConversationButton from "../components/StartConversationButton.tsx"
 import { avatarImageUrl, jobImageDetailUrl, jobImageThumbnailUrl } from "../lib/storageImageUrl.ts"
 import { fetchJobDetail, loadHirerContact, type JobDetailQueryResult } from "../lib/queries/fetchJobDetail.ts"
@@ -511,6 +512,12 @@ export default function JobDetailPage() {
                 {vacancySnap?.isFull ? t("jobs.vacancyFull") : t("jobs.spotsFree", { count: vacancySnap?.remaining ?? 0 })}
               </p>
             </div>
+
+            {isJobOwner && job.status === "open" ? (
+              <div className="mt-4">
+                <VipCoinsButton kind="job" id={job.id} invalidateKey={queryKeys.jobDetail(job.id)} />
+              </div>
+            ) : null}
 
             {!isJobOwner ? (
               <div className="mt-4 flex shrink-0 flex-wrap gap-2">

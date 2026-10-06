@@ -1012,12 +1012,15 @@ export interface Database {
           cv_url: string | null
           email: string
           full_name: string
+          hira_coins: number
           id: string
           is_active: boolean
           is_online: boolean
           is_verified: boolean
           member_since: string
           phone: string | null
+          referred_by: string | null
+          referral_code: string | null
           updated_at: string
           user_type: string
           weekly_digest_enabled: boolean
@@ -1032,12 +1035,15 @@ export interface Database {
           cv_url?: string | null
           email: string
           full_name: string
+          hira_coins?: number
           id: string
           is_active?: boolean
           is_online?: boolean
           is_verified?: boolean
           member_since?: string
           phone?: string | null
+          referred_by?: string | null
+          referral_code?: string | null
           updated_at?: string
           user_type: string
           weekly_digest_enabled?: boolean
@@ -1052,12 +1058,15 @@ export interface Database {
           cv_url?: string | null
           email?: string
           full_name?: string
+          hira_coins?: number
           id?: string
           is_active?: boolean
           is_online?: boolean
           is_verified?: boolean
           member_since?: string
           phone?: string | null
+          referred_by?: string | null
+          referral_code?: string | null
           updated_at?: string
           user_type?: string
           weekly_digest_enabled?: boolean
@@ -1573,6 +1582,17 @@ export interface Database {
           p_kind: string
           p_id: string
         }
+        Returns: Json
+      }
+      spend_coins_for_vip: {
+        Args: {
+          p_kind: string
+          p_id: string
+        }
+        Returns: Json
+      }
+      get_my_referral_summary: {
+        Args: Record<PropertyKey, never>
         Returns: Json
       }
       get_entry_level_jobs: {
