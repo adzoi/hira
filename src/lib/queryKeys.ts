@@ -21,6 +21,7 @@ export const queryKeys = {
   messagesList: (userId: string) => ["messages-list", userId] as const,
   messagesThread: (conversationId: string) => ["messages-thread", conversationId] as const,
   profile: (userId: string) => ["profile", userId] as const,
+  profileCompleteness: (freelancerProfileId: string) => ["profile-completeness", freelancerProfileId] as const,
   postJob: (userId: string, jobId?: string) => ["post-job", userId, jobId ?? "new"] as const,
   listingForm: (userId: string, listingId?: string) => ["listing-form", userId, listingId ?? "new"] as const,
   onboarding: (userId: string) => ["onboarding", userId] as const,

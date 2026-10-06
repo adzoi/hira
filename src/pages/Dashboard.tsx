@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import FollowListsModal, { FollowStatPills, type FollowModalTab } from "../components/FollowListsModal.tsx"
+import ProfileCompletenessCard from "../components/ProfileCompletenessCard.tsx"
 import { META_SUFFIX, resolveListingMetaPrefix, stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { formatListingPrice, normalizeListingPriceType } from "../lib/listingPrice.ts"
 import { subscribeToDashboardMessaging } from "../lib/dashboardMessagingRealtime.ts"
@@ -1822,6 +1823,8 @@ export default function DashboardPage() {
                   პროფილის დასრულება
                 </Link>
               </div>
+            ) : freelancerProfile ? (
+              <ProfileCompletenessCard profile={profile} freelancerProfile={freelancerProfile} />
             ) : null}
 
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">

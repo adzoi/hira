@@ -906,6 +906,23 @@ export const ka: T = {
     defaultFreelancer: "ფრილანსერი",
     defaultJob: "განცხადება",
     saveFailed: "შენახვა ვერ მოხერხდა.",
+    completeness: {
+      heading: "პროფილის სისრულე",
+      progress: "{done} / {total} შესრულებული",
+      hint: "სრული პროფილი დამქირავებლებს მეტ ნდობას აძლევს და ძიებაში უკეთ ჩანს. დაამატე დარჩენილი:",
+      items: {
+        avatar: "პროფილის ფოტო",
+        title: "პროფესიული სათაური",
+        bio: "ბიოგრაფია (მინ. {minBio} სიმბოლო)",
+        skills: "უნარები (მინ. {minSkills})",
+        service: "გამოაქვეყნე პირველი სერვისი",
+        experience: "სამუშაო გამოცდილება",
+        education: "განათლება",
+        languages: "ენები",
+        city: "ქალაქი",
+        links: "პორტფოლიო ან სოციალური ბმული",
+      },
+    },
   },
   profile: {
     title: "პროფილი - ჰირა",

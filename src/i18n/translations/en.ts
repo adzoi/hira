@@ -910,6 +910,23 @@ export const en: T = {
     defaultFreelancer: "Freelancer",
     defaultJob: "Listing",
     saveFailed: "Could not save.",
+    completeness: {
+      heading: "Profile completeness",
+      progress: "{done} of {total} done",
+      hint: "Complete profiles earn more trust from hirers and show up better in search. Still to add:",
+      items: {
+        avatar: "Profile photo",
+        title: "Professional title",
+        bio: "Bio (at least {minBio} characters)",
+        skills: "Skills (at least {minSkills})",
+        service: "Publish your first service",
+        experience: "Work experience",
+        education: "Education",
+        languages: "Languages",
+        city: "City",
+        links: "Portfolio or social link",
+      },
+    },
   },
   profile: {
     title: "Profile — Hira",
