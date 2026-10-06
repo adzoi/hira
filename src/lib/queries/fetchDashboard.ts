@@ -176,7 +176,7 @@ function snapshotServices(services: ServiceDraft[]) {
   )
 }
 
-function mapFreelancerCompletedPlatformJobRows(rows: unknown[] | null | undefined): FreelancerCompletedPlatformJob[] {
+export function mapFreelancerCompletedPlatformJobRows(rows: unknown[] | null | undefined): FreelancerCompletedPlatformJob[] {
   if (!rows?.length) return []
   const out: FreelancerCompletedPlatformJob[] = []
   for (const raw of rows as Array<Record<string, unknown>>) {

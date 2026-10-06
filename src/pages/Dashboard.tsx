@@ -10,7 +10,8 @@ import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import type { Database } from "../lib/database.types"
 import { jobVacancyStats } from "../lib/jobVacancies.ts"
 import { assertField, validateReviewComment } from "../lib/validation.ts"
-import { fetchDashboard } from "../lib/queries/fetchDashboard.ts"
+import { fetchDashboard, mapFreelancerCompletedPlatformJobRows } from "../lib/queries/fetchDashboard.ts"
+import type { FreelancerCompletedPlatformJob } from "../lib/queries/fetchDashboard.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
@@ -443,52 +444,6 @@ type FreelancerHirerReviewRow = {
   jobTitle: string
   hirerUserId: string
   hirerDisplayName: string
-}
-
-function embedJoinOne<T extends Record<string, unknown>>(v: T | T[] | null | undefined): T | null {
-  if (v == null) return null
-  return Array.isArray(v) ? (v[0] as T | undefined) ?? null : v
-}
-
-type FreelancerCompletedPlatformJob = {
-  completedJobId: string
-  jobDescription: string
-  hirerDisplayName: string
-  hirerAvatarUrl: string | null
-}
-
-function mapFreelancerCompletedPlatformJobRows(rows: unknown[] | null | undefined): FreelancerCompletedPlatformJob[] {
-  if (!rows?.length) return []
-  const out: FreelancerCompletedPlatformJob[] = []
-  for (const raw of rows as Array<Record<string, unknown>>) {
-    const job = embedJoinOne(raw.jobs as Record<string, unknown> | Record<string, unknown>[] | null)
-    const hp = embedJoinOne(raw.hirer_profiles as Record<string, unknown> | Record<string, unknown>[] | null)
-    const completedAt = raw.completed_at != null ? String(raw.completed_at) : ""
-    if (!completedAt) continue
-    const completedJobId = typeof raw.id === "string" ? raw.id : ""
-    if (!completedJobId) continue
-
-    const descRaw = job?.description != null ? String(job.description) : ""
-    const titleFallback = typeof job?.title === "string" && job.title.trim() ? job.title.trim() : ""
-    const jobDescription = descRaw.trim() || titleFallback || "აღწერა არ არის."
-
-    const profiles = hp ? embedJoinOne(hp.profiles as Record<string, unknown> | Record<string, unknown>[] | null) : null
-    const company = typeof hp?.company_name === "string" ? hp.company_name.trim() : ""
-    const profileName = typeof profiles?.full_name === "string" ? String(profiles.full_name).trim() : ""
-    const hirerDisplayName = company || profileName || "დამქირავებელი"
-    const hirerAvatarUrl =
-      profiles?.avatar_url != null && String(profiles.avatar_url).trim()
-        ? String(profiles.avatar_url).trim()
-        : null
-
-    out.push({
-      completedJobId,
-      jobDescription,
-      hirerDisplayName,
-      hirerAvatarUrl,
-    })
-  }
-  return out
 }
 
 export default function DashboardPage() {
