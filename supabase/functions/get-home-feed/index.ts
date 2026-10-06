@@ -1,5 +1,5 @@
 // @ts-ignore: URL imports are resolved at Supabase Edge runtime (Deno), not by local TS server.
-import { enforceRateLimit, getRedis } from "../_shared/rateLimit.ts"
+import { getRedis, rateLimitAndReadCache, writeCacheInBackground } from "../_shared/rateLimit.ts"
 // @ts-ignore: URL imports are resolved at Supabase Edge runtime (Deno), not by local TS server.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
 import { corsHeadersFor } from "../_shared/cors.ts"
@@ -47,29 +47,16 @@ serveWithSentry("get-home-feed", async (req) => {
     return jsonResponse(req, { ok: false, error: "Missing Supabase env" }, 500)
   }
 
-  const rateLimited = await enforceRateLimit(
+  const redis = getRedis()
+  const { limited, cached } = await rateLimitAndReadCache(
     req,
     { prefix: "rl:home-feed", requests: RATE_LIMIT_REQUESTS, window: RATE_LIMIT_WINDOW },
     corsHeadersFor(req),
+    redis,
+    CACHE_KEY,
   )
-  if (rateLimited) return rateLimited
-
-  const redis = getRedis()
-
-  if (redis) {
-    try {
-      const cached = await redis.get(CACHE_KEY)
-      if (cached != null) {
-        let parsed: unknown = cached
-        if (typeof cached === "string") {
-          try { parsed = JSON.parse(cached) } catch { parsed = null }
-        }
-        if (isCachedSuccessPayload(parsed)) return jsonResponse(req, parsed)
-      }
-    } catch {
-      /* Redis read failed — fall through to RPC */
-    }
-  }
+  if (limited) return limited
+  if (isCachedSuccessPayload(cached)) return jsonResponse(req, cached)
 
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
@@ -84,13 +71,7 @@ serveWithSentry("get-home-feed", async (req) => {
 
   const body: SuccessPayload = { ok: true, data }
 
-  if (redis) {
-    try {
-      await redis.setex(CACHE_KEY, CACHE_TTL, JSON.stringify(body))
-    } catch {
-      /* ignore cache write failures */
-    }
-  }
+  writeCacheInBackground(redis, CACHE_KEY, CACHE_TTL, body)
 
   return jsonResponse(req, body)
 })

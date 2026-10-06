@@ -1,4 +1,4 @@
-import { enforceRateLimit, getRedis } from "../_shared/rateLimit.ts"
+import { getRedis, rateLimitAndReadCache, writeCacheInBackground } from "../_shared/rateLimit.ts"
 // @ts-ignore: URL imports are resolved at Supabase Edge runtime (Deno), not by local TS server.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
 import { corsHeadersFor } from "../_shared/cors.ts"
@@ -316,13 +316,6 @@ serveWithSentry("get-homepage-vip", async (req) => {
     return jsonResponse(req, { ok: false, error: "Missing Supabase env" }, 500)
   }
 
-  const rateLimited = await enforceRateLimit(
-    req,
-    { prefix: "rl:homepage-vip", requests: 10, window: "10 s" },
-    corsHeadersFor(req),
-  )
-  if (rateLimited) return rateLimited
-
   const redis = getRedis()
 
   let limit = 20
@@ -343,26 +336,16 @@ serveWithSentry("get-homepage-vip", async (req) => {
 
   const cacheKey = `homepage:vip:${limit}`
 
-  if (redis) {
-    try {
-      const cached = await redis.get(cacheKey)
-      if (cached != null) {
-        let parsed: unknown = cached
-        if (typeof cached === "string") {
-          try {
-            parsed = JSON.parse(cached)
-          } catch {
-            parsed = null
-          }
-        }
-        if (isCachedVipPayload(parsed)) {
-          return jsonResponse(req, parsed)
-        }
-      }
-    } catch {
-      /* Redis read failed — fall through to DB */
-    }
-  }
+  // Rate-limit check and cache read run in parallel (two Upstash round trips → one).
+  const { limited, cached } = await rateLimitAndReadCache(
+    req,
+    { prefix: "rl:homepage-vip", requests: 10, window: "10 s" },
+    corsHeadersFor(req),
+    redis,
+    cacheKey,
+  )
+  if (limited) return limited
+  if (isCachedVipPayload(cached)) return jsonResponse(req, cached)
 
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
@@ -375,13 +358,7 @@ serveWithSentry("get-homepage-vip", async (req) => {
     return jsonResponse(req, { ok: false, error: "Internal server error" }, 500)
   }
 
-  if (redis) {
-    try {
-      await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(data))
-    } catch {
-      /* ignore cache write failures */
-    }
-  }
+  writeCacheInBackground(redis, cacheKey, CACHE_TTL, data)
 
   return jsonResponse(req, data)
 })

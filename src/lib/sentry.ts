@@ -60,8 +60,7 @@ export function initSentry(): void {
   Sentry.init({
     dsn: DSN,
     environment: import.meta.env.MODE,
-    integrations: [Sentry.browserTracingIntegration()],
-    tracesSampleRate: 0,
+    // No tracing integration: tracesSampleRate was 0, so it only added bundle weight and startup work.
   })
 
   Sentry.setTag("route", currentRoutePath())

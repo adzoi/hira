@@ -1,5 +1,5 @@
 // @ts-ignore: Deno remote module resolution is handled at runtime.
-import { enforceRateLimit, getRedis } from "../_shared/rateLimit.ts"
+import { getRedis, rateLimitAndReadCache, writeCacheInBackground } from "../_shared/rateLimit.ts"
 import { normalizeCategory, parsePage, readJsonBody } from "../_shared/validation.ts"
 // @ts-ignore: Deno remote module resolution is handled at runtime.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1"
@@ -82,38 +82,21 @@ serveWithSentry("get-jobs-page", async (req) => {
     return jsonResponse(req, { ok: false, error: "Missing Supabase env" }, 500)
   }
 
-  const rateLimited = await enforceRateLimit(
-    req,
-    { prefix: "rl:jobs-page", requests: 20, window: "10 s" },
-    corsHeadersFor(req),
-  )
-  if (rateLimited) return rateLimited
-
   const redis = getRedis()
 
+  // Params first so the cache key is known; the rate-limit check and cache read then run in parallel.
   const { category, page, search } = await parseParams(req)
   const cacheKey = `jobs:page:${category}:${page}:${search ?? ""}`
 
-  if (redis) {
-    try {
-      const cached = await redis.get(cacheKey)
-      if (cached != null) {
-        let parsed: unknown = cached
-        if (typeof cached === "string") {
-          try {
-            parsed = JSON.parse(cached)
-          } catch {
-            parsed = null
-          }
-        }
-        if (isCachedSuccessPayload(parsed)) {
-          return jsonResponse(req, parsed)
-        }
-      }
-    } catch {
-      /* Redis read failed — fall through to RPC */
-    }
-  }
+  const { limited, cached } = await rateLimitAndReadCache(
+    req,
+    { prefix: "rl:jobs-page", requests: 20, window: "10 s" },
+    corsHeadersFor(req),
+    redis,
+    cacheKey,
+  )
+  if (limited) return limited
+  if (isCachedSuccessPayload(cached)) return jsonResponse(req, cached)
 
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
@@ -137,13 +120,7 @@ serveWithSentry("get-jobs-page", async (req) => {
 
   const body: SuccessPayload = { ok: true, data }
 
-  if (redis) {
-    try {
-      await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(body))
-    } catch {
-      /* ignore */
-    }
-  }
+  writeCacheInBackground(redis, cacheKey, CACHE_TTL, body)
 
   return jsonResponse(req, body)
 })

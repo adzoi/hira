@@ -42,16 +42,40 @@ export async function withRejectedJwtRetry<T extends { error: { code?: string } 
  * On startup (or after a failed refresh), remove dead sessions from localStorage.
  * Does not weaken server-side auth — only stops sending rejected JWTs on public pages.
  */
-export async function recoverFromStaleAuthSession(client: SupabaseClient): Promise<void> {
+export async function recoverFromStaleAuthSession(client: SupabaseClient): Promise<boolean> {
   const {
     data: { session },
   } = await client.auth.getSession()
-  if (!session) return
+  if (!session) return false
 
   const { error } = await client.auth.getUser()
   if (error && isStaleAuthSessionError(error)) {
     await clearStaleAuthSession(client)
+    return true
   }
+  return false
+}
+
+const STALE_SESSION_RELOAD_KEY = "hira-stale-session-reloaded"
+
+/**
+ * Verifies the stored session with the auth server without blocking first render.
+ * In the rare case the server rejects it, reload once so queries that already ran
+ * with the dead JWT are re-issued with the anon key.
+ */
+export function verifySessionInBackground(client: SupabaseClient): void {
+  void recoverFromStaleAuthSession(client)
+    .then((cleared) => {
+      if (!cleared || typeof window === "undefined") return
+      try {
+        if (sessionStorage.getItem(STALE_SESSION_RELOAD_KEY)) return
+        sessionStorage.setItem(STALE_SESSION_RELOAD_KEY, "1")
+      } catch {
+        return
+      }
+      window.location.reload()
+    })
+    .catch(() => {})
 }
 
 let authRecoveryStarted = false
@@ -211,16 +235,17 @@ export function initAuthHashCleanup(client: SupabaseClient): () => void {
 /** Run once before the app mounts so public pages never send a rejected JWT. */
 export async function initSupabaseAuth(client: SupabaseClient): Promise<void> {
   if (authRecoveryStarted) {
-    await recoverFromStaleAuthSession(client)
     await consumeSupabaseAuthRedirect(client)
+    verifySessionInBackground(client)
     return
   }
   authRecoveryStarted = true
   // Parse tokens from URL before cleanup (SDK may already have consumed the hash).
   await client.auth.getSession()
   stripAuthHashFromUrl()
-  await recoverFromStaleAuthSession(client)
   await consumeSupabaseAuthRedirect(client)
+  // Server-side session check is a network round trip — don't hold up first render for it.
+  verifySessionInBackground(client)
 }
 
 /** Clear cached user data when the session ends (sign-out, expiry, or forced logout). */

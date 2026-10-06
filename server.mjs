@@ -1,7 +1,10 @@
 import { createServer } from "node:http"
-import { createReadStream, existsSync, readFileSync, statSync } from "node:fs"
+import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from "node:fs"
 import { join, extname, resolve, sep } from "node:path"
+import { readFile } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
+import { promisify } from "node:util"
+import { brotliCompress, constants as zlibConstants, gzip, gzipSync } from "node:zlib"
 import {
   buildSecurityHeaders,
   cacheControlForPath,
@@ -40,6 +43,58 @@ const MIME = {
   ".ttf": "font/ttf",
 }
 
+const COMPRESSIBLE_EXT = new Set([".html", ".js", ".css", ".svg", ".json", ".xml", ".txt", ".ttf", ".ico", ".webmanifest"])
+const MIN_COMPRESS_BYTES = 1024
+const brotliAsync = promisify(brotliCompress)
+const gzipAsync = promisify(gzip)
+/** dist/ is immutable for the process lifetime, so compressed bodies are cached per file + encoding. */
+const compressedCache = new Map()
+
+/** @returns {"br" | "gzip" | null} */
+function pickEncoding(req) {
+  const accept = String(req.headers["accept-encoding"] ?? "")
+  if (/\bbr\b/.test(accept)) return "br"
+  if (/\bgzip\b/.test(accept)) return "gzip"
+  return null
+}
+
+/** Runs on the libuv thread pool so large chunks don't block the event loop. */
+function compressBuffer(buf, encoding) {
+  return encoding === "br"
+    ? brotliAsync(buf, {
+        params: {
+          [zlibConstants.BROTLI_PARAM_QUALITY]: 9,
+          [zlibConstants.BROTLI_PARAM_SIZE_HINT]: buf.length,
+        },
+      })
+    : gzipAsync(buf, { level: 9 })
+}
+
+/** @returns {Promise<Buffer | null>} null when the file is too small or unreadable. */
+function getCompressed(filePath, encoding) {
+  const key = `${encoding}:${filePath}`
+  let pending = compressedCache.get(key)
+  if (pending === undefined) {
+    pending = readFile(filePath)
+      .then((raw) => (raw.length >= MIN_COMPRESS_BYTES ? compressBuffer(raw, encoding) : null))
+      .catch(() => null)
+    compressedCache.set(key, pending)
+  }
+  return pending
+}
+
+/** Compress hashed build assets in the background at boot so the first visitor isn't the one who waits. */
+function warmCompressedCache() {
+  const assetsDir = join(root, "assets")
+  if (!existsSync(assetsDir)) return
+  for (const name of readdirSync(assetsDir)) {
+    if (!COMPRESSIBLE_EXT.has(extname(name))) continue
+    const filePath = join(assetsDir, name)
+    void getCompressed(filePath, "br")
+    void getCompressed(filePath, "gzip")
+  }
+}
+
 function getIndexHtmlTemplate() {
   if (indexHtmlTemplate === null) {
     indexHtmlTemplate = readFileSync(indexPath, "utf8")
@@ -53,12 +108,27 @@ function applySecurityHeaders(res, headers) {
   }
 }
 
-function sendFile(res, filePath, urlPath, headers = staticSecurityHeaders) {
+async function sendFile(req, res, filePath, urlPath, headers = staticSecurityHeaders) {
   applySecurityHeaders(res, headers)
   const ext = extname(filePath)
   res.setHeader("Content-Type", MIME[ext] ?? "application/octet-stream")
   const cacheControl = cacheControlForPath(urlPath)
   if (cacheControl) res.setHeader("Cache-Control", cacheControl)
+
+  if (COMPRESSIBLE_EXT.has(ext)) {
+    res.setHeader("Vary", "Accept-Encoding")
+    const encoding = pickEncoding(req)
+    if (encoding) {
+      const body = await getCompressed(filePath, encoding)
+      if (body) {
+        res.setHeader("Content-Encoding", encoding)
+        res.setHeader("Content-Length", body.length)
+        res.end(req.method === "HEAD" ? undefined : body)
+        return
+      }
+    }
+  }
+
   createReadStream(filePath)
     .on("error", () => {
       if (!res.headersSent) res.statusCode = 500
@@ -67,12 +137,22 @@ function sendFile(res, filePath, urlPath, headers = staticSecurityHeaders) {
     .pipe(res)
 }
 
-function sendSpaIndex(res) {
+function sendSpaIndex(req, res) {
   const nonce = generateCspNonce()
   applySecurityHeaders(res, buildSecurityHeaders({ nonce }))
   res.setHeader("Content-Type", "text/html; charset=utf-8")
   res.setHeader("Cache-Control", HTML_CACHE_CONTROL)
-  res.end(injectScriptNonces(getIndexHtmlTemplate(), nonce))
+  res.setHeader("Vary", "Accept-Encoding")
+  const html = injectScriptNonces(getIndexHtmlTemplate(), nonce)
+  // Per-request nonce means the HTML can't be cached compressed; use fast gzip (small file).
+  if (/\bgzip\b/.test(String(req.headers["accept-encoding"] ?? ""))) {
+    const body = gzipSync(html, { level: 6 })
+    res.setHeader("Content-Encoding", "gzip")
+    res.setHeader("Content-Length", body.length)
+    res.end(body)
+    return
+  }
+  res.end(html)
 }
 
 async function proxySitemapDynamic(res) {
@@ -145,12 +225,12 @@ const server = createServer(async (req, res) => {
   if (safePath === "/favicon.ico") {
     const icoPath = join(root, "favicon.ico")
     if (existsSync(icoPath)) {
-      sendFile(res, icoPath, safePath)
+      await sendFile(req, res, icoPath, safePath)
       return
     }
     const fallbackPath = join(root, "icons", "hira-48.png")
     if (existsSync(fallbackPath)) {
-      sendFile(res, fallbackPath, safePath)
+      await sendFile(req, res, fallbackPath, safePath)
       return
     }
   }
@@ -163,7 +243,7 @@ const server = createServer(async (req, res) => {
   const isStaticAsset = /\.(?:webp|png|jpe?g|gif|svg|ico|js|css|woff2?|ttf|map|xml|txt)$/i.test(safePath)
 
   if (safePath !== "/" && existsSync(candidate) && statSync(candidate).isFile()) {
-    sendFile(res, candidate, safePath)
+    await sendFile(req, res, candidate, safePath)
     return
   }
 
@@ -176,7 +256,7 @@ const server = createServer(async (req, res) => {
   }
 
   if (existsSync(indexPath)) {
-    sendSpaIndex(res)
+    sendSpaIndex(req, res)
     return
   }
 
@@ -201,4 +281,5 @@ server.on("error", (err) => {
 
 server.listen(port, host, () => {
   console.log(`hira listening on http://${host}:${port}`)
+  warmCompressedCache()
 })

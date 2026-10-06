@@ -8,7 +8,9 @@ import { useHomeStatsQuery } from "../lib/queries/useHomeStatsQuery.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { normalizeSearchInput } from "../lib/validation.ts"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
-import mainHeroImage from "../../images/main.webp"
+
+/** Same URL the static LCP shell in index.html already fetched — reusing it avoids a second 86 KB download. */
+const mainHeroImage = "/images/main.webp"
 
 function formatNumber(value: number) {
   return value.toLocaleString("en-US").replace(/,/g, " ")
@@ -29,9 +31,11 @@ export default function HomePage() {
     let cancelled = false
     const loadViewerType = async () => {
       if (!isSupabaseConfigured || !supabase) return
+      // Local session is enough here (UI hint only; RLS guards the data) — avoids an auth-server round trip.
       const {
-        data: { user },
-      } = await supabase.auth.getUser()
+        data: { session },
+      } = await supabase.auth.getSession()
+      const user = session?.user
       if (cancelled || !user) return
       const { data: profile } = await supabase.from("profiles").select("user_type").eq("id", user.id).maybeSingle()
       if (cancelled) return

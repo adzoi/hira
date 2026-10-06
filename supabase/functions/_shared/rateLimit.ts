@@ -207,3 +207,51 @@ export async function enforceAuthRateLimit(
     corsHeaders,
   )
 }
+
+declare const EdgeRuntime: { waitUntil?: (p: Promise<unknown>) => void } | undefined
+
+function parseCachedValue(cached: unknown): unknown {
+  if (typeof cached !== "string") return cached
+  try {
+    return JSON.parse(cached)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Rate-limit check and cache read issued in parallel — each is a separate Upstash HTTP round trip,
+ * so doing them back-to-back roughly doubled latency on every cached marketplace request.
+ * The rate-limit verdict still wins: a limited caller never receives the cached body.
+ */
+export async function rateLimitAndReadCache(
+  req: Request,
+  opts: RateLimitOptions,
+  corsHeaders: Record<string, string> | undefined,
+  redis: Redis | null,
+  cacheKey: string,
+): Promise<{ limited: Response | null; cached: unknown }> {
+  const cacheRead = redis
+    ? redis.get(cacheKey).then(parseCachedValue, () => null)
+    : Promise.resolve(null)
+  const [limited, cached] = await Promise.all([enforceRateLimit(req, opts, corsHeaders), cacheRead])
+  return { limited, cached }
+}
+
+/** Best-effort cache write that doesn't hold up the response. */
+export function writeCacheInBackground(
+  redis: Redis | null,
+  cacheKey: string,
+  ttlSeconds: number,
+  value: unknown,
+): void {
+  if (!redis) return
+  const write = redis.setex(cacheKey, ttlSeconds, JSON.stringify(value)).catch(() => {})
+  try {
+    if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) {
+      EdgeRuntime.waitUntil(write)
+    }
+  } catch {
+    /* runtime without waitUntil — the promise still runs */
+  }
+}
