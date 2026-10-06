@@ -27,6 +27,7 @@ function buildNavLinks(t: (key: string) => string) {
     { label: t("nav.home"), to: "/" },
     { label: t("nav.freelancers"), to: "/browse" },
     { label: t("nav.listings"), to: "/listings" },
+    { label: t("nav.local"), to: "/local" },
     { label: t("nav.jobs"), to: "/jobs" },
     { label: t("nav.hirers"), to: "/hirers" },
     { label: t("nav.forum"), to: "/forum" },
@@ -37,6 +38,7 @@ function navLinkUnderlineActive(pathname: string, to: string) {
   if (to === "/forum") return pathname === "/forum" || pathname.startsWith("/forum/")
   if (to === "/hirers") return pathname === "/hirers" || pathname.startsWith("/hirer/")
   if (to === "/listings") return pathname === "/listings"
+  if (to === "/local") return pathname === "/local" || pathname.startsWith("/local/")
   return pathname === to
 }
 

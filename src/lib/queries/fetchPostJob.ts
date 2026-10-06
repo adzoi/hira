@@ -37,6 +37,8 @@ export type PostJobEditData = {
   description: string
   descriptionEn: string
   isUrgent: boolean
+  isBeginnerFriendly: boolean
+  isInternship: boolean
   budgetType: string
   budgetMin: string
   budgetMax: string
@@ -189,6 +191,8 @@ export async function fetchPostJob(jobId?: string): Promise<PostJobQueryData> {
       description: jobRow.description,
       descriptionEn: (jobRow as { description_en?: string | null }).description_en ?? "",
       isUrgent: jobRow.is_urgent,
+      isBeginnerFriendly: Boolean(jobRow.is_beginner_friendly),
+      isInternship: Boolean(jobRow.is_internship),
       budgetType: jobRow.budget_type,
       budgetMin: jobRow.budget_min == null ? "" : String(jobRow.budget_min),
       budgetMax: jobRow.budget_max == null ? "" : String(jobRow.budget_max),

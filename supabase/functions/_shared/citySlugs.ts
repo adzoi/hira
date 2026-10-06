@@ -1,0 +1,36 @@
+/**
+ * Georgian city name (as stored in profiles.city) → Latin URL slug.
+ * Mirrors the first alias in src/lib/marketplaceFilters.ts CITY_LATIN_ALIASES; keep them in sync.
+ */
+export const CITY_SLUGS: Record<string, string> = {
+  თბილისი: "tbilisi",
+  ბათუმი: "batumi",
+  ქუთაისი: "kutaisi",
+  რუსთავი: "rustavi",
+  გორი: "gori",
+  ზუგდიდი: "zugdidi",
+  ფოთი: "poti",
+  ხაშური: "khashuri",
+  სამტრედია: "samtredia",
+  ზესტაფონი: "zestaponi",
+  მარნეული: "marneuli",
+  თელავი: "telavi",
+  ახალციხე: "akhaltsikhe",
+  ოზურგეთი: "ozurgeti",
+  სენაკი: "senaki",
+  ხონი: "khoni",
+  ქობულეთი: "kobuleti",
+  სიღნაღი: "signagi",
+  მარტვილი: "martvili",
+  დუშეთი: "dusheti",
+  ახმეტა: "akhemti",
+  გარდაბანი: "gardabani",
+  ბორჯომი: "borjomi",
+  წყნეთი: "tskneti",
+  ყვარელი: "kvareli",
+  ბოლნისი: "bolnisi",
+  საგარეჯო: "sagarejo",
+  მცხეთა: "mtskheta",
+  წალენჯიხა: "tsalenjikha",
+  ხელვაჩაური: "khelvachauri",
+}

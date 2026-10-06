@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import ShareButtons from "../components/ShareButtons.tsx"
 import FreelancerAvailabilityIndicator from "../components/FreelancerAvailabilityIndicator.tsx"
 import { OptimizedImage } from "../components/OptimizedImage.tsx"
 import { ViewCountEyeIcon } from "../components/ViewCountEyeIcon.tsx"
@@ -18,7 +19,7 @@ import { validateInquiryMessage, validateMoneyAmount } from "../lib/validation.t
 import { pickCategoryName } from "../lib/categoryLocale.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { pickListingDescription, pickListingTitle } from "../lib/listingLocale.ts"
-import { usePageMeta } from "../lib/usePageMeta.tsx"
+import { SITE_BASE_URL, usePageMeta } from "../lib/usePageMeta.tsx"
 import { assertContentRateLimit, formatContentRateLimitError } from "../lib/contentRateLimit.ts"
 
 type ListingMeta = {
@@ -247,7 +248,13 @@ export default function ListingDetailPage() {
     return t("listingDetail.metaDescription")
   }, [item, displayDescription, t])
 
-  const pageMeta = usePageMeta(pageTitle, pageDescription)
+  const listingShareUrl = `${SITE_BASE_URL}/listing/${id ?? ""}`
+  const pageMeta = usePageMeta(
+    pageTitle,
+    pageDescription,
+    id ? listingShareUrl : undefined,
+    id ? { image: `${SITE_BASE_URL}/og/listing/${id}.png` } : undefined,
+  )
 
   useEffect(() => {
     const sid = parsed.meta.subcategoryId?.trim()
@@ -395,6 +402,7 @@ export default function ListingDetailPage() {
                       {formatDate(item.createdAt)}
                     </span>
                   </div>
+                  <ShareButtons url={listingShareUrl} text={displayTitle} className="mt-3" />
                 </div>
                 {!viewerOwnsListing ? (
                   <SaveBookmarkButton variant="icon" resourceType="service" resourceId={item.id} />

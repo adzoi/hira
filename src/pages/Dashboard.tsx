@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import FollowListsModal, { FollowStatPills, type FollowModalTab } from "../components/FollowListsModal.tsx"
 import ProfileCompletenessCard from "../components/ProfileCompletenessCard.tsx"
+import ShareProfileCard from "../components/ShareProfileCard.tsx"
 import { META_SUFFIX, resolveListingMetaPrefix, stripLegacyPricePrefix } from "../lib/listingDescription.ts"
 import { formatListingPrice, normalizeListingPriceType } from "../lib/listingPrice.ts"
 import { subscribeToDashboardMessaging } from "../lib/dashboardMessagingRealtime.ts"
@@ -1848,7 +1849,18 @@ export default function DashboardPage() {
                 <p className="text-sm text-slate-500">სულ ნახვები</p>
                 <p className="mt-2 text-2xl font-bold text-[#1B2B4B]">{overallProfileVisitCount}</p>
               </div>
+              <Link
+                to="/dashboard/stats"
+                className="flex flex-col justify-between rounded-xl border border-[#0088FF]/30 bg-[#E8F4FF] p-5 transition hover:border-[#0088FF]"
+              >
+                <p className="text-sm font-semibold text-[#0088FF]">{t("stats.dashboardLinkTitle")}</p>
+                <p className="mt-2 text-xs text-slate-600">{t("stats.dashboardLinkHint")} →</p>
+              </Link>
             </div>
+
+            {freelancerProfile?.is_public && freelancerProfile.slug ? (
+              <ShareProfileCard slug={freelancerProfile.slug} />
+            ) : null}
 
             {visibleFreelancerHirerReviewQueue.length > 0 ? (
               <div className="rounded-xl border border-slate-200 bg-white p-6">

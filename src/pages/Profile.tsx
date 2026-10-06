@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
+import WeeklyDigestToggle from "../components/WeeklyDigestToggle.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
 import { PROFILE_LANGUAGE_OPTIONS } from "../lib/profileLanguages.ts"
 import {
@@ -1066,6 +1067,7 @@ export default function ProfilePage() {
                   </p>
                 </div>
               ) : null}
+              {userId ? <WeeklyDigestToggle userId={userId} /> : null}
               <div>
                 <label className="mb-1 block text-base font-semibold text-gray-900">{t("profile.professionalTitle")}</label>
                 <input className="h-11 w-full rounded-lg border border-slate-300 px-3" placeholder="React Developer, Graphic Designer" value={professionalTitle} onChange={(e)=>setProfessionalTitle(e.target.value)} />

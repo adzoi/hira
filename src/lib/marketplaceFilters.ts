@@ -195,3 +195,25 @@ export function jobMatchesUnifiedLocation(
 
   return matchesLocationFilter(entity, trimmed)
 }
+
+/** URL slug for a preset Georgian city ("თბილისი" → "tbilisi"); null for sentinels and free text. */
+export function citySlug(city: string | null | undefined): string | null {
+  if (!city) return null
+  return CITY_LATIN_ALIASES[city.trim()]?.[0] ?? null
+}
+
+/** Inverse of {@link citySlug}: "tbilisi" → "თბილისი". */
+export function cityFromSlug(slug: string | null | undefined): string | null {
+  const needle = slug?.trim().toLowerCase()
+  if (!needle) return null
+  for (const [ka, aliases] of Object.entries(CITY_LATIN_ALIASES)) {
+    if (aliases[0] === needle) return ka
+  }
+  return null
+}
+
+/** Georgian locative ("თბილისი" → "თბილისში", "მცხეთა" → "მცხეთაში"). */
+export function cityLocativeKa(city: string): string {
+  const c = city.trim()
+  return c.endsWith("ი") ? `${c.slice(0, -1)}ში` : `${c}ში`
+}

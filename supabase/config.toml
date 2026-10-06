@@ -21,6 +21,18 @@ verify_jwt = false
 [functions.sitemap]
 verify_jwt = false
 
+# Link-preview images; proxied by server.mjs at /og/<kind>/<id>.png.
+[functions.og-image]
+verify_jwt = false
+
+# Called by pg_cron (trigger_weekly_digest); authenticated by X-Gigori-Webhook-Secret inside the function.
+[functions.send-weekly-digest]
+verify_jwt = false
+
+# Authorized by the HMAC token in the email link.
+[functions.digest-unsubscribe]
+verify_jwt = false
+
 [functions.auth-login]
 verify_jwt = false
 

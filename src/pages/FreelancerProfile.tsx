@@ -21,6 +21,8 @@ import {
   rejectJobApplication,
   type ProfileJobApplication,
 } from "../lib/profileOffers.ts"
+import ShareButtons from "../components/ShareButtons.tsx"
+import SimilarFreelancers from "../components/SimilarFreelancers.tsx"
 import StartConversationButton from "../components/StartConversationButton.tsx"
 import {
   fetchFreelancerProfile,
@@ -39,7 +41,7 @@ import { queryKeys } from "../lib/queryKeys.ts"
 import { validateCvUpload } from "../lib/uploadValidation.ts"
 import { createCvSignedUrl, cvStoragePath } from "../lib/cvStorage.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
-import { usePageMeta } from "../lib/usePageMeta.tsx"
+import { SITE_BASE_URL, usePageMeta } from "../lib/usePageMeta.tsx"
 import { buildPersonStructuredData, JsonLd } from "../lib/structuredData.tsx"
 import { pickListingDescription, pickListingTitle } from "../lib/listingLocale.ts"
 
@@ -576,7 +578,20 @@ export default function FreelancerProfilePage() {
   void completedWorkHiddenPublic
   void completedWorkHasRows
 
-  const pageMeta = usePageMeta(t("freelancerProfile.title"), t("freelancerProfile.metaDescription"))
+  const profileName = profile?.full_name?.trim() ?? ""
+  const profileBio = freelancer?.bio?.replace(/\s+/g, " ").trim() ?? ""
+  const shareUrl = `${SITE_BASE_URL}/freelancer/${encodeURIComponent(slug ?? "")}`
+  const pageMeta = usePageMeta(
+    profileName
+      ? t("freelancerProfile.metaTitleNamed", {
+          name: profileName,
+          title: freelancer?.professional_title?.trim() || t("freelancerProfile.title"),
+        })
+      : t("freelancerProfile.title"),
+    profileBio ? profileBio.slice(0, 200) : t("freelancerProfile.metaDescription"),
+    slug ? shareUrl : undefined,
+    slug ? { image: `${SITE_BASE_URL}/og/freelancer/${encodeURIComponent(slug)}.png` } : undefined,
+  )
 
   const personStructuredData = useMemo(() => {
     if (!profile || !freelancer || error) return null
@@ -736,12 +751,21 @@ export default function FreelancerProfilePage() {
                 </div>
               </div>
 
+              <ShareButtons
+                url={shareUrl}
+                text={t("share.freelancerText", { name: profileName })}
+                className="mt-4"
+              />
+
               {ownerVisitCount !== null ? (
                 <p className="mt-3 text-left text-xs text-gray-500">
                   {t("freelancerProfile.publicViewsCount")}{" "}
                   <span className="font-semibold tabular-nums text-gray-900" title={t("common.publicViewsOwnerOnly")}>
                     {ownerVisitCount}
-                  </span>
+                  </span>{" "}
+                  <Link to="/dashboard/stats" className="font-semibold text-[#0088FF] hover:underline">
+                    {t("stats.seeStats")}
+                  </Link>
                 </p>
               ) : null}
 
@@ -1050,6 +1074,7 @@ export default function FreelancerProfilePage() {
             ) : null}
           </div>
         )}
+        {slug && !loading ? <SimilarFreelancers slug={slug} /> : null}
       </main>
 
       {contactModalOpen && profile ? (

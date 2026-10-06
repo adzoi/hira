@@ -12,6 +12,7 @@ import {
   HTML_CACHE_CONTROL,
   injectScriptNonces,
 } from "./security/csp.mjs"
+import { injectShareTags, isLinkPreviewCrawler, resolveShareTags } from "./seo/shareMeta.mjs"
 
 const root = resolve(fileURLToPath(new URL(".", import.meta.url)), "dist")
 const host = process.env.HOST ?? "0.0.0.0"
@@ -27,6 +28,12 @@ const supabaseFunctionsBase = (
     : "")
 ).replace(/\/$/, "")
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY ?? ""
+const supabaseProjectUrl = (
+  process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? supabaseFunctionsBase.replace(/\/functions\/v1$/, "")
+).replace(/\/$/, "")
+const supabaseRestBase = supabaseProjectUrl ? `${supabaseProjectUrl}/rest/v1` : ""
+/** Static files other sites may embed (the "Hire me on Hira" badge). */
+const EMBEDDABLE_HEADERS = { ...staticSecurityHeaders, "Cross-Origin-Resource-Policy": "cross-origin" }
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -137,13 +144,18 @@ async function sendFile(req, res, filePath, urlPath, headers = staticSecurityHea
     .pipe(res)
 }
 
-function sendSpaIndex(req, res) {
+async function sendSpaIndex(req, res, urlPath) {
   const nonce = generateCspNonce()
   applySecurityHeaders(res, buildSecurityHeaders({ nonce }))
   res.setHeader("Content-Type", "text/html; charset=utf-8")
   res.setHeader("Cache-Control", HTML_CACHE_CONTROL)
-  res.setHeader("Vary", "Accept-Encoding")
-  const html = injectScriptNonces(getIndexHtmlTemplate(), nonce)
+  res.setHeader("Vary", "Accept-Encoding, User-Agent")
+  let template = getIndexHtmlTemplate()
+  if (isLinkPreviewCrawler(req.headers["user-agent"])) {
+    const tags = await resolveShareTags(urlPath, supabaseRestBase, supabaseAnonKey)
+    if (tags) template = injectShareTags(template, tags)
+  }
+  const html = injectScriptNonces(template, nonce)
   // Per-request nonce means the HTML can't be cached compressed; use fast gzip (small file).
   if (/\bgzip\b/.test(String(req.headers["accept-encoding"] ?? ""))) {
     const body = gzipSync(html, { level: 6 })
@@ -190,6 +202,57 @@ async function proxySitemapDynamic(res) {
   }
 }
 
+const OG_IMAGE_PATH = /^\/og\/(freelancer|job|listing)\/([^/]{1,200})\.png$/
+const OG_CACHE_TTL_MS = 30 * 60_000
+const OG_CACHE_MAX = 200
+/** @type {Map<string, { expires: number; status: number; body: Buffer }>} */
+const ogImageCache = new Map()
+
+/** Proxies generated link-preview images so they're served (and CDN-cached) from hira.ge. */
+async function proxyOgImage(res, kind, id) {
+  const key = `${kind}:${id}`
+  let entry = ogImageCache.get(key)
+  if (!entry || entry.expires < Date.now()) {
+    entry = undefined
+    if (supabaseFunctionsBase && supabaseAnonKey) {
+      try {
+        const upstream = await fetch(
+          `${supabaseFunctionsBase}/og-image?kind=${kind}&id=${encodeURIComponent(id)}`,
+          {
+            headers: { apikey: supabaseAnonKey, Authorization: `Bearer ${supabaseAnonKey}` },
+            signal: AbortSignal.timeout(10_000),
+          },
+        )
+        const body = Buffer.from(await upstream.arrayBuffer())
+        if (upstream.ok || upstream.status === 404) {
+          entry = { expires: Date.now() + OG_CACHE_TTL_MS, status: upstream.status, body }
+          if (ogImageCache.size >= OG_CACHE_MAX) {
+            const oldest = ogImageCache.keys().next().value
+            if (oldest !== undefined) ogImageCache.delete(oldest)
+          }
+          ogImageCache.set(key, entry)
+        }
+      } catch (error) {
+        console.error("[og-image]", key, error instanceof Error ? error.message : error)
+      }
+    }
+  }
+
+  applySecurityHeaders(res, EMBEDDABLE_HEADERS)
+  if (!entry || entry.status !== 200) {
+    // Fall back to the site-wide card so a preview still shows something.
+    res.statusCode = 302
+    res.setHeader("Location", "/og-image.png")
+    res.setHeader("Cache-Control", "public, max-age=300")
+    res.end()
+    return
+  }
+  res.setHeader("Content-Type", "image/png")
+  res.setHeader("Content-Length", entry.body.length)
+  res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=21600")
+  res.end(entry.body)
+}
+
 function sendBadRequest(res) {
   applySecurityHeaders(res, staticSecurityHeaders)
   res.statusCode = 400
@@ -222,6 +285,12 @@ const server = createServer(async (req, res) => {
     return
   }
 
+  const ogMatch = OG_IMAGE_PATH.exec(safePath)
+  if (ogMatch) {
+    await proxyOgImage(res, ogMatch[1], ogMatch[2])
+    return
+  }
+
   if (safePath === "/favicon.ico") {
     const icoPath = join(root, "favicon.ico")
     if (existsSync(icoPath)) {
@@ -243,7 +312,7 @@ const server = createServer(async (req, res) => {
   const isStaticAsset = /\.(?:webp|png|jpe?g|gif|svg|ico|js|css|woff2?|ttf|map|xml|txt)$/i.test(safePath)
 
   if (safePath !== "/" && existsSync(candidate) && statSync(candidate).isFile()) {
-    await sendFile(req, res, candidate, safePath)
+    await sendFile(req, res, candidate, safePath, safePath.startsWith("/badges/") ? EMBEDDABLE_HEADERS : staticSecurityHeaders)
     return
   }
 
@@ -256,7 +325,7 @@ const server = createServer(async (req, res) => {
   }
 
   if (existsSync(indexPath)) {
-    sendSpaIndex(req, res)
+    await sendSpaIndex(req, res, safePath)
     return
   }
 

@@ -29,6 +29,7 @@ import MarketplaceCatalogToolbar, { marketplaceFilterPillClass } from "../compon
 import { LIMITS, normalizeSearchInput, sanitizeDisplayText } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { pickCategoryName } from "../lib/categoryLocale.ts"
+import { useSearchImpressions } from "../lib/searchImpressions.ts"
 
 type SortOption = "rating" | "price_asc" | "price_desc" | "newest" | "completed"
 type Availability = "full_time" | "part_time" | "weekends"
@@ -573,6 +574,7 @@ export default function BrowsePage() {
     }
     return filteredFreelancers.toSorted((a, b) => b.completedJobsCount - a.completedJobsCount)
   }, [filteredFreelancers, sortBy])
+  useSearchImpressions(useMemo(() => sortedFreelancers.map((f) => f.id), [sortedFreelancers]))
 
   const availabilityLabel: Record<Availability, string> = useMemo(
     () => ({

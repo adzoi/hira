@@ -136,6 +136,8 @@ export default function PostJobPage() {
   const [description, setDescription] = useState("")
   const [descriptionEn, setDescriptionEn] = useState("")
   const [isUrgent, setIsUrgent] = useState(false)
+  const [isBeginnerFriendly, setIsBeginnerFriendly] = useState(false)
+  const [isInternship, setIsInternship] = useState(false)
 
   const [budgetType, setBudgetType] = useState("fixed")
   const [budgetMin, setBudgetMin] = useState("")
@@ -186,6 +188,8 @@ export default function PostJobPage() {
       setDescription(edit.description)
       setDescriptionEn(edit.descriptionEn)
       setIsUrgent(edit.isUrgent)
+      setIsBeginnerFriendly(edit.isBeginnerFriendly)
+      setIsInternship(edit.isInternship)
       setBudgetType(edit.budgetType)
       setBudgetMin(edit.budgetMin)
       setBudgetMax(edit.budgetMax)
@@ -445,6 +449,8 @@ export default function PostJobPage() {
             contact_preference: contactPreference,
             application_deadline: applicationDeadline || null,
             is_urgent: isUrgent,
+            is_beginner_friendly: isBeginnerFriendly,
+            is_internship: isInternship,
             vacancies,
           })
           .eq("id", jobId)
@@ -486,6 +492,8 @@ export default function PostJobPage() {
             contact_preference: contactPreference,
             application_deadline: applicationDeadline || null,
             is_urgent: isUrgent,
+            is_beginner_friendly: isBeginnerFriendly,
+            is_internship: isInternship,
             is_featured: false,
             status: "open",
             views_count: 0,
@@ -643,6 +651,8 @@ export default function PostJobPage() {
                   <span className="rounded-full bg-white px-3 py-1 text-slate-700">{t("postJob.previewDeadline")} {applicationDeadline}</span>
                 ) : null}
                 {isUrgent ? <span className="rounded-full bg-red-100 px-3 py-1 font-semibold text-red-700">{t("common.urgent")}</span> : null}
+                {isInternship ? <span className="rounded-full bg-amber-100 px-3 py-1 font-semibold text-amber-800">{t("entryLevel.internship")}</span> : null}
+                {isBeginnerFriendly ? <span className="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">{t("entryLevel.beginnerFriendly")}</span> : null}
                 <span className="rounded-full bg-white px-3 py-1 text-slate-700">
                   {t("postJob.previewVacancies", { count: vacancies })}
                 </span>
@@ -836,6 +846,27 @@ export default function PostJobPage() {
                 <label className="inline-flex items-center gap-2 text-sm text-[#1B2B4B]">
                   <input type="checkbox" checked={isUrgent} onChange={(e) => setIsUrgent(e.target.checked)} />
                   {t("postJob.isUrgent")}
+                </label>
+
+                <label className="flex items-start gap-2 text-sm text-[#1B2B4B]">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={isBeginnerFriendly}
+                    onChange={(e) => setIsBeginnerFriendly(e.target.checked)}
+                  />
+                  <span>
+                    {t("entryLevel.beginnerFriendly")}
+                    <span className="block text-xs text-slate-500">{t("entryLevel.beginnerFriendlyHint")}</span>
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-2 text-sm text-[#1B2B4B]">
+                  <input type="checkbox" className="mt-0.5" checked={isInternship} onChange={(e) => setIsInternship(e.target.checked)} />
+                  <span>
+                    {t("entryLevel.internship")}
+                    <span className="block text-xs text-slate-500">{t("entryLevel.internshipHint")}</span>
+                  </span>
                 </label>
               </div>
             </section>

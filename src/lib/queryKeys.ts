@@ -28,4 +28,10 @@ export const queryKeys = {
   forumPosts: (filters: { category?: string; subcategory?: string; mine?: boolean; userId?: string }) =>
     ["forum-posts", filters] as const,
   forumPostDetail: (postId: string) => ["forum-post-detail", postId] as const,
+  freelancerLanding: (category: string, city: string) => ["freelancer-landing", category, city] as const,
+  freelancerLandingIndex: ["freelancer-landing-index"] as const,
+  similarFreelancers: (slug: string) => ["similar-freelancers", slug] as const,
+  similarJobs: (jobId: string) => ["similar-jobs", jobId] as const,
+  freelancerStats: (userId: string, days: number) => ["freelancer-stats", userId, days] as const,
+  entryLevelJobs: (kind: string) => ["entry-level-jobs", kind] as const,
 }

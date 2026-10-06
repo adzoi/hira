@@ -675,7 +675,9 @@ export interface Database {
           hirer_profile_id: string
           id: string
           image_urls: string[]
+          is_beginner_friendly: boolean
           is_featured: boolean
+          is_internship: boolean
           is_urgent: boolean
           is_vip: boolean
           location_type: string
@@ -705,7 +707,9 @@ export interface Database {
           hirer_profile_id: string
           id?: string
           image_urls?: string[]
+          is_beginner_friendly?: boolean
           is_featured?: boolean
+          is_internship?: boolean
           is_urgent?: boolean
           is_vip?: boolean
           location_type: string
@@ -735,7 +739,9 @@ export interface Database {
           hirer_profile_id?: string
           id?: string
           image_urls?: string[]
+          is_beginner_friendly?: boolean
           is_featured?: boolean
+          is_internship?: boolean
           is_urgent?: boolean
           is_vip?: boolean
           location_type?: string
@@ -1014,6 +1020,8 @@ export interface Database {
           phone: string | null
           updated_at: string
           user_type: string
+          weekly_digest_enabled: boolean
+          weekly_digest_sent_at: string | null
           unread_messages_count: number
           unread_notifications_count: number
         }
@@ -1032,6 +1040,8 @@ export interface Database {
           phone?: string | null
           updated_at?: string
           user_type: string
+          weekly_digest_enabled?: boolean
+          weekly_digest_sent_at?: string | null
           unread_messages_count?: number
           unread_notifications_count?: number
         }
@@ -1050,6 +1060,8 @@ export interface Database {
           phone?: string | null
           updated_at?: string
           user_type?: string
+          weekly_digest_enabled?: boolean
+          weekly_digest_sent_at?: string | null
           unread_messages_count?: number
           unread_notifications_count?: number
         }
@@ -1515,6 +1527,59 @@ export interface Database {
         Args: {
           p_freelancer_id: string
           p_limit?: number
+        }
+        Returns: Json
+      }
+      get_freelancer_landing: {
+        Args: {
+          p_category: string
+          p_city?: string | null
+          p_limit?: number
+        }
+        Returns: Json
+      }
+      get_freelancer_landing_index: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      get_similar_freelancers: {
+        Args: {
+          p_slug: string
+          p_limit?: number
+        }
+        Returns: Json
+      }
+      get_similar_jobs: {
+        Args: {
+          p_job_id: string
+          p_limit?: number
+        }
+        Returns: Json
+      }
+      record_search_impressions: {
+        Args: {
+          p_freelancer_profile_ids: string[]
+        }
+        Returns: undefined
+      }
+      get_my_freelancer_stats: {
+        Args: {
+          p_days?: number
+        }
+        Returns: Json
+      }
+      get_share_meta: {
+        Args: {
+          p_kind: string
+          p_id: string
+        }
+        Returns: Json
+      }
+      get_entry_level_jobs: {
+        Args: {
+          p_kind?: string
+          p_limit?: number
+          p_offset?: number
         }
         Returns: Json
       }

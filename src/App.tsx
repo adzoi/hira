@@ -41,6 +41,12 @@ const ResetPasswordPage = lazy(() => import("./pages/ResetPassword.tsx"))
 const AuthConfirmPage = lazy(() => import("./pages/AuthConfirm.tsx"))
 const SavedPage = lazy(() => import("./pages/Saved.tsx"))
 const MessagesPage = lazy(() => import("./pages/Messages.tsx"))
+const InternshipsPage = lazy(() => import("./pages/Internships.tsx"))
+const LocalServicesPage = lazy(() => import("./pages/LocalServices.tsx"))
+const FreelancerStatsPage = lazy(() => import("./pages/FreelancerStats.tsx"))
+const UnsubscribePage = lazy(() => import("./pages/Unsubscribe.tsx"))
+const FreelancersHubPage = lazy(() => import("./pages/FreelancersHub.tsx"))
+const FreelancerLandingPage = lazy(() => import("./pages/FreelancerLanding.tsx"))
 const Footer = lazy(() => import("./components/Footer.tsx"))
 
 function MainLayout() {
@@ -130,6 +136,13 @@ function App() {
             <Route path="/guide" element={<GuidePage />} />
             <Route path="/faq" element={<FaqPage />} />
             <Route path="/freelancer/:slug" element={<FreelancerProfilePage />} />
+            <Route path="/unsubscribe" element={<UnsubscribePage />} />
+            <Route path="/internships" element={<InternshipsPage />} />
+            <Route path="/local" element={<LocalServicesPage />} />
+            <Route path="/local/:city" element={<LocalServicesPage />} />
+            <Route path="/freelancers" element={<FreelancersHubPage />} />
+            <Route path="/freelancers/:category" element={<FreelancerLandingPage />} />
+            <Route path="/freelancers/:category/:city" element={<FreelancerLandingPage />} />
             <Route path="/jobs" element={<JobsPage />} />
             <Route path="/job/:id" element={<JobDetailPage />} />
             <Route path="/login" element={<LoginPage />} />
@@ -182,6 +195,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <DashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard/stats"
+              element={
+                <ProtectedRoute>
+                  <FreelancerStatsPage />
                 </ProtectedRoute>
               }
             />

@@ -14,6 +14,8 @@ export type JobData = {
   created_at: string
   views_count: number
   is_urgent: boolean
+  is_beginner_friendly: boolean
+  is_internship: boolean
   budget_type: string
   budget_min: number | null
   budget_max: number | null
@@ -109,6 +111,8 @@ export async function fetchJobDetail(id: string): Promise<JobDetailQueryResult> 
             created_at,
             views_count,
             is_urgent,
+            is_beginner_friendly,
+            is_internship,
             budget_type,
             budget_min,
             budget_max,
@@ -180,6 +184,8 @@ export async function fetchJobDetail(id: string): Promise<JobDetailQueryResult> 
     created_at: String(rowUnknown.created_at ?? ""),
     views_count: Number(rowUnknown.views_count ?? 0),
     is_urgent: Boolean(rowUnknown.is_urgent),
+    is_beginner_friendly: Boolean(rowUnknown.is_beginner_friendly),
+    is_internship: Boolean(rowUnknown.is_internship),
     budget_type: String(rowUnknown.budget_type ?? ""),
     budget_min: rowUnknown.budget_min === null || rowUnknown.budget_min === undefined ? null : Number(rowUnknown.budget_min),
     budget_max: rowUnknown.budget_max === null || rowUnknown.budget_max === undefined ? null : Number(rowUnknown.budget_max),

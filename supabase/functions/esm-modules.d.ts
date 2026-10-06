@@ -78,3 +78,22 @@ declare module "https://deno.land/x/denomailer@1.6.0/mod.ts" {
     close(): Promise<void>
   }
 }
+
+declare module "npm:satori@0.12.2" {
+  export default function satori(
+    element: unknown,
+    options: {
+      width: number
+      height: number
+      fonts: Array<{ name: string; data: ArrayBuffer; weight?: number; style?: "normal" | "italic" }>
+    },
+  ): Promise<string>
+}
+
+declare module "npm:@resvg/resvg-wasm@2.6.2" {
+  export function initWasm(module: Response | Promise<Response> | ArrayBuffer | Uint8Array): Promise<void>
+  export class Resvg {
+    constructor(svg: string, options?: { fitTo?: { mode: "width" | "height" | "zoom"; value: number } })
+    render(): { asPng(): Uint8Array }
+  }
+}

@@ -6,6 +6,8 @@ import { ViewCountEyeIcon } from "../components/ViewCountEyeIcon.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
 import { useToast } from "../components/ui/ToastProvider.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
+import ShareButtons from "../components/ShareButtons.tsx"
+import SimilarJobs from "../components/SimilarJobs.tsx"
 import StartConversationButton from "../components/StartConversationButton.tsx"
 import { avatarImageUrl, jobImageDetailUrl, jobImageThumbnailUrl } from "../lib/storageImageUrl.ts"
 import { fetchJobDetail, loadHirerContact, type JobDetailQueryResult } from "../lib/queries/fetchJobDetail.ts"
@@ -17,7 +19,7 @@ import { formatJobBudget, jobApplicationRateLabel } from "../lib/listingPrice.ts
 import { formatHirerContactForApplicant, hirerContactCopyText } from "../lib/jobContactPreference.ts"
 import { validateCoverLetter, validateMoneyAmount } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
-import { usePageMeta } from "../lib/usePageMeta.tsx"
+import { SITE_BASE_URL, usePageMeta } from "../lib/usePageMeta.tsx"
 import { buildJobPostingStructuredData, JsonLd } from "../lib/structuredData.tsx"
 import { pickCategoryName } from "../lib/categoryLocale.ts"
 import { pickListingTitle } from "../lib/listingLocale.ts"
@@ -66,7 +68,6 @@ const sidebarCardClass = `${detailCardClass} flex min-h-[580px] flex-col md:min-
 
 export default function JobDetailPage() {
   const { t, locale } = useTranslation()
-  const pageMeta = usePageMeta(t("jobDetail.title"), t("jobDetail.metaDescription"))
   const { pushToast } = useToast()
   const queryClient = useQueryClient()
   const { id } = useParams()
@@ -161,6 +162,14 @@ export default function JobDetailPage() {
     if (!job) return ""
     return displayJobDescription(job, locale)
   }, [job, locale])
+
+  const jobShareUrl = `${SITE_BASE_URL}/job/${id ?? ""}`
+  const pageMeta = usePageMeta(
+    displayTitle ? t("jobDetail.metaTitleNamed", { title: displayTitle }) : t("jobDetail.title"),
+    displayDescription ? displayDescription.replace(/\s+/g, " ").trim().slice(0, 200) : t("jobDetail.metaDescription"),
+    id ? jobShareUrl : undefined,
+    id ? { image: `${SITE_BASE_URL}/og/job/${id}.png` } : undefined,
+  )
 
   const displayCategoryName = useMemo(() => {
     if (!job) return ""
@@ -350,6 +359,22 @@ export default function JobDetailPage() {
                       {t("common.urgent")}
                     </span>
                   ) : null}
+                  {job.is_internship ? (
+                    <Link
+                      to="/internships"
+                      className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800"
+                    >
+                      {t("entryLevel.internship")}
+                    </Link>
+                  ) : null}
+                  {job.is_beginner_friendly ? (
+                    <Link
+                      to="/internships"
+                      className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-800"
+                    >
+                      {t("entryLevel.beginnerFriendly")}
+                    </Link>
+                  ) : null}
                 </div>
                 <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
                   <span className="inline-flex items-center gap-1">
@@ -361,6 +386,7 @@ export default function JobDetailPage() {
                     {formatRelativeTime(job.created_at)}
                   </span>
                 </div>
+                <ShareButtons url={jobShareUrl} text={displayTitle} className="mt-3" />
               </div>
               {!isJobOwner ? (
                 <SaveBookmarkButton variant="icon" resourceType="job" resourceId={job.id} />
@@ -606,6 +632,7 @@ export default function JobDetailPage() {
             </div>
           </aside>
         </div>
+        <SimilarJobs jobId={job.id} />
       </main>
     </div>
   </>

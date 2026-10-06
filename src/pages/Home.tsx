@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import HomeFeedSection from "../components/HomeFeedSection.tsx"
+import LocalServicesStrip from "../components/LocalServicesStrip.tsx"
 import { OptimizedImage } from "../components/OptimizedImage.tsx"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { translate } from "../i18n/translate.ts"
@@ -112,6 +113,8 @@ export default function HomePage() {
         </section>
 
         <HomeFeedSection />
+
+        <LocalServicesStrip />
 
         {showStatsBar ? (
           <section className="border-x border-b border-slate-200 bg-white">

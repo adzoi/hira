@@ -9,11 +9,16 @@ export type PageMetaProps = {
   description?: string
   /** Absolute URL; defaults to the current route on hira.ge */
   url?: string
+  /** Absolute share image URL (1200×630); defaults to the site-wide card. */
+  image?: string
+  /** Keep thin or empty pages out of search results. */
+  noindex?: boolean
 }
 
-export function PageMeta({ title, description, url }: PageMetaProps) {
+export function PageMeta({ title, description, url, image, noindex }: PageMetaProps) {
   const { pathname, search } = useLocation()
   const pageUrl = url ?? `${SITE_BASE_URL}${pathname}${search}`
+  const ogImage = image ?? SITE_OG_IMAGE
 
   return (
     <Helmet>
@@ -22,17 +27,26 @@ export function PageMeta({ title, description, url }: PageMetaProps) {
       <meta property="og:title" content={title} />
       {description ? <meta property="og:description" content={description} /> : null}
       <meta property="og:url" content={pageUrl} />
-      <meta property="og:image" content={SITE_OG_IMAGE} />
+      {noindex ? <meta name="robots" content="noindex, follow" /> : null}
+      <link rel="canonical" href={url ?? `${SITE_BASE_URL}${pathname}`} />
+      <meta property="og:image" content={ogImage} />
       <meta property="og:type" content="website" />
       <meta property="og:site_name" content="ჰირა" />
       <meta property="og:locale" content="ka_GE" />
-      <meta name="twitter:card" content="summary" />
-      <meta name="twitter:image" content={SITE_OG_IMAGE} />
+      {image ? <meta property="og:image:width" content="1200" /> : null}
+      {image ? <meta property="og:image:height" content="630" /> : null}
+      <meta name="twitter:card" content={image ? "summary_large_image" : "summary"} />
+      <meta name="twitter:image" content={ogImage} />
     </Helmet>
   )
 }
 
 /** Renders title, description, and Open Graph tags for the current page. */
-export function usePageMeta(title: string, description?: string, url?: string) {
-  return <PageMeta title={title} description={description} url={url} />
+export function usePageMeta(
+  title: string,
+  description?: string,
+  url?: string,
+  options?: { image?: string; noindex?: boolean },
+) {
+  return <PageMeta title={title} description={description} url={url} image={options?.image} noindex={options?.noindex} />
 }

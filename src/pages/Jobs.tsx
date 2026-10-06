@@ -56,6 +56,8 @@ type JobItem = {
   locationType: string
   durationType: string
   isUrgent: boolean
+  isBeginnerFriendly: boolean
+  isInternship: boolean
   applicationDeadline: string | null
   categoryName: string
   subcategoryName: string | null
@@ -114,6 +116,8 @@ const mockJobs: JobItem[] = [
     locationType: "remote",
     durationType: "one_time",
     isUrgent: true,
+    isBeginnerFriendly: false,
+    isInternship: false,
     skills: [
       { id: "s1", name: "React" },
       { id: "s2", name: "TypeScript" },
@@ -150,6 +154,8 @@ const mockJobs: JobItem[] = [
     locationType: "anywhere",
     durationType: "one_time",
     isUrgent: false,
+    isBeginnerFriendly: false,
+    isInternship: false,
     skills: [
       { id: "s4", name: "Figma" },
       { id: "s5", name: "Adobe Illustrator" },
@@ -186,6 +192,8 @@ const mockJobs: JobItem[] = [
     locationType: "tbilisi",
     durationType: "ongoing",
     isUrgent: false,
+    isBeginnerFriendly: false,
+    isInternship: false,
     skills: [
       { id: "s7", name: "Instagram" },
       { id: "s8", name: "Facebook" },
@@ -222,6 +230,8 @@ const mockJobs: JobItem[] = [
     locationType: "remote",
     durationType: "one_time",
     isUrgent: true,
+    isBeginnerFriendly: false,
+    isInternship: false,
     skills: [
       { id: "s10", name: "თარგმანი" },
       { id: "s11", name: "ქართული ენა" },
@@ -306,6 +316,8 @@ function mapRpcRowsToJobs(jobRows: unknown[]): JobItem[] {
       locationType: String(row.location_type ?? ""),
       durationType: String(row.duration_type ?? ""),
       isUrgent: Boolean(row.is_urgent),
+      isBeginnerFriendly: Boolean(row.is_beginner_friendly),
+      isInternship: Boolean(row.is_internship),
       applicationDeadline: row.application_deadline != null ? String(row.application_deadline) : null,
       categoryName: String(row.category_name ?? "").trim() || "კატეგორია",
       subcategoryName: row.subcategory_name != null ? String(row.subcategory_name) : null,
@@ -429,6 +441,7 @@ export default function JobsPage() {
   const [appliedBudgetMax, setAppliedBudgetMax] = useState("")
   const [appliedDurations, setAppliedDurations] = useState<DurationType[]>([])
   const [appliedUrgentOnly, setAppliedUrgentOnly] = useState(false)
+  const [appliedEntryLevelOnly, setAppliedEntryLevelOnly] = useState(() => searchParams.get("entry") === "1")
   const [appliedLocationFilter, setAppliedLocationFilter] = useState("")
   const [appliedSkillIds, setAppliedSkillIds] = useState<string[]>([])
 
@@ -437,6 +450,7 @@ export default function JobsPage() {
   const [draftBudgetMax, setDraftBudgetMax] = useState("")
   const [draftDurations, setDraftDurations] = useState<DurationType[]>([])
   const [draftUrgentOnly, setDraftUrgentOnly] = useState(false)
+  const [draftEntryLevelOnly, setDraftEntryLevelOnly] = useState(false)
   const [draftLocationFilter, setDraftLocationFilter] = useState("")
   const [draftSkillIds, setDraftSkillIds] = useState<string[]>([])
 
@@ -693,6 +707,7 @@ export default function JobsPage() {
     setDraftBudgetMax(appliedBudgetMax)
     setDraftDurations([...appliedDurations])
     setDraftUrgentOnly(appliedUrgentOnly)
+    setDraftEntryLevelOnly(appliedEntryLevelOnly)
     setDraftLocationFilter(appliedLocationFilter)
     setDraftSkillIds([...appliedSkillIds])
     setAdvancedDropdownOpen(true)
@@ -704,6 +719,7 @@ export default function JobsPage() {
     setAppliedBudgetMax(draftBudgetMax)
     setAppliedDurations([...draftDurations])
     setAppliedUrgentOnly(draftUrgentOnly)
+    setAppliedEntryLevelOnly(draftEntryLevelOnly)
     setAppliedLocationFilter(draftLocationFilter)
     setAppliedSkillIds([...draftSkillIds])
     setAdvancedDropdownOpen(false)
@@ -715,6 +731,7 @@ export default function JobsPage() {
     setDraftBudgetMax("")
     setDraftDurations([])
     setDraftUrgentOnly(false)
+    setDraftEntryLevelOnly(false)
     setDraftLocationFilter("")
     setDraftSkillIds([])
   }
@@ -729,6 +746,7 @@ export default function JobsPage() {
     setAppliedBudgetMax("")
     setAppliedDurations([])
     setAppliedUrgentOnly(false)
+    setAppliedEntryLevelOnly(false)
     setAppliedLocationFilter("")
     setAppliedSkillIds([])
     clearDraftAdvanced()
@@ -743,6 +761,7 @@ export default function JobsPage() {
     if (appliedBudgetMax.trim()) n += 1
     if (appliedDurations.length > 0) n += appliedDurations.length
     if (appliedUrgentOnly) n += 1
+    if (appliedEntryLevelOnly) n += 1
     if (appliedLocationFilter.trim()) n += 1
     if (appliedSkillIds.length > 0) n += appliedSkillIds.length
     return n
@@ -752,6 +771,7 @@ export default function JobsPage() {
     appliedBudgetMax,
     appliedDurations,
     appliedUrgentOnly,
+    appliedEntryLevelOnly,
     appliedLocationFilter,
     appliedSkillIds,
   ])
@@ -792,6 +812,7 @@ export default function JobsPage() {
         return false
       }
       if (appliedUrgentOnly && !job.isUrgent) return false
+      if (appliedEntryLevelOnly && !job.isBeginnerFriendly && !job.isInternship) return false
 
       if (
         appliedSkillIds.length > 0 &&
@@ -813,6 +834,7 @@ export default function JobsPage() {
     appliedLocationFilter,
     appliedDurations,
     appliedUrgentOnly,
+    appliedEntryLevelOnly,
     appliedSkillIds,
   ])
 
@@ -962,6 +984,15 @@ export default function JobsPage() {
                 <span>{t("common.urgentOnly")}</span>
                 <input type="checkbox" checked={draftUrgentOnly} onChange={(event) => setDraftUrgentOnly(event.target.checked)} />
               </label>
+
+              <label className="flex items-center justify-between rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-[#1B2B4B]">
+                <span>{t("entryLevel.filterLabel")}</span>
+                <input
+                  type="checkbox"
+                  checked={draftEntryLevelOnly}
+                  onChange={(event) => setDraftEntryLevelOnly(event.target.checked)}
+                />
+              </label>
             </>
             }
           />
@@ -1034,6 +1065,16 @@ export default function JobsPage() {
                     </Link>
 
                     <div className="mt-2 flex flex-wrap gap-2">
+                      {job.isInternship ? (
+                        <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+                          {t("entryLevel.internship")}
+                        </span>
+                      ) : null}
+                      {job.isBeginnerFriendly ? (
+                        <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+                          {t("entryLevel.beginnerFriendly")}
+                        </span>
+                      ) : null}
                       <span className={tagChipClass}>
                         {jobCategoryLabel(job, categories, locale)}
                       </span>

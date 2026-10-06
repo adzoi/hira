@@ -35,6 +35,7 @@ import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { assertContentRateLimit, formatContentRateLimitError } from "../lib/contentRateLimit.ts"
 import { localizedNameFromMap, pickCategoryName, type LocalizedNameEntry } from "../lib/categoryLocale.ts"
 import { pickListingDescription, pickListingTitle } from "../lib/listingLocale.ts"
+import { useSearchImpressions } from "../lib/searchImpressions.ts"
 type ListingMeta = { categoryId: string | null; subcategoryId: string | null; tags: string[] }
 type Availability = "full_time" | "part_time" | "weekends"
 type SkillItem = { id: string; name: string; category_id: string | null }
@@ -810,6 +811,7 @@ export default function ListingsPage() {
     categories,
     serverSearchQuery,
   ])
+  useSearchImpressions(useMemo(() => filteredSorted.map((item) => item.freelancerProfileId), [filteredSorted]))
 
   const openListingQueryId = searchParams.get("open")
 
