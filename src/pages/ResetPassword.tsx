@@ -1,7 +1,6 @@
 import type { FormEvent } from "react"
 import { useEffect, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import Navbar from "../components/Navbar.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { AUTH_RECOVERY_HINT_KEY } from "../lib/supabaseAuth.ts"
 import { validatePassword } from "../lib/validation.ts"
@@ -126,7 +125,6 @@ export default function ResetPasswordPage() {
       <>
         {pageMeta}
         <div className="min-h-screen bg-[#F8F9FC] page-enter">
-          <Navbar />
           <div className="mx-auto w-full max-w-xl px-4 py-16 text-center text-sm text-slate-700">
             {t("auth.supabaseNotConfigured")}
             <Link to="/login" className="mt-4 block font-semibold text-[#D4A843] hover:underline">
@@ -142,7 +140,6 @@ export default function ResetPasswordPage() {
     <>
       {pageMeta}
     <div className="min-h-screen bg-[#F8F9FC] page-enter">
-      <Navbar />
       <div className="mx-auto w-full max-w-xl px-4 py-10 md:px-6 md:py-16">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-8">
           <h1 className="text-[26px] font-bold text-[#1B2B4B] md:text-4xl">{t("auth.newPassword")}</h1>

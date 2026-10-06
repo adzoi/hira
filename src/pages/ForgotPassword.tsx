@@ -4,6 +4,7 @@ import { Link } from "react-router-dom"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import {
   authCooldownUntil,
+  retryAfterFromAuthMessage,
   consumeAuthRateLimit,
   isAuthRateLimited,
 } from "../lib/authRateLimit"
@@ -75,7 +76,7 @@ export default function ForgotPasswordPage() {
       const { error: resetErr } = await supabase.auth.resetPasswordForEmail(trimmed, { redirectTo })
       if (resetErr) {
         if (isAuthRateLimited(resetErr.status, resetErr.message)) {
-          setCooldownUntil(authCooldownUntil())
+          setCooldownUntil(authCooldownUntil(retryAfterFromAuthMessage(resetErr.message)))
           throw new Error(t("validation.rateLimited"))
         }
         throw resetErr

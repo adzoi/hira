@@ -4,6 +4,7 @@ import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import {
   authCooldownUntil,
+  retryAfterFromAuthMessage,
   consumeAuthRateLimit,
   isAuthRateLimited,
 } from "../lib/authRateLimit"
@@ -166,7 +167,7 @@ export default function RegisterPage() {
         } else if (message.includes("invalid email")) {
           setError(t("validation.emailInvalid"))
         } else if (isAuthRateLimited(registerError.status, registerError.message)) {
-          setCooldownUntil(authCooldownUntil())
+          setCooldownUntil(authCooldownUntil(retryAfterFromAuthMessage(registerError.message)))
           setError(t("validation.rateLimited"))
         } else if (message.includes("email signups are disabled")) {
           setError("ელფოსტით რეგისტრაცია გათიშულია Supabase პროექტში.")

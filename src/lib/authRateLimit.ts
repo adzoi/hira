@@ -16,6 +16,12 @@ export function isAuthRateLimited(status?: number, message?: string): boolean {
   return lower.includes("too many") || lower.includes("rate limit")
 }
 
+/** Seconds from GoTrue's "you can only request this after N seconds" message, if present. */
+export function retryAfterFromAuthMessage(message?: string): number | undefined {
+  const match = message?.match(/after (\d+) seconds?/i)
+  return match ? Number(match[1]) : undefined
+}
+
 export function authCooldownUntil(retryAfterSeconds?: number): number {
   if (retryAfterSeconds && retryAfterSeconds > 0) {
     return Date.now() + retryAfterSeconds * 1000

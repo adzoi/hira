@@ -1,5 +1,6 @@
 import type { AuthError, Session, SupabaseClient, User } from "@supabase/supabase-js"
 import type { QueryClient } from "@tanstack/react-query"
+import { AUTH_RECOVERY_HINT_KEY } from "./supabase"
 import { SITE_BASE_URL } from "./usePageMeta.tsx"
 
 /** True when the browser holds a session the auth server no longer accepts. */
@@ -57,7 +58,7 @@ let authRecoveryStarted = false
 
 const AUTH_HASH_PARAM_KEYS = ["access_token", "refresh_token", "type", "error", "error_description"] as const
 
-export const AUTH_RECOVERY_HINT_KEY = "hira-auth-recovery"
+export { AUTH_RECOVERY_HINT_KEY }
 export const AUTH_ONBOARDING_PATH = "/onboarding"
 export const AUTH_ONBOARDING_URL = `${SITE_BASE_URL}${AUTH_ONBOARDING_PATH}`
 
