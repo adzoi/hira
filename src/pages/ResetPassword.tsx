@@ -50,7 +50,21 @@ export default function ResetPasswordPage() {
     })
 
     void (async () => {
-      const code = new URLSearchParams(window.location.search).get("code")
+      const searchParams = new URLSearchParams(window.location.search)
+      // Links from our own email template: /auth/reset-password?token_hash=...&type=recovery
+      const tokenHash = searchParams.get("token_hash")
+      if (tokenHash && searchParams.get("type") === "recovery") {
+        const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "recovery" })
+        if (cancelled) return
+        window.history.replaceState(null, "", "/auth/reset-password")
+        if (!error) {
+          setReady(true)
+          setChecking(false)
+          return
+        }
+      }
+
+      const code = searchParams.get("code")
       if (code) {
         try {
           const { error } = await supabase.auth.exchangeCodeForSession(window.location.href)

@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import type { User } from "@supabase/supabase-js"
+import type { EmailOtpType, User } from "@supabase/supabase-js"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { AUTH_ONBOARDING_PATH, AUTH_ONBOARDING_URL } from "../lib/supabaseAuth.ts"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
+
+const OTP_TYPES = new Set(["email", "signup", "invite", "magiclink", "email_change"])
 
 function isEmailConfirmed(user: User): boolean {
   return Boolean(user.email_confirmed_at ?? user.confirmed_at)
@@ -52,6 +54,27 @@ export default function AuthConfirmPage() {
 
     void (async () => {
       const searchParams = new URLSearchParams(window.location.search)
+      // Links from our own email templates: /auth/confirm?token_hash=...&type=email
+      const tokenHash = searchParams.get("token_hash")
+      const otpType = searchParams.get("type")
+      if (tokenHash && otpType === "recovery") {
+        navigate(`/auth/reset-password${window.location.search}`, { replace: true })
+        return
+      }
+      if (tokenHash && otpType && OTP_TYPES.has(otpType)) {
+        const { error: verifyError } = await client.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: otpType as EmailOtpType,
+        })
+        if (cancelled) return
+        if (verifyError) {
+          setError(verifyError.message)
+          return
+        }
+        window.history.replaceState(null, "", AUTH_ONBOARDING_PATH)
+        if (await finish()) return
+      }
+
       const code = searchParams.get("code")
       if (code) {
         const { error: exchangeError } = await client.auth.exchangeCodeForSession(window.location.href)
