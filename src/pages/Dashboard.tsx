@@ -528,6 +528,8 @@ export default function DashboardPage() {
   const [freelancerCompletedJobsCount, setFreelancerCompletedJobsCount] = useState(0)
   const [freelancerHirerReviewQueue, setFreelancerHirerReviewQueue] = useState<FreelancerHirerReviewRow[]>([])
   const [freelancerHirerReviewModal, setFreelancerHirerReviewModal] = useState<FreelancerHirerReviewRow | null>(null)
+  /** Review prompts the freelancer hid without reviewing (per browser, keyed by completed_job id). */
+  const [dismissedHirerReviewIds, setDismissedHirerReviewIds] = useState<Set<string>>(() => new Set())
   const [freelancerHirerReviewSubmitting, setFreelancerHirerReviewSubmitting] = useState(false)
   const [freelancerHirerReviewError, setFreelancerHirerReviewError] = useState("")
   const [freelancerListingCompleteModal, setFreelancerListingCompleteModal] = useState<DashboardFreelancerInquiry | null>(null)
@@ -594,7 +596,6 @@ export default function DashboardPage() {
   const supabaseAny = supabase as any
   void hirerCompletedJobsCount
   void freelancerCompletedJobsCount
-  void freelancerCompletedPlatformJobs
   useEffect(() => {
     const state = location.state as { successMessage?: string } | null
     if (!state?.successMessage) return
@@ -719,6 +720,33 @@ export default function DashboardPage() {
       rejected: freelancerListingOffersInRange.filter((item) => ["declined", "rejected", "cancelled"].includes(item.status)).length,
     }),
     [freelancerListingOffersInRange],
+  )
+  const hirerReviewDismissKey = profile?.id ? `hira.dismissedHirerReviews.${profile.id}` : ""
+  useEffect(() => {
+    if (!hirerReviewDismissKey) return
+    try {
+      const raw = localStorage.getItem(hirerReviewDismissKey)
+      const ids = raw ? (JSON.parse(raw) as unknown) : []
+      setDismissedHirerReviewIds(new Set(Array.isArray(ids) ? ids.map(String) : []))
+    } catch {
+      setDismissedHirerReviewIds(new Set())
+    }
+  }, [hirerReviewDismissKey])
+  const dismissFreelancerHirerReview = (completedJobId: string) => {
+    setDismissedHirerReviewIds((prev) => {
+      const next = new Set(prev)
+      next.add(completedJobId)
+      try {
+        if (hirerReviewDismissKey) localStorage.setItem(hirerReviewDismissKey, JSON.stringify([...next]))
+      } catch {
+        /* storage unavailable: hidden for this session only */
+      }
+      return next
+    })
+  }
+  const visibleFreelancerHirerReviewQueue = useMemo(
+    () => freelancerHirerReviewQueue.filter((item) => !dismissedHirerReviewIds.has(item.completedJobId)),
+    [freelancerHirerReviewQueue, dismissedHirerReviewIds],
   )
   const freelancerOngoingJobOffers = useMemo(
     () => freelancerPendingJobOffers.filter((offer) => ["accepted"].includes(offer.status)),
@@ -1864,14 +1892,14 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {freelancerHirerReviewQueue.length > 0 ? (
+            {visibleFreelancerHirerReviewQueue.length > 0 ? (
               <div className="rounded-xl border border-slate-200 bg-white p-6">
                 <h3 className="text-xl font-bold text-[#1B2B4B]">დამქირავებლის შეფასება</h3>
                 <p className="mt-1 text-sm text-slate-500">
                   დასრულებულ სამუშაოებზე დააფიქსირე გამოცდილება.
                 </p>
                 <ul className="mt-4 space-y-3">
-                  {freelancerHirerReviewQueue.map((item) => (
+                  {visibleFreelancerHirerReviewQueue.map((item) => (
                     <li
                       key={item.completedJobId}
                       className="flex flex-col gap-3 rounded-lg border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between"
@@ -1880,13 +1908,22 @@ export default function DashboardPage() {
                         <p className="font-semibold text-[#1B2B4B]">{item.jobTitle}</p>
                         <p className="mt-1 text-sm text-slate-600">{item.hirerDisplayName}</p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => openFreelancerHirerReviewModal(item)}
-                        className="shrink-0 rounded-lg border border-[#D4A843] bg-amber-50 px-3 py-2 text-xs font-semibold text-[#1B2B4B] transition hover:bg-[#D4A843]/30"
-                      >
-                        შეფასების დაწყება
-                      </button>
+                      <div className="flex shrink-0 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openFreelancerHirerReviewModal(item)}
+                          className="rounded-lg border border-[#D4A843] bg-amber-50 px-3 py-2 text-xs font-semibold text-[#1B2B4B] transition hover:bg-[#D4A843]/30"
+                        >
+                          შეფასების დაწყება
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => dismissFreelancerHirerReview(item.completedJobId)}
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-400"
+                        >
+                          დამალვა
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -2301,10 +2338,18 @@ export default function DashboardPage() {
             {freelancerDashboardTab === "completed" ? (
               <div className="rounded-xl border border-slate-200 bg-white p-6">
                 <h3 className="text-xl font-bold text-[#1B2B4B]">დასრულებული სამუშაოები</h3>
-                {freelancerCompletedListingInquiries.length === 0 ? (
+                {freelancerCompletedListingInquiries.length === 0 && freelancerCompletedPlatformJobs.length === 0 ? (
                   <p className="mt-4 text-sm text-slate-500">დასრულებული სამუშაოები არ არის.</p>
                 ) : (
                   <ul className="mt-4 space-y-2">
+                    {freelancerCompletedPlatformJobs.map((job) => (
+                      <li key={`done-job-${job.completedJobId}`} className="rounded-lg border border-slate-200 bg-slate-50/60 px-4 py-3">
+                        <p className="font-semibold text-[#1B2B4B]">{job.jobTitle}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {job.hirerDisplayName} · {formatDate(job.completedAt)}
+                        </p>
+                      </li>
+                    ))}
                     {freelancerCompletedListingInquiries.map((q) => (
                       <li key={`done-${q.id}`} className="rounded-lg border border-slate-200 bg-slate-50/60 px-4 py-3">
                         <p className="font-semibold text-[#1B2B4B]">{q.listingTitle}</p>

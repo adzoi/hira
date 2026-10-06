@@ -88,6 +88,8 @@ type FreelancerHirerReviewRow = {
 
 type FreelancerCompletedPlatformJob = {
   completedJobId: string
+  jobTitle: string
+  completedAt: string
   jobDescription: string
   hirerDisplayName: string
   hirerAvatarUrl: string | null
@@ -195,7 +197,14 @@ function mapFreelancerCompletedPlatformJobRows(rows: unknown[] | null | undefine
       profiles?.avatar_url != null && String(profiles.avatar_url).trim()
         ? String(profiles.avatar_url).trim()
         : null
-    out.push({ completedJobId, jobDescription, hirerDisplayName, hirerAvatarUrl })
+    out.push({
+      completedJobId,
+      jobTitle: titleFallback || "სამუშაო",
+      completedAt,
+      jobDescription,
+      hirerDisplayName,
+      hirerAvatarUrl,
+    })
   }
   return out
 }
