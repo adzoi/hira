@@ -513,6 +513,13 @@ export const ka: T = {
     hirerDone: "დამქირავებელმა დაასრულა",
   },
   auth: {
+    checkEmailHeading: "შეამოწმე ელფოსტა",
+    checkEmailBody: "ანგარიში შეიქმნა. დასადასტურებელი ბმული გავგზავნეთ მისამართზე:",
+    checkEmailSpam: "გახსენი წერილი და დააჭირე ბმულს, შემდეგ შეძლებ შესვლას. თუ წერილი არ ჩანს, შეამოწმე Spam / Promotions საქაღალდე.",
+    checkEmailToLogin: "დადასტურების შემდეგ შედი ანგარიშზე",
+    resendConfirmation: "დასტურის წერილის ხელახლა გაგზავნა",
+    confirmationResent: "წერილი ხელახლა გაიგზავნა.",
+    emailAlreadyRegistered: "ეს ელფოსტა უკვე დარეგისტრირებულია. შედი ანგარიშზე ან აღადგინე პაროლი.",
     loginTitle: "შესვლა - ჰირა",
     registerTitle: "რეგისტრაცია - ჰირა",
     forgotTitle: "პაროლის აღდგენა - ჰირა",

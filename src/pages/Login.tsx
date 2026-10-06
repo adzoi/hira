@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom"
+import { ResendConfirmationButton } from "../components/ResendConfirmation.tsx"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import {
   authCooldownUntil,
@@ -35,6 +36,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null)
   const [cooldownSeconds, setCooldownSeconds] = useState(0)
@@ -71,6 +73,7 @@ export default function LoginPage() {
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError("")
+    setUnconfirmedEmail(null)
 
     if (!isSupabaseConfigured || !supabase) {
       setError(t("validation.supabaseMissing"))
@@ -105,6 +108,7 @@ export default function LoginPage() {
         setError(t("validation.rateLimited"))
       } else if (message.includes("email not confirmed")) {
         setError(t("validation.emailNotConfirmed"))
+        setUnconfirmedEmail(emailResult.value)
       } else if (message.includes("invalid login credentials")) {
         setError(t("validation.invalidCredentials"))
       } else if (message.includes("invalid email")) {
@@ -218,7 +222,10 @@ export default function LoginPage() {
               </label>
 
               {error ? (
-                <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  <p>{error}</p>
+                  {unconfirmedEmail ? <ResendConfirmationButton email={unconfirmedEmail} /> : null}
+                </div>
               ) : null}
 
               <button

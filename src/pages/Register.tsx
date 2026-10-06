@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
+import CheckEmailPanel from "../components/ResendConfirmation.tsx"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import {
   authCooldownUntil,
@@ -43,6 +44,7 @@ export default function RegisterPage() {
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null)
   const [cooldownSeconds, setCooldownSeconds] = useState(0)
   const registerInFlightRef = useRef(false)
+  const [confirmationSentTo, setConfirmationSentTo] = useState<string | null>(null)
 
   const pageMeta = usePageMeta(t("auth.registerTitle"), t("auth.registerMetaDescription"))
 
@@ -170,7 +172,7 @@ export default function RegisterPage() {
         })
         const message = registerError.message.toLowerCase()
         if (message.includes("user already registered")) {
-          setError("ეს ელფოსტა უკვე გამოყენებულია.")
+          setError(t("auth.emailAlreadyRegistered"))
         } else if (message.includes("invalid email")) {
           setError(t("validation.emailInvalid"))
         } else if (isAuthRateLimited(registerError.status, registerError.message)) {
@@ -186,13 +188,20 @@ export default function RegisterPage() {
         return
       }
 
+      // Supabase hides existing accounts: it "succeeds" with no session and no identities.
+      if (signUpData.user && !signUpData.session && signUpData.user.identities?.length === 0) {
+        setError(t("auth.emailAlreadyRegistered"))
+        return
+      }
+
       clearStoredReferralCode()
       const newUserId = signUpData.user?.id
       const session = signUpData.session
       const emailConfirmed = Boolean(signUpData.user?.email_confirmed_at ?? signUpData.user?.confirmed_at)
 
       if (!session || !emailConfirmed) {
-        navigate("/login?reason=confirm-email")
+        setConfirmationSentTo(formData.email)
+        window.scrollTo({ top: 0 })
         return
       }
 
@@ -223,12 +232,14 @@ export default function RegisterPage() {
         <div className="mx-auto w-full max-w-3xl px-4 py-10 md:px-6 md:py-14">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-8">
             <h1 className="text-[28px] font-bold text-[#0088FF] md:text-4xl">{t("auth.registerHeading")}</h1>
-            <p className="mt-2 text-sm text-slate-500">{t("auth.registerStep", { step })}</p>
-            {referralCode ? (
+            {confirmationSentTo ? null : <p className="mt-2 text-sm text-slate-500">{t("auth.registerStep", { step })}</p>}
+            {referralCode && !confirmationSentTo ? (
               <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-[#1B2B4B]">{t("referral.invitedBanner")}</p>
             ) : null}
 
-            {step === 1 ? (
+            {confirmationSentTo ? (
+              <CheckEmailPanel email={confirmationSentTo} />
+            ) : step === 1 ? (
               <div className="mt-7 grid gap-4 md:grid-cols-2">
                 <button
                   type="button"

@@ -517,6 +517,13 @@ export const en: T = {
     hirerDone: "Hirer finished",
   },
   auth: {
+    checkEmailHeading: "Check your email",
+    checkEmailBody: "Your account was created. We sent a confirmation link to:",
+    checkEmailSpam: "Open the email and click the link, then you can log in. If you don't see it, check your Spam / Promotions folder.",
+    checkEmailToLogin: "Log in after confirming",
+    resendConfirmation: "Resend confirmation email",
+    confirmationResent: "Email sent again.",
+    emailAlreadyRegistered: "This email is already registered. Log in or reset your password.",
     loginTitle: "Log in - Hira",
     registerTitle: "Sign up - Hira",
     forgotTitle: "Reset password - Hira",
