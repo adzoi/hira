@@ -1,11 +1,11 @@
 /*
-  Content-Security-Policy: default-src 'none'; script-src 'self' https://*.paypal.com https://*.paypalobjects.com https://www.googletagmanager.com; style-src 'self' https://*.paypal.com https://*.paypalobjects.com; style-src-elem 'self' https://*.paypal.com https://*.paypalobjects.com; font-src 'self' data:; img-src 'self' data: blob: https://*.supabase.co https://*.paypal.com https://*.paypalobjects.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.paypal.com https://*.paypalobjects.com https://www.google-analytics.com https://analytics.google.com https://*.google-analytics.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io; frame-src 'self' https://*.paypal.com https://*.paypalobjects.com; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self' https://*.paypal.com; frame-ancestors 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'none'; script-src 'self' https://www.googletagmanager.com; style-src 'self'; style-src-elem 'self'; font-src 'self' data:; img-src 'self' data: blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://www.google-analytics.com https://analytics.google.com https://*.google-analytics.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io; frame-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(self)
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
-  Cross-Origin-Opener-Policy: same-origin-allow-popups
+  Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-origin
 
 /*

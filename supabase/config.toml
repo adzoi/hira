@@ -30,6 +30,10 @@ verify_jwt = false
 [functions.content-rate-limit]
 verify_jwt = false
 
+# Called by the notify_via_email trigger; authenticated by X-Gigori-Webhook-Secret inside the function.
+[functions.send-notification-email]
+verify_jwt = false
+
 [db]
 major_version = 15
 

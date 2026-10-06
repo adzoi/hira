@@ -814,7 +814,7 @@ export default function DashboardPage() {
         }
         const { data: completedRows, error: completedErr } = await supabase
           .from("completed_jobs")
-          .select("id, job_id")
+          .select("id, job_id, freelancer_profile_id")
           .in("job_id", jobIds)
         if (completedErr || !completedRows || completedRows.length === 0) {
           setHirerReviewedJobApplicationIds({})
@@ -833,14 +833,13 @@ export default function DashboardPage() {
         const reviewedCompletedIds = new Set(
           reviewRows.map((row) => String(row.completed_job_id ?? "")).filter(Boolean),
         )
-        const reviewedJobIds = new Set(
+        const reviewedHireKeys = new Set(
           completedRows
             .filter((row) => reviewedCompletedIds.has(String(row.id ?? "")))
-            .map((row) => String(row.job_id ?? ""))
-            .filter(Boolean),
+            .map((row) => `${row.job_id ?? ""}:${row.freelancer_profile_id ?? ""}`),
         )
         const reviewedAppMap = applications.reduce<Record<string, true>>((acc, item) => {
-          if (reviewedJobIds.has(item.jobId)) acc[item.applicationId] = true
+          if (reviewedHireKeys.has(`${item.jobId}:${item.freelancerProfileId}`)) acc[item.applicationId] = true
           return acc
         }, {})
         setHirerReviewedJobApplicationIds(reviewedAppMap)
@@ -1528,6 +1527,7 @@ export default function DashboardPage() {
         .from("completed_jobs")
         .select("id")
         .eq("job_id", reviewModalItem.jobId)
+        .eq("freelancer_profile_id", reviewModalItem.freelancerProfileId)
         .maybeSingle()
 
       let completedJobId = existingCj?.id ?? null
@@ -1551,6 +1551,7 @@ export default function DashboardPage() {
               .from("completed_jobs")
               .select("id")
               .eq("job_id", reviewModalItem.jobId)
+              .eq("freelancer_profile_id", reviewModalItem.freelancerProfileId)
               .maybeSingle()
             if (dupSelErr) throw dupSelErr
             completedJobId = dupRow?.id ?? null

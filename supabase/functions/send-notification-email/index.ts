@@ -13,8 +13,8 @@ declare const Deno: {
   env: { get: (key: string) => string | undefined }
 }
 
-/** Gmail SMTP path: CTA always opens production dashboard (ASCII URL avoids client quirks). */
-const GMAIL_CTA_DASHBOARD_URL = "https://gigori-production.up.railway.app/dashboard"
+/** Gmail SMTP path: CTA always opens the production dashboard (ASCII URL avoids client quirks). */
+const GMAIL_CTA_DASHBOARD_URL = "https://hira.ge/dashboard"
 const FUNCTION_NAME = "send-notification-email"
 
 function jsonResponse(req: Request, body: unknown, status = 200) {
@@ -309,7 +309,7 @@ serveWithSentry(FUNCTION_NAME, async (req: Request) => {
         provider_status: r.status,
         provider_detail: r.detail.slice(0, 500),
       })
-      return jsonResponse(req, { error: "Resend failed", detail: r.detail }, 502)
+      return jsonResponse(req, { error: "Resend failed" }, 502)
     }
     return jsonResponse(req, { ok: true, transport: "resend" })
   }
@@ -321,7 +321,7 @@ serveWithSentry(FUNCTION_NAME, async (req: Request) => {
       transport: "gmail_smtp",
       provider_detail: g.detail.slice(0, 500),
     })
-    return jsonResponse(req, { error: "SMTP send failed", detail: g.detail }, 502)
+    return jsonResponse(req, { error: "SMTP send failed" }, 502)
   }
 
   return jsonResponse(req, { ok: true, transport: "gmail_smtp" })
