@@ -2,12 +2,18 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 export type SavedResourceType = "freelancer" | "hirer" | "job" | "service"
 
+/** resource_id is a uuid column; placeholder catalog items use short ids like "1". */
+function isSavableId(resourceId: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resourceId)
+}
+
 export async function fetchSavedState(
   client: SupabaseClient,
   userId: string,
   resourceType: SavedResourceType,
   resourceId: string,
 ): Promise<boolean> {
+  if (!isSavableId(resourceId)) return false
   const { data, error } = await client
     .from("user_saved_items")
     .select("id")
@@ -26,6 +32,7 @@ export async function toggleSavedItem(
   resourceType: SavedResourceType,
   resourceId: string,
 ): Promise<{ saved: boolean; error: string | null }> {
+  if (!isSavableId(resourceId)) return { saved: false, error: null }
   const { data: existing, error: selErr } = await client
     .from("user_saved_items")
     .select("id")

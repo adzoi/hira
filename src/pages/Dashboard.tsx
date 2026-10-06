@@ -1374,56 +1374,11 @@ export default function DashboardPage() {
     setHirerActionError("")
     setApplicationBusyId(item.applicationId)
     try {
-      const { error: e1 } = await supabase.from("job_applications").update({ status: "accepted" }).eq("id", item.applicationId)
-      if (e1) throw e1
-
-      let incremented = false
-      let vacancyNowFull = false
-      for (let attempt = 0; attempt < 5; attempt += 1) {
-        const { data: snapshot, error: selErr } = await supabase
-          .from("jobs")
-          .select("accepted_count,vacancies")
-          .eq("id", item.jobId)
-          .eq("hirer_profile_id", hirerProfile.id)
-          .maybeSingle()
-        if (selErr) throw selErr
-        if (!snapshot) throw new Error("სამუშაო ვერ მოიძებნა.")
-
-        const prev = Number(snapshot.accepted_count ?? 0)
-        const vac = Math.max(1, Number(snapshot.vacancies ?? 1))
-        const next = prev + 1
-        vacancyNowFull = next >= vac
-
-        const updatePayload: { accepted_count: number; status?: string } = { accepted_count: next }
-        if (vacancyNowFull) updatePayload.status = "closed"
-
-        const { data: updatedRows, error: updErr } = await supabase
-          .from("jobs")
-          .update(updatePayload)
-          .eq("id", item.jobId)
-          .eq("hirer_profile_id", hirerProfile.id)
-          .eq("accepted_count", prev)
-          .select("id")
-        if (updErr) throw updErr
-        if ((updatedRows?.length ?? 0) > 0) {
-          incremented = true
-          break
-        }
-      }
-
-      if (!incremented) {
-        throw new Error("განახლება ვერ დასრულდა — განაახლე გვერდი და სცადე თავიდან.")
-      }
-
-      if (vacancyNowFull) {
-        const { error: e2 } = await supabase
-          .from("job_applications")
-          .update({ status: "rejected" })
-          .eq("job_id", item.jobId)
-          .neq("id", item.applicationId)
-          .eq("status", "pending")
-        if (e2) throw e2
-      }
+      // One transaction server-side: accept, bump accepted_count / close the job, reject the rest.
+      const { error: acceptErr } = await supabaseAny.rpc("accept_job_application", {
+        p_application_id: item.applicationId,
+      })
+      if (acceptErr) throw new Error(acceptErr.message)
 
       await notifyUser(
         item.freelancerUserId,
@@ -2920,6 +2875,9 @@ export default function DashboardPage() {
 
             {hirerDashboardTab === "ongoing" ? (
               <div className="rounded-xl border border-slate-200 bg-white p-6">
+                {hirerActionError ? (
+                  <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{hirerActionError}</p>
+                ) : null}
                 <h3 className="text-xl font-bold text-[#1B2B4B]">მიმდინარე სამუშაოები</h3>
                 {hirerOngoingApplications.length === 0 && hirerOngoingListingInquiries.length === 0 ? (
                   <p className="mt-4 text-sm text-slate-500">მიმდინარე სამუშაოები არ არის.</p>
