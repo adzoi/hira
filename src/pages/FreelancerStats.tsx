@@ -71,19 +71,43 @@ function DailyChart({ daily, locale }: { daily: DailyPoint[]; locale: string }) 
   const { t } = useTranslation()
   const max = Math.max(1, ...daily.map((d) => Math.max(d.views, d.impressions)))
   const dateFormat = new Intl.DateTimeFormat(locale === "en" ? "en-US" : "ka-GE", { month: "short", day: "numeric" })
+  const [active, setActive] = useState<number | null>(null)
+  const activePoint = active === null ? null : daily[active]
+  // Keep the tooltip inside the chart near the left/right edges.
+  const activePct = active === null ? 0 : ((active + 0.5) / daily.length) * 100
+  const tooltipShift = activePct < 15 ? "0%" : activePct > 85 ? "-100%" : "-50%"
   return (
     <div>
-      <div className="flex h-48 items-end gap-[2px]" role="img" aria-label={t("stats.chartLabel")}>
-        {daily.map((d) => (
+      <div className="relative" onPointerLeave={() => setActive(null)}>
+        <div className="flex h-48 items-end gap-[2px]" role="img" aria-label={t("stats.chartLabel")}>
+          {daily.map((d, i) => (
+            <div
+              key={d.day}
+              className={`flex h-full min-w-0 flex-1 cursor-default items-end gap-[1px] rounded-t ${active === i ? "bg-slate-100" : ""}`}
+              onPointerEnter={() => setActive(i)}
+              onPointerDown={() => setActive(i)}
+            >
+              <div className="flex-1 rounded-t bg-[#BFE0FF]" style={{ height: `${(d.impressions / max) * 100}%` }} />
+              <div className="flex-1 rounded-t bg-[#0088FF]" style={{ height: `${(d.views / max) * 100}%` }} />
+            </div>
+          ))}
+        </div>
+        {activePoint ? (
           <div
-            key={d.day}
-            className="flex h-full min-w-0 flex-1 items-end gap-[1px]"
-            title={`${dateFormat.format(new Date(d.day))}: ${t("stats.views")} ${d.views}, ${t("stats.impressions")} ${d.impressions}`}
+            className="pointer-events-none absolute top-0 z-10 whitespace-nowrap rounded-lg bg-[#1B2B4B] px-3 py-2 text-xs text-white shadow-lg"
+            style={{ left: `${activePct}%`, transform: `translateX(${tooltipShift})` }}
           >
-            <div className="flex-1 rounded-t bg-[#BFE0FF]" style={{ height: `${(d.impressions / max) * 100}%` }} />
-            <div className="flex-1 rounded-t bg-[#0088FF]" style={{ height: `${(d.views / max) * 100}%` }} />
+            <p className="mb-1 font-semibold">{dateFormat.format(new Date(activePoint.day))}</p>
+            <p className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-sm bg-[#0088FF]" /> {t("stats.views")}:{" "}
+              <span className="font-semibold">{activePoint.views}</span>
+            </p>
+            <p className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-sm bg-[#BFE0FF]" /> {t("stats.impressions")}:{" "}
+              <span className="font-semibold">{activePoint.impressions}</span>
+            </p>
           </div>
-        ))}
+        ) : null}
       </div>
       <div className="mt-2 flex justify-between text-xs text-slate-400">
         <span>{daily[0] ? dateFormat.format(new Date(daily[0].day)) : ""}</span>
