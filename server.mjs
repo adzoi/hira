@@ -38,6 +38,8 @@ const EMBEDDABLE_HEADERS = { ...staticSecurityHeaders, "Cross-Origin-Resource-Po
 const MIME = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
+  // pdf.js ships its worker as an ES module file (CV import).
+  ".mjs": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",
@@ -50,7 +52,7 @@ const MIME = {
   ".ttf": "font/ttf",
 }
 
-const COMPRESSIBLE_EXT = new Set([".html", ".js", ".css", ".svg", ".json", ".xml", ".txt", ".ttf", ".ico", ".webmanifest"])
+const COMPRESSIBLE_EXT = new Set([".html", ".js", ".mjs", ".css", ".svg", ".json", ".xml", ".txt", ".ttf", ".ico", ".webmanifest"])
 const MIN_COMPRESS_BYTES = 1024
 const brotliAsync = promisify(brotliCompress)
 const gzipAsync = promisify(gzip)
@@ -309,7 +311,7 @@ const server = createServer(async (req, res) => {
     sendBadRequest(res)
     return
   }
-  const isStaticAsset = /\.(?:webp|png|jpe?g|gif|svg|ico|js|css|woff2?|ttf|map|xml|txt)$/i.test(safePath)
+  const isStaticAsset = /\.(?:webp|png|jpe?g|gif|svg|ico|m?js|css|woff2?|ttf|map|xml|txt)$/i.test(safePath)
 
   if (safePath !== "/" && existsSync(candidate) && statSync(candidate).isFile()) {
     await sendFile(req, res, candidate, safePath)

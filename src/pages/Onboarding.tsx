@@ -8,6 +8,8 @@ import {
 } from "../lib/freelancerEducation.ts"
 import { OptimizedImage } from "../components/OptimizedImage.tsx"
 import OptionalSocialUrlField from "../components/OptionalSocialUrlField.tsx"
+import CvImportPanel, { type CvImportField } from "../components/CvImportPanel.tsx"
+import type { CvImportResult } from "../lib/cvImport.ts"
 import { parseFreelancerSocialFields } from "../lib/freelancerSocialFields.ts"
 import { avatarPublicUrl } from "../lib/storageImageUrl.ts"
 import { validateAvatarUpload } from "../lib/uploadValidation.ts"
@@ -277,6 +279,54 @@ export default function OnboardingPage() {
     setEducations((prev) => prev.map((item, i) => (i === idx ? { ...item, [key]: value } : item)))
   }
 
+  /** Fills the onboarding form from a parsed CV; lists are merged, text fields replaced. */
+  const applyCvImport = (cv: CvImportResult, fields: Set<CvImportField>) => {
+    if (fields.has("title") && cv.title) setProfessionalTitle(cv.title)
+    if (fields.has("bio") && cv.bio) setBio(cv.bio)
+    if (fields.has("skills")) setSelectedSkillIds((prev) => Array.from(new Set([...prev, ...cv.skillIds])))
+    if (fields.has("languages")) setLanguages((prev) => Array.from(new Set([...prev, ...cv.languages])))
+    if (fields.has("links")) {
+      const l = cv.links
+      if (l.linkedin) { setLinkedinUrl(l.linkedin); setNoLinkedinProfile(false) }
+      if (l.github) { setGithubUrl(l.github); setNoGithubProfile(false) }
+      if (l.portfolio) { setPortfolioUrl(l.portfolio); setNoPortfolioWebsite(false) }
+      if (l.facebook) { setFacebookUrl(l.facebook); setNoFacebookProfile(false) }
+      if (l.instagram) { setInstagramUrl(l.instagram); setNoInstagramProfile(false) }
+      if (l.tiktok) { setTiktokUrl(l.tiktok); setNoTiktokProfile(false) }
+      if (l.youtube) { setYoutubeUrl(l.youtube); setNoYoutubeProfile(false) }
+      if (l.x) { setXUrl(l.x); setNoXProfile(false) }
+    }
+    if (fields.has("experience") && cv.experiences.length) {
+      setExperiences((prev) =>
+        [
+          ...prev.filter((e) => e.title.trim() || e.organization.trim()),
+          ...cv.experiences.map((e) => ({
+            title: e.title,
+            organization: e.organization,
+            start_date: e.startDate,
+            end_date: e.isPresent ? "" : e.endDate,
+            is_present: e.isPresent,
+            description: e.description,
+          })),
+        ].slice(0, 10),
+      )
+    }
+    if (fields.has("education") && cv.educations.length) {
+      setEducations((prev) =>
+        [
+          ...prev.filter((e) => e.institution.trim()),
+          ...cv.educations.map((e) => ({
+            institution: e.institution,
+            degree_level: e.degreeLevel,
+            field_of_study: e.fieldOfStudy,
+            end_date: e.endDate,
+          })),
+        ].slice(0, 10),
+      )
+    }
+    setError("")
+  }
+
   const nextFromStep1 = () => {
     if (!professionalTitle.trim()) return setError("პროფესიული სათაური სავალდებულოა.")
     if (bio.trim().length < 50) return setError("ბიო უნდა იყოს მინიმუმ 50 სიმბოლო.")
@@ -441,7 +491,7 @@ export default function OnboardingPage() {
         if (eduErr) throw eduErr
       }
 
-      navigate(`/freelancer/${encodeURIComponent(slug)}`)
+      navigate("/dashboard?welcome=1")
     } catch (err) {
       setError(err instanceof Error ? err.message : t("onboarding.saveFailed"))
     } finally {
@@ -485,7 +535,7 @@ export default function OnboardingPage() {
         { onConflict: "user_id" },
       )
       if (hpError) throw hpError
-      navigate("/dashboard")
+      navigate("/dashboard?welcome=1")
     } catch (err) {
       setError(err instanceof Error ? err.message : t("onboarding.saveFailed"))
     } finally {
@@ -537,6 +587,7 @@ export default function OnboardingPage() {
 
               {step === 1 && (
                 <div className="space-y-3">
+                  <CvImportPanel skillCatalog={skills} onApply={applyCvImport} />
                   <input className="h-11 w-full rounded-lg border border-slate-300 px-3" placeholder="პროფესიული სათაური" value={professionalTitle} onChange={(e)=>setProfessionalTitle(e.target.value)} />
                   <div>
                     <textarea className="w-full rounded-lg border border-slate-300 px-3 py-2" rows={5} placeholder="ბიო" value={bio} onChange={(e)=>setBio(e.target.value)} />

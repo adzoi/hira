@@ -24,6 +24,8 @@ import {
 import ShareButtons from "../components/ShareButtons.tsx"
 import SimilarFreelancers from "../components/SimilarFreelancers.tsx"
 import StartConversationButton from "../components/StartConversationButton.tsx"
+import InviteToJobButton from "../components/InviteToJobButton.tsx"
+import ProfileCvModal from "../components/ProfileCvModal.tsx"
 import {
   fetchFreelancerProfile,
   type EducationData,
@@ -276,6 +278,17 @@ export default function FreelancerProfilePage() {
       subscription.unsubscribe()
     }
   }, [freelancer?.id, freelancer?.user_id])
+
+  const [cvModalOpen, setCvModalOpen] = useState(false)
+  // `?cv=1` (dashboard, welcome checklist, old /cv-generator links) opens the CV for the owner.
+  const cvFlag = searchParams.get("cv") === "1"
+  useEffect(() => {
+    if (!cvFlag || !viewerIsOwner) return
+    setCvModalOpen(true)
+    const next = new URLSearchParams(searchParams)
+    next.delete("cv")
+    setSearchParams(next, { replace: true })
+  }, [cvFlag, viewerIsOwner, searchParams, setSearchParams])
 
   const showContactFlag = searchParams.get("showContact") === "1"
 
@@ -689,6 +702,14 @@ export default function FreelancerProfilePage() {
                       className="h-11 shrink-0 px-3 text-xs sm:px-4 sm:text-sm"
                     />
                   ) : null}
+                  {viewerHirerProfileId && viewerUserId ? (
+                    <InviteToJobButton
+                      hirerProfileId={viewerHirerProfileId}
+                      freelancerProfileId={freelancer.id}
+                      freelancerName={profile.full_name || t("auth.freelancer")}
+                      className="h-11 min-h-11 shrink-0 px-3 text-xs sm:px-4 sm:text-sm"
+                    />
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => void openContactModal()}
@@ -811,9 +832,9 @@ export default function FreelancerProfilePage() {
                     >
                       {cvUploading ? t("common.loading") : t("common.addCv")}
                     </button>
-                    <Link to="/cv-generator" className={`${outlineBtnClass} shrink-0`}>
-                      {t("common.cvGeneration")}
-                    </Link>
+                    <button type="button" onClick={() => setCvModalOpen(true)} className={`${outlineBtnClass} shrink-0`}>
+                      {t("profileCv.download")}
+                    </button>
                   </>
                 ) : null}
                 {cvSignedUrl ? (
@@ -1140,6 +1161,10 @@ export default function FreelancerProfilePage() {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {cvModalOpen && viewerIsOwner && freelancer ? (
+        <ProfileCvModal userId={freelancer.user_id} onClose={() => setCvModalOpen(false)} />
       ) : null}
 
       {selectedImageUrl ? (

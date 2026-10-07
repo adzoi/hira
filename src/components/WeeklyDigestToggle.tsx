@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { supabase } from "../lib/supabase"
 
-/** Settings switch for the weekly "new jobs in your field" email. */
+/** Settings switch for the weekly summary email (matching jobs and profile/post activity). */
 export default function WeeklyDigestToggle({ userId }: { userId: string }) {
   const { t } = useTranslation()
   const [enabled, setEnabled] = useState<boolean | null>(null)

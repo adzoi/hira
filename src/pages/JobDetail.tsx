@@ -97,6 +97,7 @@ export default function JobDetailPage() {
   const [authedUserType, setAuthedUserType] = useState<"freelancer" | "hirer" | "guest">("guest")
   const [freelancerProfileId, setFreelancerProfileId] = useState<string | null>(null)
   const [alreadyApplied, setAlreadyApplied] = useState(false)
+  const [invitation, setInvitation] = useState<{ message: string | null } | null>(null)
   const [jobApplicationId, setJobApplicationId] = useState<string | null>(null)
   const [coverLetter, setCoverLetter] = useState("")
   const [proposedRate, setProposedRate] = useState("")
@@ -150,6 +151,24 @@ export default function JobDetailPage() {
     Boolean(job) && authedUserType === "hirer" && Boolean(viewerUserId) && viewerUserId === job!.hirer_user_id
 
   const canViewHirerContact = Boolean(hirerContact) && (alreadyApplied || isJobOwner)
+
+  // Freelancer opened a job they were invited to: show the hirer's note above the form.
+  useEffect(() => {
+    if (!supabase || !job?.id || !freelancerProfileId) return
+    let cancelled = false
+    void supabase
+      .from("job_invitations")
+      .select("message")
+      .eq("job_id", job.id)
+      .eq("freelancer_profile_id", freelancerProfileId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setInvitation(data ? { message: data.message } : null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [job?.id, freelancerProfileId])
 
   const vacancySnap = job ? jobVacancyStats(job.vacancies, job.accepted_count) : null
 
@@ -211,6 +230,7 @@ export default function JobDetailPage() {
     }
 
     let rateNote: string | null = null
+    let rateValue: number | null = null
     if (proposedRate.trim()) {
       const rateResult = validateMoneyAmount(proposedRate, { min: 0, label: "ტარიფი" })
       if (rateResult.ok === false) {
@@ -221,6 +241,7 @@ export default function JobDetailPage() {
         setSubmitError("შემოთავაზებული ტარიფი არასწორია.")
         return
       }
+      rateValue = rateResult.value
       rateNote = `შემოთავაზებული ტარიფი: ₾${rateResult.value}`
     }
 
@@ -239,16 +260,21 @@ export default function JobDetailPage() {
 
       await assertContentRateLimit("job-application")
 
-      const { data: inserted, error: applyError } = await supabase
+      const row = {
+        job_id: job.id,
+        freelancer_profile_id: freelancerProfileId,
+        cover_note: coverNote,
+        status: "pending",
+      }
+      let { data: inserted, error: applyError } = await supabase
         .from("job_applications")
-        .insert({
-          job_id: job.id,
-          freelancer_profile_id: freelancerProfileId,
-          cover_note: coverNote,
-          status: "pending",
-        })
+        .insert({ ...row, proposed_rate: rateValue })
         .select("id")
         .single()
+      // proposed_rate column not deployed yet: the rate is still in the cover note.
+      if (applyError?.code === "PGRST204") {
+        ;({ data: inserted, error: applyError } = await supabase.from("job_applications").insert(row).select("id").single())
+      }
       if (applyError) throw applyError
 
       setAlreadyApplied(true)
@@ -586,6 +612,12 @@ export default function JobDetailPage() {
                 </div>
               ) : authedUserType === "freelancer" && !isJobOwner ? (
                 <div className="space-y-4">
+                  {invitation ? (
+                    <div className="rounded-lg border border-[#D4A843] bg-amber-50 p-3 text-sm text-[#1B2B4B]">
+                      <p className="font-semibold">{t("invite.youWereInvited")}</p>
+                      {invitation.message ? <p className="mt-1 whitespace-pre-line text-slate-700">{invitation.message}</p> : null}
+                    </div>
+                  ) : null}
                   <p className="text-sm font-semibold text-[#1B2B4B]">{t("common.sendApplication")}</p>
                   <label className="block">
                     <span className="mb-2 block text-xs font-semibold text-slate-500">{t("nav.comment")}</span>

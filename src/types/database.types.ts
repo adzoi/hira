@@ -586,7 +586,9 @@ export interface Database {
           created_at: string
           freelancer_profile_id: string
           id: string
+          is_shortlisted: boolean
           job_id: string
+          proposed_rate: number | null
           status: string
         }
         Insert: {
@@ -594,7 +596,9 @@ export interface Database {
           created_at?: string
           freelancer_profile_id: string
           id?: string
+          is_shortlisted?: boolean
           job_id: string
+          proposed_rate?: number | null
           status?: string
         }
         Update: {
@@ -602,7 +606,9 @@ export interface Database {
           created_at?: string
           freelancer_profile_id?: string
           id?: string
+          is_shortlisted?: boolean
           job_id?: string
+          proposed_rate?: number | null
           status?: string
         }
         Relationships: [
@@ -621,6 +627,33 @@ export interface Database {
             referencedColumns: ["id"]
           }
         ]
+      }
+      job_invitations: {
+        Row: {
+          created_at: string
+          freelancer_profile_id: string
+          hirer_profile_id: string
+          id: string
+          job_id: string
+          message: string | null
+        }
+        Insert: {
+          created_at?: string
+          freelancer_profile_id: string
+          hirer_profile_id: string
+          id?: string
+          job_id: string
+          message?: string | null
+        }
+        Update: {
+          created_at?: string
+          freelancer_profile_id?: string
+          hirer_profile_id?: string
+          id?: string
+          job_id?: string
+          message?: string | null
+        }
+        Relationships: []
       }
       job_skills: {
         Row: {
@@ -681,6 +714,8 @@ export interface Database {
           is_urgent: boolean
           is_vip: boolean
           location_type: string
+          stale_clock_at: string | null
+          stale_reminders_sent: number
           status: string
           subcategory_id: string | null
           title: string
@@ -713,6 +748,8 @@ export interface Database {
           is_urgent?: boolean
           is_vip?: boolean
           location_type: string
+          stale_clock_at?: string | null
+          stale_reminders_sent?: number
           status?: string
           subcategory_id?: string | null
           title: string
@@ -745,6 +782,8 @@ export interface Database {
           is_urgent?: boolean
           is_vip?: boolean
           location_type?: string
+          stale_clock_at?: string | null
+          stale_reminders_sent?: number
           status?: string
           subcategory_id?: string | null
           title?: string
@@ -1576,6 +1615,26 @@ export interface Database {
           p_days?: number
         }
         Returns: Json
+      }
+      get_job_applicants_compare: {
+        Args: {
+          p_job_id: string
+        }
+        Returns: Json
+      }
+      invite_freelancer_to_job: {
+        Args: {
+          p_job_id: string
+          p_freelancer_profile_id: string
+          p_message?: string | null
+        }
+        Returns: string
+      }
+      keep_job_open: {
+        Args: {
+          p_job_id: string
+        }
+        Returns: undefined
       }
       get_share_meta: {
         Args: {

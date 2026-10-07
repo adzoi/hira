@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
+import CvImportPanel, { type CvImportField } from "../components/CvImportPanel.tsx"
+import type { CvImportResult } from "../lib/cvImport.ts"
 import WeeklyDigestToggle from "../components/WeeklyDigestToggle.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
 import { PROFILE_LANGUAGE_OPTIONS } from "../lib/profileLanguages.ts"
@@ -255,6 +257,53 @@ export default function ProfilePage() {
     setExperiences(profileQueryData.experiences)
     setEducations(profileQueryData.educations)
   }, [profileQueryData])
+
+  /** Fills the form from a parsed CV; lists are merged, text fields replaced. Saved with the usual Save button. */
+  const applyCvImport = (cv: CvImportResult, fields: Set<CvImportField>) => {
+    if (fields.has("title") && cv.title) setProfessionalTitle(cv.title)
+    if (fields.has("bio") && cv.bio) setBio(cv.bio)
+    if (fields.has("skills")) setSelectedSkillIds((prev) => Array.from(new Set([...prev, ...cv.skillIds])))
+    if (fields.has("languages")) setLanguages((prev) => Array.from(new Set([...prev, ...cv.languages])))
+    if (fields.has("links")) {
+      const l = cv.links
+      if (l.linkedin) { setLinkedinUrl(l.linkedin); setNoLinkedinProfile(false) }
+      if (l.github) { setGithubUrl(l.github); setNoGithubProfile(false) }
+      if (l.portfolio) { setPortfolioUrl(l.portfolio); setNoPortfolioWebsite(false) }
+      if (l.facebook) { setFacebookUrl(l.facebook); setNoFacebookProfile(false) }
+      if (l.instagram) { setInstagramUrl(l.instagram); setNoInstagramProfile(false) }
+      if (l.tiktok) { setTiktokUrl(l.tiktok); setNoTiktokProfile(false) }
+      if (l.youtube) { setYoutubeUrl(l.youtube); setNoYoutubeProfile(false) }
+      if (l.x) { setXUrl(l.x); setNoXProfile(false) }
+    }
+    if (fields.has("experience") && cv.experiences.length) {
+      setExperiences((prev) =>
+        [
+          ...prev.filter((e) => e.title.trim() || e.organization.trim()),
+          ...cv.experiences.map((e) => ({
+            title: e.title,
+            organization: e.organization,
+            startDate: e.startDate,
+            endDate: e.isPresent ? "" : e.endDate,
+            isPresent: e.isPresent,
+            description: e.description,
+          })),
+        ].slice(0, 10),
+      )
+    }
+    if (fields.has("education") && cv.educations.length) {
+      setEducations((prev) =>
+        [
+          ...prev.filter((e) => e.institution.trim()),
+          ...cv.educations.map((e) => ({
+            institution: e.institution,
+            degreeLevel: e.degreeLevel,
+            fieldOfStudy: e.fieldOfStudy,
+            endDate: e.endDate,
+          })),
+        ].slice(0, 10),
+      )
+    }
+  }
 
   const handleAvatarUpload = async (file: File) => {
     if (!file || !supabase) return
@@ -1036,6 +1085,12 @@ export default function ProfilePage() {
             ) : null}
           </section>
 
+          {userId ? (
+            <div className="mt-5">
+              <WeeklyDigestToggle userId={userId} />
+            </div>
+          ) : null}
+
           {userType === "freelancer" ? (
             <div className="mt-5 space-y-5">
               {freelancerProfileId ? (
@@ -1067,7 +1122,7 @@ export default function ProfilePage() {
                   </p>
                 </div>
               ) : null}
-              {userId ? <WeeklyDigestToggle userId={userId} /> : null}
+              <CvImportPanel skillCatalog={skillsCatalog} onApply={applyCvImport} />
               <div>
                 <label className="mb-1 block text-base font-semibold text-gray-900">{t("profile.professionalTitle")}</label>
                 <input className="h-11 w-full rounded-lg border border-slate-300 px-3" placeholder="React Developer, Graphic Designer" value={professionalTitle} onChange={(e)=>setProfessionalTitle(e.target.value)} />
