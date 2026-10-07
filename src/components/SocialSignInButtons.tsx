@@ -24,9 +24,10 @@ function FacebookIcon() {
   )
 }
 
-const PROVIDERS: Array<{ id: OAuthProvider; labelKey: string; Icon: () => React.JSX.Element }> = [
+const PROVIDERS: Array<{ id: OAuthProvider; labelKey: string; Icon: () => React.JSX.Element; hidden?: boolean }> = [
   { id: "google", labelKey: "auth.continueWithGoogle", Icon: GoogleIcon },
-  { id: "facebook", labelKey: "auth.continueWithFacebook", Icon: FacebookIcon },
+  // Hidden until Meta business verification is approved and the Facebook app is published.
+  { id: "facebook", labelKey: "auth.continueWithFacebook", Icon: FacebookIcon, hidden: true },
 ]
 
 type Props = {
@@ -53,7 +54,7 @@ export default function SocialSignInButtons({ next = null, referralCode = null }
   return (
     <div>
       <div className="space-y-3">
-        {PROVIDERS.map(({ id, labelKey, Icon }) => (
+        {PROVIDERS.filter((provider) => !provider.hidden).map(({ id, labelKey, Icon }) => (
           <button
             key={id}
             type="button"
