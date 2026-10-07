@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import FollowListsModal, { FollowStatPills, type FollowModalTab } from "../components/FollowListsModal.tsx"
 import ProfileCompletenessCard from "../components/ProfileCompletenessCard.tsx"
+import VipCoinsButton from "../components/VipCoinsButton.tsx"
 import ReferralCard from "../components/ReferralCard.tsx"
 import ShareProfileCard from "../components/ShareProfileCard.tsx"
 import { META_SUFFIX, resolveListingMetaPrefix, stripLegacyPricePrefix } from "../lib/listingDescription.ts"
@@ -36,6 +37,8 @@ type ServiceDraft = {
   price: string
   priceType: "fixed" | "hourly" | "monthly"
   isActive: boolean
+  /** Saved posts only: VIP expiry when the service is VIP. */
+  vipExpiresAt?: string | null
 }
 
 function snapshotServices(services: ServiceDraft[]) {
@@ -1742,6 +1745,7 @@ export default function DashboardPage() {
           price: item.price !== null && item.price !== undefined ? String(item.price) : "",
           priceType: normalizeListingPriceType(item.price_type),
           isActive: item.is_active ?? true,
+          vipExpiresAt: item.is_vip ? item.vip_expires_at : null,
         })),
       )
       setInitialServicesSnapshot(
@@ -2377,6 +2381,11 @@ export default function DashboardPage() {
                           </button>
                         </div>
                       </div>
+                      {service.id && service.isActive ? (
+                        <div className="mb-3">
+                          <VipCoinsButton compact kind="service" id={service.id} vipExpiresAt={service.vipExpiresAt} />
+                        </div>
+                      ) : null}
                       <div className="space-y-3">
                         <p className="text-sm font-medium text-[#1B2B4B]">{service.title || "უსათაურო სერვისი"}</p>
                         <p className="text-sm text-slate-600">{service.description || "აღწერა არ არის."}</p>
@@ -2893,6 +2902,9 @@ export default function DashboardPage() {
                           {jobDeletingId === job.id ? "…" : "წაშლა"}
                         </button>
                       </div>
+                      {job.status === "open" ? (
+                        <VipCoinsButton compact kind="job" id={job.id} vipExpiresAt={job.is_vip ? job.vip_expires_at : null} />
+                      ) : null}
                     </div>
                     )
                   })}

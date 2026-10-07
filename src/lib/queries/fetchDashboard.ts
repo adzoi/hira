@@ -76,6 +76,8 @@ type ServiceDraft = {
   price: string
   priceType: "fixed" | "hourly" | "monthly"
   isActive: boolean
+  /** Saved posts only: VIP expiry when the service is VIP. */
+  vipExpiresAt?: string | null
 }
 
 type FreelancerHirerReviewRow = {
@@ -720,6 +722,7 @@ export async function fetchDashboard(actions: DashboardFetchActions): Promise<st
                 price: item.price !== null && item.price !== undefined ? String(item.price) : "",
                 priceType: normalizeListingPriceType(item.price_type),
                 isActive: item.is_active ?? true,
+                vipExpiresAt: item.is_vip ? item.vip_expires_at : null,
               }))
               actions.setServiceDrafts(nextDrafts)
               actions.setInitialServicesSnapshot(snapshotServices(nextDrafts))

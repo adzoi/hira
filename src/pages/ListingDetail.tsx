@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import ShareButtons from "../components/ShareButtons.tsx"
+import VipBadge from "../components/VipBadge.tsx"
 import VipCoinsButton from "../components/VipCoinsButton.tsx"
 import FreelancerAvailabilityIndicator from "../components/FreelancerAvailabilityIndicator.tsx"
 import { OptimizedImage } from "../components/OptimizedImage.tsx"
@@ -392,7 +393,10 @@ export default function ListingDetailPage() {
             <article className={`${cardClass} p-4 md:p-5`}>
               <div className="flex shrink-0 items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h1 className="text-xl font-bold leading-snug text-[#1B2B4B] md:text-2xl">{displayTitle}</h1>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="min-w-0 text-xl font-bold leading-snug text-[#1B2B4B] md:text-2xl">{displayTitle}</h1>
+                    {item.vipActive ? <VipBadge /> : null}
+                  </div>
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
                     <span className="inline-flex items-center gap-1">
                       <ViewCountEyeIcon className="h-3.5 w-3.5" />
@@ -412,7 +416,12 @@ export default function ListingDetailPage() {
 
               {viewerOwnsListing ? (
                 <div className="mt-4">
-                  <VipCoinsButton kind="service" id={item.id} invalidateKey={queryKeys.listingDetail(item.id)} />
+                  <VipCoinsButton
+                    kind="service"
+                    id={item.id}
+                    vipExpiresAt={item.vipExpiresAt}
+                    invalidateKey={queryKeys.listingDetail(item.id)}
+                  />
                 </div>
               ) : null}
 

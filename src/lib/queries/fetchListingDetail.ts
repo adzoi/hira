@@ -1,4 +1,5 @@
 import { normalizeListingPriceType } from "../listingPrice.ts"
+import { jobVipIsActive } from "../vipStatus.ts"
 import { isSupabaseConfigured, supabase } from "../supabase.ts"
 
 export type ListingDetail = {
@@ -20,6 +21,8 @@ export type ListingDetail = {
   averageRating: number
   viewsCount: number
   isAcceptingNewWork: boolean
+  vipExpiresAt: string | null
+  vipActive: boolean
 }
 
 export async function fetchListingDetail(id: string): Promise<ListingDetail> {
@@ -40,6 +43,8 @@ export async function fetchListingDetail(id: string): Promise<ListingDetail> {
             price_type,
             views_count,
             created_at,
+            is_vip,
+            vip_expires_at,
             image_urls,
             freelancer_profiles (
               slug,
@@ -69,7 +74,10 @@ export async function fetchListingDetail(id: string): Promise<ListingDetail> {
   } | null
   if (!fp?.slug) throw new Error("ლისტინგი ვერ მოიძებნა.")
 
+  const vipExpiresAt = (data as { vip_expires_at?: string | null }).vip_expires_at ?? null
   return {
+    vipExpiresAt,
+    vipActive: jobVipIsActive(Boolean((data as { is_vip?: boolean | null }).is_vip), vipExpiresAt) && vipExpiresAt != null,
     id: data.id,
     freelancerProfileId: String(data.freelancer_profile_id ?? ""),
     title: data.title ?? "სერვისი",

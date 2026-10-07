@@ -515,7 +515,12 @@ export default function JobDetailPage() {
 
             {isJobOwner && job.status === "open" ? (
               <div className="mt-4">
-                <VipCoinsButton kind="job" id={job.id} invalidateKey={queryKeys.jobDetail(job.id)} />
+                <VipCoinsButton
+                  kind="job"
+                  id={job.id}
+                  vipExpiresAt={job.vipActive ? job.vip_expires_at : null}
+                  invalidateKey={queryKeys.jobDetail(job.id)}
+                />
               </div>
             ) : null}
 
