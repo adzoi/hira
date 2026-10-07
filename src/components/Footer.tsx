@@ -101,6 +101,7 @@ export default function Footer() {
         { labelKey: "footer.terms", to: "/terms" },
         { labelKey: "footer.privacy", to: "/privacy" },
         { labelKey: "footer.cookies", to: "/cookies" },
+        { labelKey: "footer.dataDeletion", to: "/data-deletion" },
       ],
     },
   ]

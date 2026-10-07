@@ -37,6 +37,7 @@ const STATIC_PAGES: ReadonlyArray<{ path: string; changefreq: string; priority: 
   { path: "/terms", changefreq: "yearly", priority: "0.4" },
   { path: "/privacy", changefreq: "yearly", priority: "0.4" },
   { path: "/cookies", changefreq: "yearly", priority: "0.4" },
+  { path: "/data-deletion", changefreq: "yearly", priority: "0.4" },
   { path: "/login", changefreq: "monthly", priority: "0.5" },
   { path: "/register", changefreq: "monthly", priority: "0.5" },
 ]

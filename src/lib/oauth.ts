@@ -23,13 +23,18 @@ export function sanitizeAuthRedirect(raw: string | null): string | null {
   return decoded
 }
 
+export type OAuthProvider = "google" | "facebook"
+
 /**
- * Leaves the site for Google. Kept in sessionStorage (not the redirect URL) so the
+ * Leaves the site for the provider. Kept in sessionStorage (not the redirect URL) so the
  * Supabase redirect allow-list only needs the bare callback path; the referral code
  * would otherwise be lost because consent-gated storage is in-memory until the
  * cookie banner is answered.
  */
-export async function signInWithGoogle(state: OAuthReturnState): Promise<{ error: Error | null }> {
+export async function signInWithProvider(
+  provider: OAuthProvider,
+  state: OAuthReturnState,
+): Promise<{ error: Error | null }> {
   if (!supabase) return { error: new Error("Supabase is not configured") }
   try {
     sessionStorage.setItem(
@@ -40,7 +45,7 @@ export async function signInWithGoogle(state: OAuthReturnState): Promise<{ error
     // Private browsing: fall back to the default post-login destination.
   }
   const { error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
+    provider,
     options: { redirectTo: `${window.location.origin}${OAUTH_CALLBACK_PATH}` },
   })
   return { error }

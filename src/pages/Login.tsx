@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom"
-import GoogleSignInButton from "../components/GoogleSignInButton.tsx"
+import SocialSignInButtons from "../components/SocialSignInButtons.tsx"
 import { ResendConfirmationButton } from "../components/ResendConfirmation.tsx"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import {
@@ -163,7 +163,7 @@ export default function LoginPage() {
             ) : null}
 
             <div className="mt-6">
-              <GoogleSignInButton next={postLoginPath} />
+              <SocialSignInButtons next={postLoginPath} />
             </div>
 
             <form onSubmit={handleLogin} className="space-y-4">

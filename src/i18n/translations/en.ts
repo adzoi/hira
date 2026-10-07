@@ -67,6 +67,7 @@ export const en: T = {
     terms: "Terms of use",
     privacy: "Privacy",
     cookies: "Cookies",
+    dataDeletion: "Data deletion",
     copyright: "© {year} Hira. All rights reserved.",
     madeIn: "Made in Georgia 🇬🇪",
   },
@@ -224,6 +225,44 @@ export const en: T = {
     section10Heading: "10. Contact",
     section10P1:
       "For privacy-related requests or questions, contact us at: info@hira.ge",
+  },
+  dataDeletion: {
+    pageTitle: "Data deletion - Hira",
+    metaDescription:
+      "How to delete your Hira account and personal data, including data received through Facebook or Google sign-in.",
+    heroHeading: "Data deletion",
+    heroSubtitle: "How to delete your Hira account and the personal data linked to it.",
+    lastUpdated: "Last updated: 7 October 2026",
+    section1Heading: "1. What gets deleted",
+    section1P1:
+      "Deleting your account permanently removes your profile, freelancer or hirer details, services, experience, education, skills, conversations and messages, notifications, profile photo, uploaded CV, and your sign-in account.",
+    section1P2:
+      "This includes any data we received when you signed in with Facebook or Google, such as your name, email address, and profile photo.",
+    section2Heading: "2. Delete your account yourself",
+    section2P1:
+      "Sign in to Hira and open your Profile page (hira.ge/profile).",
+    section2P2:
+      "Click \"Delete account\" at the top of the page, confirm with your password, and confirm the deletion.",
+    section2P3:
+      "Your account and data are deleted immediately and you are signed out.",
+    section3Heading: "3. Signed in with Facebook or Google?",
+    section3P1:
+      "If you created your account with Facebook or Google and never set a password, send a deletion request to info@hira.ge from the email address linked to your account, with the subject \"Delete my data\".",
+    section3P2:
+      "We will verify the request and delete your account and data within 30 days, then confirm by email.",
+    section4Heading: "4. Remove Hira from Facebook",
+    section4P1:
+      "You can also remove Hira's access to your Facebook account: in Facebook, go to Settings & privacy → Settings → Apps and websites, find Hira, and click Remove.",
+    section4P2:
+      "Removing the app stops Hira from receiving any further data from Facebook. To delete the data Hira already has, follow the steps above.",
+    section5Heading: "5. What we may keep",
+    section5P1:
+      "We may keep limited records where Georgian law requires it, such as payment records for VIP purchases, for as long as the law requires.",
+    section5P2:
+      "These records are not shown on Hira and are not used for any other purpose.",
+    section6Heading: "6. Contact",
+    section6P1:
+      "For questions about data deletion, contact us at: info@hira.ge",
   },
   cookies: {
     bannerHeading: "We use cookies",
@@ -555,8 +594,9 @@ export const en: T = {
     registerStep: "Step {step}/2 - create your Hira account.",
     tryAgainIn: "Try again in {seconds}s",
     continueWithGoogle: "Continue with Google",
+    continueWithFacebook: "Continue with Facebook",
     orWithEmail: "or with email",
-    oauthFailed: "Couldn't sign in with Google. Please try again.",
+    oauthFailed: "Couldn't sign in. Please try again.",
     oauthSigningIn: "Signing you in…",
     chooseRoleTitle: "Finish signing up - Hira",
     chooseRoleHeading: "One last step",

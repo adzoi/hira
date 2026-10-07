@@ -56,6 +56,11 @@
     <priority>0.4</priority>
   </url>
   <url>
+    <loc>https://hira.ge/data-deletion</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.4</priority>
+  </url>
+  <url>
     <loc>https://hira.ge/login</loc>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>

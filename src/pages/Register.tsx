@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
-import GoogleSignInButton from "../components/GoogleSignInButton.tsx"
+import SocialSignInButtons from "../components/SocialSignInButtons.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
 import CheckEmailPanel from "../components/ResendConfirmation.tsx"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
@@ -243,7 +243,7 @@ export default function RegisterPage() {
             ) : step === 1 ? (
               <>
                 <div className="mt-7">
-                  <GoogleSignInButton referralCode={referralCode} />
+                  <SocialSignInButtons referralCode={referralCode} />
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <button

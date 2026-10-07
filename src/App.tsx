@@ -36,6 +36,7 @@ const AboutPage = lazy(() => import("./pages/About.tsx"))
 const TermsPage = lazy(() => import("./pages/Terms.tsx"))
 const PrivacyPage = lazy(() => import("./pages/Privacy.tsx"))
 const CookiesPage = lazy(() => import("./pages/Cookies.tsx"))
+const DataDeletionPage = lazy(() => import("./pages/DataDeletion.tsx"))
 const GuidePage = lazy(() => import("./pages/Guide.tsx"))
 const FaqPage = lazy(() => import("./pages/Faq.tsx"))
 const ForgotPasswordPage = lazy(() => import("./pages/ForgotPassword.tsx"))
@@ -135,6 +136,7 @@ function App() {
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/cookies" element={<CookiesPage />} />
+            <Route path="/data-deletion" element={<DataDeletionPage />} />
             <Route path="/guide" element={<GuidePage />} />
             <Route path="/faq" element={<FaqPage />} />
             <Route path="/freelancer/:slug" element={<FreelancerProfilePage />} />
