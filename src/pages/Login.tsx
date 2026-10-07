@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom"
+import GoogleSignInButton from "../components/GoogleSignInButton.tsx"
 import { ResendConfirmationButton } from "../components/ResendConfirmation.tsx"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import {
@@ -7,25 +8,10 @@ import {
   isAuthRateLimited,
   signInWithRateLimit,
 } from "../lib/authRateLimit"
+import { sanitizeAuthRedirect } from "../lib/oauth.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { validateEmail, validatePasswordForLogin } from "../lib/validation.ts"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
-
-/** Only same-site relative paths; blocks protocol-relative URLs. */
-function sanitizeLoginRedirect(raw: string | null): string | null {
-  if (!raw || typeof raw !== "string") return null
-  let decoded = raw.trim()
-  try {
-    decoded = decodeURIComponent(decoded)
-  } catch {
-    return null
-  }
-  // Backslashes are normalised to `/` by browsers, so `/\evil.com` would become `//evil.com`.
-  if (!decoded.startsWith("/") || decoded.startsWith("//") || decoded.includes("\\")) return null
-  if (decoded.startsWith("/login")) return null
-  if (decoded.startsWith("/register")) return null
-  return decoded
-}
 
 export default function LoginPage() {
   const { t } = useTranslation()
@@ -46,6 +32,16 @@ export default function LoginPage() {
     typeof location.state === "object" &&
     location.state !== null &&
     (location.state as { reason?: string }).reason === "password-reset"
+
+  const postLoginPath = (() => {
+    if (reason === "post-job") return "/post-job"
+    const safeRedirect = sanitizeAuthRedirect(redirectRaw)
+    if (safeRedirect && reason === "contact") {
+      const separator = safeRedirect.includes("?") ? "&" : "?"
+      return `${safeRedirect}${separator}showContact=1`
+    }
+    return safeRedirect
+  })()
 
   const pageMeta = usePageMeta(t("auth.loginTitle"), t("auth.loginMetaDescription"))
 
@@ -119,25 +115,7 @@ export default function LoginPage() {
       return
     }
 
-    const safeRedirect = sanitizeLoginRedirect(redirectRaw)
-
-    if (reason === "post-job") {
-      navigate("/post-job")
-      return
-    }
-
-    if (safeRedirect && reason === "contact") {
-      const separator = safeRedirect.includes("?") ? "&" : "?"
-      navigate(`${safeRedirect}${separator}showContact=1`)
-      return
-    }
-
-    if (safeRedirect) {
-      navigate(safeRedirect)
-      return
-    }
-
-    navigate("/dashboard")
+    navigate(postLoginPath ?? "/dashboard")
   }
 
   return (
@@ -184,7 +162,11 @@ export default function LoginPage() {
               </div>
             ) : null}
 
-            <form onSubmit={handleLogin} className="mt-6 space-y-4">
+            <div className="mt-6">
+              <GoogleSignInButton next={postLoginPath} />
+            </div>
+
+            <form onSubmit={handleLogin} className="space-y-4">
               <label className="block">
                 <span className="mb-1 block text-sm font-semibold text-[#1B2B4B]">{t("common.email")}</span>
                 <input

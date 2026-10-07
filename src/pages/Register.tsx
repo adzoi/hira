@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
+import GoogleSignInButton from "../components/GoogleSignInButton.tsx"
 import LocationFilterSelect from "../components/LocationFilterSelect.tsx"
 import CheckEmailPanel from "../components/ResendConfirmation.tsx"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
@@ -240,31 +241,36 @@ export default function RegisterPage() {
             {confirmationSentTo ? (
               <CheckEmailPanel email={confirmationSentTo} />
             ) : step === 1 ? (
-              <div className="mt-7 grid gap-4 md:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUserType("freelancer")
-                    setStep(2)
-                  }}
-                  className="rounded-xl border-2 border-slate-200 p-5 text-left transition hover:border-[#D4A843] hover:bg-amber-50"
-                >
-                  <p className="text-xl font-bold text-[#1B2B4B]">{t("auth.freelancer")}</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{t("auth.freelancerDesc")}</p>
-                </button>
+              <>
+                <div className="mt-7">
+                  <GoogleSignInButton referralCode={referralCode} />
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserType("freelancer")
+                      setStep(2)
+                    }}
+                    className="rounded-xl border-2 border-slate-200 p-5 text-left transition hover:border-[#D4A843] hover:bg-amber-50"
+                  >
+                    <p className="text-xl font-bold text-[#1B2B4B]">{t("auth.freelancer")}</p>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{t("auth.freelancerDesc")}</p>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUserType("hirer")
-                    setStep(2)
-                  }}
-                  className="rounded-xl border-2 border-slate-200 p-5 text-left transition hover:border-[#D4A843] hover:bg-amber-50"
-                >
-                  <p className="text-xl font-bold text-[#1B2B4B]">{t("auth.hirer")}</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{t("auth.hirerDesc")}</p>
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserType("hirer")
+                      setStep(2)
+                    }}
+                    className="rounded-xl border-2 border-slate-200 p-5 text-left transition hover:border-[#D4A843] hover:bg-amber-50"
+                  >
+                    <p className="text-xl font-bold text-[#1B2B4B]">{t("auth.hirer")}</p>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{t("auth.hirerDesc")}</p>
+                  </button>
+                </div>
+              </>
             ) : (
               <form onSubmit={handleRegister} className="mt-7 space-y-4">
                 <div className="rounded-lg border border-[#D4A843]/40 bg-amber-50 px-4 py-2 text-sm text-[#1B2B4B]">

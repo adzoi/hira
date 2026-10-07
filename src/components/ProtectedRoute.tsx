@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import type { User } from "@supabase/supabase-js"
+import { needsRoleSelection, OAUTH_CALLBACK_PATH } from "../lib/oauth.ts"
 import { supabase } from "../lib/supabase"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 
@@ -44,6 +45,13 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
         navigate("/login?reason=confirm-email")
         return
       }
+      if (await needsRoleSelection(currentUser)) {
+        if (!mounted) return
+        setLoading(false)
+        navigate(OAUTH_CALLBACK_PATH, { replace: true })
+        return
+      }
+      if (!mounted) return
       setUser(currentUser)
       setLoading(false)
     }

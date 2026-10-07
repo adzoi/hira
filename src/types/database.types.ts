@@ -1059,6 +1059,7 @@ export interface Database {
           member_since: string
           phone: string | null
           referred_by: string | null
+          role_confirmed: boolean
           referral_code: string | null
           updated_at: string
           user_type: string
@@ -1082,6 +1083,7 @@ export interface Database {
           member_since?: string
           phone?: string | null
           referred_by?: string | null
+          role_confirmed?: boolean
           referral_code?: string | null
           updated_at?: string
           user_type: string
@@ -1105,6 +1107,7 @@ export interface Database {
           member_since?: string
           phone?: string | null
           referred_by?: string | null
+          role_confirmed?: boolean
           referral_code?: string | null
           updated_at?: string
           user_type?: string
@@ -1642,6 +1645,14 @@ export interface Database {
           p_id: string
         }
         Returns: Json
+      }
+      set_initial_role: {
+        Args: { p_user_type: string; p_city: string; p_phone?: string; p_referral_code?: string }
+        Returns: undefined
+      }
+      my_role_confirmed: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
       }
       spend_coins_for_vip: {
         Args: {

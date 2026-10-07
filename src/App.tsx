@@ -12,6 +12,7 @@ import { syncSentryRoute } from "./lib/sentry.ts"
 
 const LoginPage = lazy(() => import("./pages/Login.tsx"))
 const RegisterPage = lazy(() => import("./pages/Register.tsx"))
+const AuthCallbackPage = lazy(() => import("./pages/AuthCallback.tsx"))
 const NotFoundPage = lazy(() => import("./pages/NotFound.tsx"))
 const DashboardPage = lazy(() => import("./pages/Dashboard.tsx"))
 const BrowsePage = lazy(() => import("./pages/Browse.tsx"))
@@ -148,6 +149,7 @@ function App() {
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
             <Route path="/auth/confirm" element={<AuthConfirmPage />} />
+            <Route path="/auth/callback" element={<AuthCallbackPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route
               path="/saved"
