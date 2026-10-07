@@ -71,6 +71,10 @@ export default function AuthConfirmPage() {
           setError(verifyError.message)
           return
         }
+        if (otpType === "email_change") {
+          navigate("/profile", { replace: true })
+          return
+        }
         window.history.replaceState(null, "", AUTH_ONBOARDING_PATH)
         if (await finish()) return
       }
