@@ -3,7 +3,12 @@ import { useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { subscribeToDashboardMessaging } from "../../lib/dashboardMessagingRealtime.ts"
 import { isSupabaseConfigured, supabase } from "../../lib/supabase"
-import { fetchDashboard, mapFreelancerCompletedPlatformJobRows } from "../../lib/queries/fetchDashboard.ts"
+import {
+  fetchDashboard,
+  fetchHirerReviewedApplicationIds,
+  mapFreelancerCompletedPlatformJobRows,
+  type DashboardSnapshot,
+} from "../../lib/queries/fetchDashboard.ts"
 import type { FreelancerCompletedPlatformJob } from "../../lib/queries/fetchDashboard.ts"
 import { queryErrorMessage } from "../../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../../lib/queryKeys.ts"
@@ -31,6 +36,7 @@ export function useDashboardData() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [dashboardUserId, setDashboardUserId] = useState("")
+  const [dashboardUserResolved, setDashboardUserResolved] = useState(false)
   const [error, setError] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
 
@@ -91,6 +97,7 @@ export function useDashboardData() {
     if (!isSupabaseConfigured || !supabase) return
     void supabase.auth.getUser().then(({ data: { user } }) => {
       setDashboardUserId(user?.id ?? "")
+      setDashboardUserResolved(true)
     })
   }, [])
 
@@ -109,47 +116,12 @@ export function useDashboardData() {
 
   const loadHirerApplicationReviewedFlags = useCallback(
     async (applications: HirerApplicationRow[]) => {
-      if (!supabase || !profile?.id || applications.length === 0) {
+      if (!supabase || !profile?.id) {
         setHirerReviewedJobApplicationIds({})
         return
       }
       try {
-        const jobIds = Array.from(new Set(applications.map((item) => item.jobId).filter(Boolean)))
-        if (jobIds.length === 0) {
-          setHirerReviewedJobApplicationIds({})
-          return
-        }
-        const { data: completedRows, error: completedErr } = await supabase
-          .from("completed_jobs")
-          .select("id, job_id, freelancer_profile_id")
-          .in("job_id", jobIds)
-        if (completedErr || !completedRows || completedRows.length === 0) {
-          setHirerReviewedJobApplicationIds({})
-          return
-        }
-        const completedIds = completedRows.map((row) => row.id)
-        const { data: reviewRows, error: reviewErr } = await supabase
-          .from("reviews")
-          .select("completed_job_id")
-          .eq("reviewer_id", profile.id)
-          .in("completed_job_id", completedIds)
-        if (reviewErr || !reviewRows || reviewRows.length === 0) {
-          setHirerReviewedJobApplicationIds({})
-          return
-        }
-        const reviewedCompletedIds = new Set(
-          reviewRows.map((row) => String(row.completed_job_id ?? "")).filter(Boolean),
-        )
-        const reviewedHireKeys = new Set(
-          completedRows
-            .filter((row) => reviewedCompletedIds.has(String(row.id ?? "")))
-            .map((row) => `${row.job_id ?? ""}:${row.freelancer_profile_id ?? ""}`),
-        )
-        const reviewedAppMap = applications.reduce<Record<string, true>>((acc, item) => {
-          if (reviewedHireKeys.has(`${item.jobId}:${item.freelancerProfileId}`)) acc[item.applicationId] = true
-          return acc
-        }, {})
-        setHirerReviewedJobApplicationIds(reviewedAppMap)
+        setHirerReviewedJobApplicationIds(await fetchHirerReviewedApplicationIds(supabase, profile.id, applications))
       } catch {
         setHirerReviewedJobApplicationIds({})
       }
@@ -158,42 +130,51 @@ export function useDashboardData() {
   )
 
   const {
-    isLoading: loading,
+    data: snapshot,
+    dataUpdatedAt,
+    isLoading: queryLoading,
     isError: dashboardQueryIsError,
     error: dashboardQueryError,
   } = useQuery({
     queryKey: queryKeys.dashboard(dashboardUserId || "pending"),
-    queryFn: () =>
-      fetchDashboard({
-        navigate,
-        supabaseAny,
-        setError,
-        setProfile,
-        setFreelancerProfile,
-        setHirerProfile,
-        setFreelancerListingInquiries,
-        setFreelancerCompletedJobsCount,
-        setFreelancerHirerReviewQueue,
-        setFreelancerCompletedPlatformJobs,
-        setFreelancerPendingJobOffers,
-        setHirerProfileViewerCount,
-        setOverallProfileVisitCount,
-        setMyJobs,
-        setHirerApplications,
-        setJobApplicationsByJobId,
-        setHirerCompletedJobsCount,
-        setHirerListingInquiries,
-        setHirerReviewedListingInquiryIds,
-        setHirerReviewedJobApplicationIds,
-        setServiceDrafts,
-        setInitialServicesSnapshot,
-        setInitialServiceIds,
-        setDashFollowersCount,
-        setDashFollowingCount,
-        loadHirerApplicationReviewedFlags,
-      }),
+    queryFn: () => fetchDashboard(navigate, supabaseAny),
     enabled: Boolean(dashboardUserId) && isSupabaseConfigured,
   })
+
+  // The role views edit these fields locally (drafts, realtime reloads), so they live in state.
+  // Copy each new snapshot in during render, so a remount shows cached data on its first paint.
+  const [hydratedAt, setHydratedAt] = useState(0)
+  if (snapshot && dataUpdatedAt !== hydratedAt) {
+    setHydratedAt(dataUpdatedAt)
+    applySnapshot(snapshot)
+  }
+
+  function applySnapshot(next: DashboardSnapshot) {
+    setProfile(next.profile)
+    setFreelancerProfile(next.freelancerProfile)
+    setHirerProfile(next.hirerProfile)
+    setDashFollowersCount(next.followersCount)
+    setDashFollowingCount(next.followingCount)
+    setFreelancerListingInquiries(next.freelancerListingInquiries)
+    setFreelancerCompletedJobsCount(next.freelancerCompletedJobsCount)
+    setFreelancerHirerReviewQueue(next.freelancerHirerReviewQueue)
+    setFreelancerCompletedPlatformJobs(next.freelancerCompletedPlatformJobs)
+    setFreelancerPendingJobOffers(next.freelancerPendingJobOffers)
+    setHirerProfileViewerCount(next.hirerProfileViewerCount)
+    setOverallProfileVisitCount(next.overallProfileVisitCount)
+    setServiceDrafts(next.serviceDrafts)
+    setInitialServicesSnapshot(next.initialServicesSnapshot)
+    setInitialServiceIds(next.initialServiceIds)
+    setMyJobs(next.myJobs)
+    setHirerApplications(next.hirerApplications)
+    setJobApplicationsByJobId(next.jobApplicationsByJobId)
+    setHirerCompletedJobsCount(next.hirerCompletedJobsCount)
+    setHirerListingInquiries(next.hirerListingInquiries)
+    setHirerReviewedListingInquiryIds(next.hirerReviewedListingInquiryIds)
+    setHirerReviewedJobApplicationIds(next.hirerReviewedJobApplicationIds)
+  }
+
+  const loading = (isSupabaseConfigured && !dashboardUserResolved) || queryLoading || (Boolean(snapshot) && !profile)
   const dashboardLoadError = dashboardQueryIsError
     ? queryErrorMessage(dashboardQueryError, t("dashboard.loadFailed"))
     : ""
