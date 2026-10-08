@@ -61,7 +61,7 @@ export function profileCompletenessItems(
     { id: "title", weight: 10, done: hasText(freelancer.professional_title), href: "/profile" },
     { id: "bio", weight: 15, done: (freelancer.bio?.trim().length ?? 0) >= MIN_BIO_LENGTH, href: "/profile" },
     { id: "skills", weight: 15, done: counts.skills >= MIN_SKILLS, href: "/profile" },
-    { id: "service", weight: 15, done: counts.activeServices > 0, href: "/listing/new" },
+    { id: "service", weight: 15, done: counts.activeServices > 0, href: "/listing/new?from=profile" },
     { id: "experience", weight: 10, done: counts.experience > 0, href: "/profile" },
     { id: "education", weight: 5, done: counts.education > 0, href: "/profile" },
     { id: "languages", weight: 5, done: (freelancer.languages?.length ?? 0) > 0, href: "/profile" },

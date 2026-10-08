@@ -15,6 +15,7 @@ import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { usePageMeta } from "../lib/usePageMeta.tsx"
 import { formatCityForDisplay, formatIndustryForDisplay, matchesLocationFilter } from "../lib/marketplaceFilters.ts"
 import { normalizeSearchInput, safeExternalHref } from "../lib/validation.ts"
+import { matchesSearch } from "../lib/searchTranslit.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 
 type HirerRow = {
@@ -380,7 +381,7 @@ export default function HirersPage() {
   const advancedFilterCount = locationFilter.trim() ? 1 : 0
 
   const filtered = useMemo(() => {
-    const q = searchText.trim().toLowerCase()
+    const q = searchText.trim()
     return hirers.filter((h) => {
       if (categoryId && (h.industry?.trim() || "") !== categoryId) return false
 
@@ -399,8 +400,7 @@ export default function HirersPage() {
       }
 
       if (!q) return true
-      const nameBlob = `${h.contactName} ${h.companyName}`.toLowerCase()
-      return nameBlob.includes(q)
+      return matchesSearch(q, h.contactName, h.companyName)
     })
   }, [hirers, searchText, categoryId, locationFilter])
 

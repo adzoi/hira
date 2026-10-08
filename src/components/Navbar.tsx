@@ -19,6 +19,7 @@ import { getAuthenticatedSession } from "../lib/supabaseAuth.ts"
 import { sanitizeInternalPath } from "../lib/validation.ts"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import LanguageToggle from "./LanguageToggle.tsx"
+import { SHOW_FORUM_IN_NAV, SHOW_HIRERS_DIRECTORY_IN_NAV } from "../lib/featureFlags.ts"
 import { OptimizedImage } from "./OptimizedImage.tsx"
 const logoImage = "/logo.webp"
 
@@ -28,8 +29,8 @@ function buildNavLinks(t: (key: string) => string) {
     { label: t("nav.freelancers"), to: "/browse" },
     { label: t("nav.listings"), to: "/listings" },
     { label: t("nav.jobs"), to: "/jobs" },
-    { label: t("nav.hirers"), to: "/hirers" },
-    { label: t("nav.forum"), to: "/forum" },
+    ...(SHOW_HIRERS_DIRECTORY_IN_NAV ? [{ label: t("nav.hirers"), to: "/hirers" }] : []),
+    ...(SHOW_FORUM_IN_NAV ? [{ label: t("nav.forum"), to: "/forum" }] : []),
   ]
 }
 

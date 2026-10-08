@@ -7,6 +7,7 @@ import { useRecommendedJobs } from "../lib/queries/useRecommendedJobs.ts"
 import { formatJobBudget, formatListingPrice } from "../lib/listingPrice.ts"
 import { OptimizedImage } from "./OptimizedImage.tsx"
 import { ViewCountEyeIcon } from "./ViewCountEyeIcon.tsx"
+import { locationLabel } from "../lib/locationLabel.ts"
 import VipBadge from "./VipBadge.tsx"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
@@ -48,20 +49,6 @@ function jobBudgetLabel(job: HomeJobListingItem) {
 
 function locationGlyph(type: string) {
   return type === "remote" ? "🌐" : "📍"
-}
-
-function locationLabel(
-  type: string,
-  t: (key: string, params?: Record<string, string | number>) => string,
-) {
-  const labels: Record<string, string> = {
-    remote: t("common.remote"),
-    tbilisi: "თბილისი",
-    hybrid: t("common.hybrid"),
-    anywhere: t("common.anywhere"),
-    on_site: t("common.onSite"),
-  }
-  return labels[type] ?? type
 }
 
 function showHirerRatingValue(value: number) {
@@ -144,10 +131,12 @@ function FreelancerFeedCard({ item }: { item: HomeFreelancerServiceItem }) {
           <span className={metaPillFreelancerClass}>
             {formatListingPrice(item.price, item.priceType, { negotiable })}
           </span>
-          <span className={`${metaPillFreelancerClass} gap-1`}>
-            <ViewCountEyeIcon className="h-3.5 w-3.5 shrink-0 text-[#374151]" />
-            {item.viewsCount}
-          </span>
+          {item.viewsCount > 0 ? (
+            <span className={`${metaPillFreelancerClass} gap-1`}>
+              <ViewCountEyeIcon className="h-3.5 w-3.5 shrink-0 text-[#374151]" />
+              {item.viewsCount}
+            </span>
+          ) : null}
         </div>
       </div>
       <div className="mt-auto flex w-full shrink-0 flex-col gap-2 pt-3 sm:flex-row">
@@ -250,7 +239,10 @@ function JobListingFeedCard({ item }: { item: HomeJobListingItem }) {
             {locationGlyph(item.locationType)} {locationLabel(item.locationType, t)}
           </span>
           <span className={metaPillJobClass}>
-            💼 {t("common.applicants", { count: item.applicantsCount })}
+            💼{" "}
+            {item.applicantsCount > 0
+              ? t("common.applicants", { count: item.applicantsCount })
+              : t("common.beFirstToApply")}
           </span>
         </div>
       </div>

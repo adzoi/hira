@@ -61,13 +61,64 @@ export type ListingFormEditData = {
   existingImageUrls: string[]
 }
 
+/** Starting point for a new listing, built from the freelancer's own profile. */
+export type ListingProfileDraft = {
+  title: string
+  bio: string
+  skills: string[]
+  rootCategoryId: string
+  categoryId: string
+  tags: string[]
+}
+
 export type ListingFormQueryData = {
   userId: string
   freelancerProfileId: string
   categories: CategoryBranchRow[]
   availableTags: TagOption[]
   edit?: ListingFormEditData
+  profileDraft?: ListingProfileDraft
   redirectTo?: string
+}
+
+/** Root + mid category ids for a stored mid-level category id. */
+function resolveCategoryPath(fullCats: CategoryBranchRow[], mid: string): { root: string; mid: string } {
+  if (!mid) return { root: "", mid: "" }
+  const node = fullCats.find((c) => c.id === mid)
+  if (node?.parent_id) return { root: rootIdContainingCategory(fullCats, mid), mid }
+  if (categoryIdsWithChildren(fullCats).has(mid)) return { root: mid, mid: "" }
+  return { root: mid, mid }
+}
+
+async function fetchProfileDraft(freelancerProfileId: string, fullCats: CategoryBranchRow[]): Promise<ListingProfileDraft | undefined> {
+  if (!supabase) return undefined
+  const [{ data: fp }, { data: skillRows }] = await Promise.all([
+    supabase.from("freelancer_profiles").select("professional_title,bio").eq("id", freelancerProfileId).maybeSingle(),
+    supabase.from("freelancer_skills").select("skills(name,category_id)").eq("freelancer_profile_id", freelancerProfileId),
+  ])
+  const skills = ((skillRows ?? []) as Array<{ skills: { name?: string | null; category_id?: string | null } | null }>)
+    .map((row) => ({ name: String(row.skills?.name ?? "").trim(), categoryId: row.skills?.category_id ?? null }))
+    .filter((row) => row.name)
+
+  // The category most of the freelancer's skills belong to.
+  const counts = new Map<string, number>()
+  for (const skill of skills) {
+    if (skill.categoryId) counts.set(skill.categoryId, (counts.get(skill.categoryId) ?? 0) + 1)
+  }
+  const topCategory = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? ""
+  const path = resolveCategoryPath(fullCats, topCategory)
+
+  const title = String(fp?.professional_title ?? "").trim()
+  const bio = String(fp?.bio ?? "").trim()
+  if (!title && !bio && skills.length === 0) return undefined
+  return {
+    title,
+    bio,
+    skills: skills.map((s) => s.name),
+    rootCategoryId: path.root,
+    categoryId: path.mid,
+    tags: topCategory ? skills.filter((s) => s.categoryId === topCategory).map((s) => s.name) : [],
+  }
 }
 
 export async function fetchListingForm(listingId?: string): Promise<ListingFormQueryData> {
@@ -140,7 +191,10 @@ export async function fetchListingForm(listingId?: string): Promise<ListingFormQ
     availableTags,
   }
 
-  if (!listingId) return base
+  if (!listingId) {
+    const profileDraft = await fetchProfileDraft(fp.id, fullCats).catch(() => undefined)
+    return { ...base, profileDraft }
+  }
 
   const { data: listing, error: listingError } = await supabase
     .from("services")

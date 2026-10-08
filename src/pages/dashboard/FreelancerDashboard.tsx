@@ -1078,7 +1078,7 @@ export default function FreelancerDashboard({ data, onOpenFollowList }: Props) {
                 <h3 className="shrink-0 whitespace-nowrap text-base font-bold text-[#1B2B4B] sm:text-xl">ჩემი სერვისები</h3>
                 <button
                   type="button"
-                  onClick={() => navigate("/listing/new")}
+                  onClick={() => navigate(serviceDrafts.length === 0 ? "/listing/new?from=profile" : "/listing/new")}
                   disabled={serviceDrafts.length >= 3}
                   className="shrink-0 rounded-lg bg-[#1B2B4B] px-2 py-1 text-xs font-semibold text-white transition hover:bg-[#D4A843] hover:text-[#1B2B4B] disabled:cursor-not-allowed disabled:opacity-50 sm:px-4 sm:py-2 sm:text-sm"
                 >

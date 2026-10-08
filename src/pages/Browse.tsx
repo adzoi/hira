@@ -30,6 +30,7 @@ import { LIMITS, normalizeSearchInput, sanitizeDisplayText } from "../lib/valida
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { pickCategoryName } from "../lib/categoryLocale.ts"
 import { useSearchImpressions } from "../lib/searchImpressions.ts"
+import { matchesSearch } from "../lib/searchTranslit.ts"
 
 type SortOption = "rating" | "price_asc" | "price_desc" | "newest" | "completed"
 type Availability = "full_time" | "part_time" | "weekends"
@@ -504,12 +505,19 @@ export default function BrowsePage() {
   }
 
   const filteredFreelancers = useMemo(() => {
-    const search = searchText.trim().toLowerCase()
+    const search = searchText.trim()
     const minPriceNumber = minPrice ? Number(minPrice) : null
     const maxPriceNumber = maxPrice ? Number(maxPrice) : null
 
     return freelancers.filter((freelancer) => {
-      const hasSearchMatch = search.length === 0 || freelancer.fullName.toLowerCase().includes(search)
+      const hasSearchMatch =
+        search.length === 0 ||
+        matchesSearch(
+          search,
+          freelancer.fullName,
+          freelancer.professionalTitle,
+          freelancer.skills.map((skill) => skill.name).join(" "),
+        )
       if (!hasSearchMatch) return false
 
       const hasCategoryMatch =
@@ -800,13 +808,18 @@ export default function BrowsePage() {
             </div>
           ) : (
             <>
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-slate-600">{t("browse.found", { count: sortedFreelancers.length })}</p>
-              </div>
+              {sortedFreelancers.length > 0 ? (
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-slate-600">{t("browse.found", { count: sortedFreelancers.length })}</p>
+                </div>
+              ) : null}
 
               {sortedFreelancers.length === 0 ? (
                 <EmptyState
                   message={t("browse.empty")}
+                  hint={t("emptyCta.catalogHint")}
+                  ctaLabel={t("emptyCta.postJob")}
+                  ctaTo="/post-job"
                   actionLabel={t("common.clearFilters")}
                   onAction={clearFilters}
                 />
@@ -885,7 +898,11 @@ export default function BrowsePage() {
                             : t("common.priceOnRequest")}
                         </p>
 
-                        <p className="mt-2 text-xs text-slate-500">💼 {t("common.completed", { count: freelancer.completedJobsCount })}</p>
+                        <p className="mt-2 text-xs text-slate-500">
+                          {freelancer.completedJobsCount > 0
+                            ? `💼 ${t("common.completed", { count: freelancer.completedJobsCount })}`
+                            : `✨ ${t("common.newOnHira")}`}
+                        </p>
                         </Link>
 
                         <div className="mt-auto flex shrink-0 gap-2 pt-3">

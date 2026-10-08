@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom"
 import I18nText from "../i18n/I18nText.tsx"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
+import { SHOW_FORUM_IN_NAV, SHOW_HIRERS_DIRECTORY_IN_NAV } from "../lib/featureFlags.ts"
 
 const socialLinks = [
   {
@@ -83,8 +84,8 @@ export default function Footer() {
         { labelKey: "nav.listings", to: "/listings" },
         { labelKey: "nav.jobs", to: "/jobs" },
         { labelKey: "entryLevel.footerLink", to: "/internships" },
-        { labelKey: "nav.hirers", to: "/hirers" },
-        { labelKey: "nav.forum", to: "/forum" },
+        ...(SHOW_HIRERS_DIRECTORY_IN_NAV ? [{ labelKey: "nav.hirers", to: "/hirers" }] : []),
+        ...(SHOW_FORUM_IN_NAV ? [{ labelKey: "nav.forum", to: "/forum" }] : []),
       ],
     },
     {

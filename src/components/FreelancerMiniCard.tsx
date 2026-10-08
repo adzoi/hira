@@ -84,8 +84,10 @@ export default function FreelancerMiniCard({ freelancer }: { freelancer: Freelan
               <span className="font-semibold text-[#1B2B4B]">★ {rating.toFixed(1)}</span> ·{" "}
               {t("common.reviewsCount", { count: reviews })}
             </>
-          ) : (
+          ) : Number(freelancer.completed_jobs_count ?? 0) > 0 ? (
             t("common.completed", { count: Number(freelancer.completed_jobs_count ?? 0) })
+          ) : (
+            t("common.newOnHira")
           )}
         </span>
         <span className="font-semibold text-[#1B2B4B]">

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Link, useNavigate, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import {
   PRICE_TYPE_LABELS,
@@ -15,7 +15,7 @@ import {
   validateTags,
 } from "../lib/validation.ts"
 import { META_PREFIX, META_SUFFIX } from "../lib/listingDescription.ts"
-import { fetchListingForm } from "../lib/queries/fetchListingForm.ts"
+import { fetchListingForm, type ListingProfileDraft } from "../lib/queries/fetchListingForm.ts"
 import { queryErrorMessage } from "../lib/queries/queryErrorMessage.ts"
 import { queryKeys } from "../lib/queryKeys.ts"
 import { pickCategoryName } from "../lib/categoryLocale.ts"
@@ -61,6 +61,9 @@ export default function ListingFormPage() {
   const navigate = useNavigate()
   const { id } = useParams()
   const isEdit = Boolean(id)
+  const [searchParams] = useSearchParams()
+  const wantsProfileDraft = searchParams.get("from") === "profile"
+  const [draftApplied, setDraftApplied] = useState(false)
   const [listingFormUserId, setListingFormUserId] = useState("")
   const {
     data: listingFormData,
@@ -108,6 +111,19 @@ export default function ListingFormPage() {
     })
   }, [navigate])
 
+  const profileDraft = isEdit ? undefined : listingFormData?.profileDraft
+
+  const applyProfileDraft = (draft: ListingProfileDraft) => {
+    if (draft.title) setTitle(draft.title.slice(0, 120))
+    const skillsLine = draft.skills.length > 0 ? t("listingForm.draftSkillsLine", { skills: draft.skills.join(", ") }) : ""
+    setDescription([draft.bio, skillsLine].filter(Boolean).join("\n\n"))
+    setRootCategoryId(draft.rootCategoryId)
+    setCategoryId(draft.categoryId)
+    setSubcategoryId("")
+    setTags(draft.tags)
+    setDraftApplied(true)
+  }
+
   useEffect(() => {
     if (!listingFormData) return
     if (listingFormData.redirectTo) {
@@ -133,8 +149,12 @@ export default function ListingFormPage() {
       setSubcategoryId(edit.subcategoryId)
       setTags(edit.tags)
       setExistingImageUrls(edit.existingImageUrls)
+    } else if (wantsProfileDraft && listingFormData.profileDraft) {
+      applyProfileDraft(listingFormData.profileDraft)
     }
-  }, [listingFormData, navigate])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- applyProfileDraft only sets state
+  }, [listingFormData, navigate, wantsProfileDraft])
+
 
   const categoryRootsList = useMemo(() => categoryRoots(categories), [categories])
   const categoryMidsList = useMemo(
@@ -414,6 +434,23 @@ export default function ListingFormPage() {
               {t("listingForm.backToDashboard")}
             </Link>
           </div>
+
+          {profileDraft ? (
+            <div className="mb-5 flex flex-col gap-3 rounded-xl border border-[#0088FF]/30 bg-[#0088FF]/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-[#1B2B4B]">
+                {draftApplied ? t("listingForm.draftAppliedHint") : t("listingForm.draftOfferHint")}
+              </p>
+              {!draftApplied ? (
+                <button
+                  type="button"
+                  onClick={() => applyProfileDraft(profileDraft)}
+                  className="shrink-0 rounded-lg bg-[#0088FF] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0077e0]"
+                >
+                  {t("listingForm.draftFromProfile")}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="space-y-4">
             <label className="block">

@@ -327,13 +327,22 @@ export default function OnboardingPage() {
     setError("")
   }
 
-  const nextFromStep1 = () => {
-    if (!professionalTitle.trim()) return setError("პროფესიული სათაური სავალდებულოა.")
-    if (bio.trim().length < 50) return setError("ბიო უნდა იყოს მინიმუმ 50 სიმბოლო.")
-    if (!availability) return setError("აირჩიე ხელმისაწვდომობა.")
-    if (languages.length === 0) return setError(t("onboarding.selectLanguage"))
+  /** Only the title is required up front; the completeness meter nudges for the rest later. */
+  const validateMinimumProfile = () => {
+    if (!professionalTitle.trim()) {
+      setError("პროფესიული სათაური სავალდებულოა.")
+      return false
+    }
     setError("")
-    setStep(2)
+    return true
+  }
+
+  const nextFromStep1 = () => {
+    if (validateMinimumProfile()) setStep(2)
+  }
+
+  const finishEarly = () => {
+    if (validateMinimumProfile()) void submitFreelancer()
   }
 
   const nextFromStep2 = () => {
@@ -421,8 +430,8 @@ export default function OnboardingPage() {
             user_id: userId,
             slug,
             professional_title: professionalTitle.trim(),
-            bio: bio.trim(),
-            availability,
+            bio: bio.trim() || null,
+            availability: availability || null,
             languages,
             ...parsedSocial.values,
             is_profile_complete: true,
@@ -505,18 +514,19 @@ export default function OnboardingPage() {
     const companyNameResult = validateTextField(companyName, {
       min: 1,
       max: 120,
-      label: "კომპანიის სახელი",
+      label: "კომპანიის ან შენი სახელი",
     })
     if (companyNameResult.ok === false) return setError(companyNameResult.message)
 
-    const companyDescriptionResult = validateTextField(companyDescription, {
-      min: LIMITS.companyDescriptionMin,
-      max: LIMITS.companyDescription,
-      label: "აღწერა",
-    })
+    // Description and industry are optional at signup; the dashboard nudges for them later.
+    const companyDescriptionResult = companyDescription.trim()
+      ? validateTextField(companyDescription, {
+          min: 1,
+          max: LIMITS.companyDescription,
+          label: "აღწერა",
+        })
+      : ({ ok: true, value: null } as const)
     if (companyDescriptionResult.ok === false) return setError(companyDescriptionResult.message)
-
-    if (!industry) return setError("აირჩიე ინდუსტრია.")
 
     const websiteResult = validateOptionalUrl(companyWebsite)
     if (websiteResult.ok === false) return setError(websiteResult.message)
@@ -529,7 +539,7 @@ export default function OnboardingPage() {
           user_id: userId,
           company_name: companyNameResult.value,
           description: companyDescriptionResult.value,
-          industry,
+          industry: industry || null,
           website_url: websiteResult.value,
         },
         { onConflict: "user_id" },
@@ -566,10 +576,10 @@ export default function OnboardingPage() {
 
           {userType === "hirer" ? (
             <div className="mt-6 space-y-4">
-              <input className="h-11 w-full rounded-lg border border-slate-300 px-3" placeholder="კომპანიის სახელი" value={companyName} onChange={(e)=>setCompanyName(e.target.value)} />
-              <textarea className="w-full rounded-lg border border-slate-300 px-3 py-2" rows={4} placeholder="კომპანიის აღწერა" value={companyDescription} onChange={(e)=>setCompanyDescription(e.target.value)} />
+              <input className="h-11 w-full rounded-lg border border-slate-300 px-3" placeholder="კომპანიის ან შენი სახელი" value={companyName} onChange={(e)=>setCompanyName(e.target.value)} />
+              <textarea className="w-full rounded-lg border border-slate-300 px-3 py-2" rows={4} placeholder="კომპანიის აღწერა (არასავალდებულო)" value={companyDescription} onChange={(e)=>setCompanyDescription(e.target.value)} />
               <select className="h-11 w-full rounded-lg border border-slate-300 px-3" value={industry} onChange={(e)=>setIndustry(e.target.value)}>
-                <option value="">აირჩიე ინდუსტრია</option>
+                <option value="">ინდუსტრია (არასავალდებულო)</option>
                 {industryOptions.map((opt)=><option key={opt} value={opt}>{opt}</option>)}
               </select>
               <input className="h-11 w-full rounded-lg border border-slate-300 px-3" placeholder="ვებსაიტი (არასავალდებულო)" value={companyWebsite} onChange={(e)=>setCompanyWebsite(e.target.value)} />
@@ -590,7 +600,7 @@ export default function OnboardingPage() {
                   <CvImportPanel skillCatalog={skills} onApply={applyCvImport} />
                   <input className="h-11 w-full rounded-lg border border-slate-300 px-3" placeholder="პროფესიული სათაური" value={professionalTitle} onChange={(e)=>setProfessionalTitle(e.target.value)} />
                   <div>
-                    <textarea className="w-full rounded-lg border border-slate-300 px-3 py-2" rows={5} placeholder="ბიო" value={bio} onChange={(e)=>setBio(e.target.value)} />
+                    <textarea className="w-full rounded-lg border border-slate-300 px-3 py-2" rows={5} placeholder="ბიო (არასავალდებულო)" value={bio} onChange={(e)=>setBio(e.target.value)} />
                     <p className="mt-1 text-right text-xs text-slate-500">{bio.length}/2000</p>
                   </div>
                   <div className="space-y-2 text-sm">
@@ -675,6 +685,14 @@ export default function OnboardingPage() {
                     className="h-11 w-full rounded-lg bg-[#0088FF] text-sm font-medium text-white transition-colors duration-150 hover:bg-[#006ACC]"
                   >
                     შემდეგი
+                  </button>
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={finishEarly}
+                    className="w-full text-center text-sm font-medium text-slate-500 hover:text-[#0088FF] disabled:opacity-50"
+                  >
+                    {submitting ? t("common.loading") : t("onboarding.finishLater")}
                   </button>
                 </div>
               )}
@@ -973,6 +991,14 @@ export default function OnboardingPage() {
                       შემდეგი
                     </button>
                   </div>
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={finishEarly}
+                    className="w-full text-center text-sm font-medium text-slate-500 hover:text-[#0088FF] disabled:opacity-50"
+                  >
+                    {submitting ? t("common.loading") : t("onboarding.finishLater")}
+                  </button>
                 </div>
               )}
 

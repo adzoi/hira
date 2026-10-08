@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { OptimizedImage } from "../components/OptimizedImage.tsx"
+import ReportBlockMenu from "../components/ReportBlockMenu.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
 import ErrorState from "../components/ui/ErrorState.tsx"
 import { useToast } from "../components/ui/ToastProvider.tsx"
@@ -233,6 +234,9 @@ export default function ForumPostDetailPage() {
                 {formatForumDateTime(post.createdAt, locale)}
               </time>
             </div>
+            {!isAuthor ? (
+              <ReportBlockMenu className="ml-auto" targetType="forum_post" targetId={post.id} targetUserId={post.authorId} />
+            ) : null}
           </div>
 
           <div className="mt-6 whitespace-pre-wrap text-base leading-relaxed text-slate-700">{post.body}</div>

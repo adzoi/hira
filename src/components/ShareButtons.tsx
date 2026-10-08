@@ -1,6 +1,8 @@
 import { useState } from "react"
 import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { FacebookBrandIcon } from "./SocialBrandIcons.tsx"
+import FacebookGroupPostButton from "./FacebookGroupPostButton.tsx"
+import { withGroupUtm } from "../lib/groupPost.ts"
 
 type ShareButtonsProps = {
   /** Absolute URL to share. */
@@ -8,13 +10,18 @@ type ShareButtonsProps = {
   /** Short text that accompanies the link in messengers. */
   text: string
   className?: string
+  /** Adds a "Post to a Facebook group" button with a ready-to-paste post. */
+  groupPost?: {
+    campaign: string
+    buildText: (taggedUrl: string) => string
+  }
 }
 
 const linkClass =
   "inline-flex h-9 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-[#0088FF] hover:text-[#0088FF]"
 
 /** Share row: native share sheet on phones (covers Instagram), plus Facebook, Messenger apps and copy. */
-export default function ShareButtons({ url, text, className }: ShareButtonsProps) {
+export default function ShareButtons({ url, text, className, groupPost }: ShareButtonsProps) {
   const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
   const canNativeShare = typeof navigator !== "undefined" && typeof navigator.share === "function"
@@ -33,6 +40,9 @@ export default function ShareButtons({ url, text, className }: ShareButtonsProps
 
   return (
     <div className={`flex flex-wrap items-center gap-2 ${className ?? ""}`}>
+      {groupPost ? (
+        <FacebookGroupPostButton url={withGroupUtm(url, groupPost.campaign)} buildText={groupPost.buildText} />
+      ) : null}
       {canNativeShare ? (
         <button
           type="button"

@@ -1084,13 +1084,18 @@ export default function ListingsPage() {
             </div>
           ) : (
             <>
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-slate-600">{t("listings.found", { count: filteredSorted.length })}</p>
-              </div>
+              {filteredSorted.length > 0 ? (
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-slate-600">{t("listings.found", { count: filteredSorted.length })}</p>
+                </div>
+              ) : null}
 
               {filteredSorted.length === 0 ? (
                 <EmptyState
                   message={t("listings.empty")}
+                  hint={t("emptyCta.catalogHint")}
+                  ctaLabel={t("emptyCta.postJob")}
+                  ctaTo="/post-job"
                   actionLabel={t("common.clearFilters")}
                   onAction={clearFilters}
                 />
@@ -1222,13 +1227,20 @@ export default function ListingsPage() {
                               </span>
                             ) : null}
                           </div>
-                          <p className="text-xs text-slate-500">
-                            💼 {t("common.completed", { count: item.completedJobsCount })} ·{" "}
-                            <span className="inline-flex items-center gap-0.5 align-middle">
-                              <ViewCountEyeIcon className="relative -top-px inline h-3.5 w-3.5 text-slate-500" />
-                              {item.viewsCount}
-                            </span>
-                          </p>
+                          {item.completedJobsCount > 0 || item.viewsCount > 0 ? (
+                            <p className="text-xs text-slate-500">
+                              {item.completedJobsCount > 0 ? (
+                                <>💼 {t("common.completed", { count: item.completedJobsCount })}</>
+                              ) : null}
+                              {item.completedJobsCount > 0 && item.viewsCount > 0 ? " · " : null}
+                              {item.viewsCount > 0 ? (
+                                <span className="inline-flex items-center gap-0.5 align-middle">
+                                  <ViewCountEyeIcon className="relative -top-px inline h-3.5 w-3.5 text-slate-500" />
+                                  {item.viewsCount}
+                                </span>
+                              ) : null}
+                            </p>
+                          ) : null}
                         </div>
 
                         <div className="flex shrink-0 flex-nowrap gap-2 pt-3">

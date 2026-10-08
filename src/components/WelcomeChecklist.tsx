@@ -130,7 +130,7 @@ export default function WelcomeChecklist(props: Props) {
           { id: "created", done: true },
           { id: "avatar", done: Boolean(avatarUrl?.trim()), href: "/profile" },
           { id: "skills", done: fCounts.skills >= 3, href: "/profile" },
-          { id: "service", done: fCounts.services > 0, href: "/listing/new" },
+          { id: "service", done: fCounts.services > 0, href: "/listing/new?from=profile" },
           { id: "portfolio", done: fCounts.portfolio > 0, href: "/profile" },
           { id: "apply", done: fCounts.applications > 0, href: "/jobs" },
           { id: "share", done: Boolean(flags.share), onClick: () => void copyProfileLink() },

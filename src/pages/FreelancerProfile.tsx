@@ -9,6 +9,7 @@ import { formatCityForDisplay } from "../lib/marketplaceFilters.ts"
 import FollowListsModal, { type FollowModalTab } from "../components/FollowListsModal.tsx"
 import { OptimizedImage } from "../components/OptimizedImage.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
+import ReportBlockMenu from "../components/ReportBlockMenu.tsx"
 import { ViewCountEyeIcon } from "../components/ViewCountEyeIcon.tsx"
 import { countFollowers, countFollowing, followUser, isFollowing, unfollowUser } from "../lib/follows.ts"
 import { avatarImageUrl, jobOrServiceImageDisplayUrl } from "../lib/storageImageUrl.ts"
@@ -22,6 +23,7 @@ import {
   type ProfileJobApplication,
 } from "../lib/profileOffers.ts"
 import ShareButtons from "../components/ShareButtons.tsx"
+import { joinPostLines } from "../lib/groupPost.ts"
 import SimilarFreelancers from "../components/SimilarFreelancers.tsx"
 import StartConversationButton from "../components/StartConversationButton.tsx"
 import InviteToJobButton from "../components/InviteToJobButton.tsx"
@@ -634,12 +636,13 @@ export default function FreelancerProfilePage() {
           <div className="space-y-5">
             <section className="relative min-w-0 overflow-hidden rounded-[14px] border border-[#E5E7EB] bg-white px-6 py-5 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
               {!viewerIsOwner ? (
-                <div className="absolute right-4 top-4 z-10">
+                <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
                   <SaveBookmarkButton variant="icon" resourceType="freelancer" resourceId={freelancer.id} />
+                  <ReportBlockMenu targetType="user" targetId={profile.id} targetUserId={profile.id} />
                 </div>
               ) : null}
 
-              <div className={`flex items-start gap-4 ${!viewerIsOwner ? "pr-10" : ""}`}>
+              <div className={`flex items-start gap-4 ${!viewerIsOwner ? "pr-24" : ""}`}>
                 <button
                   type="button"
                   onClick={() => setAvatarLightboxOpen(true)}
@@ -776,6 +779,26 @@ export default function FreelancerProfilePage() {
                 url={shareUrl}
                 text={t("share.freelancerText", { name: profileName })}
                 className="mt-4"
+                groupPost={{
+                  campaign: "freelancer",
+                  buildText: (taggedUrl) =>
+                    joinPostLines([
+                      t("share.freelancerIntro", {
+                        name: profileName,
+                        title: freelancer.professional_title?.trim() || t("common.freelancerFallback"),
+                      }),
+                      freelancer.total_reviews_count > 0 &&
+                        t("share.freelancerRating", {
+                          rating: freelancer.average_rating.toFixed(1),
+                          count: freelancer.total_reviews_count,
+                        }),
+                      skills.length > 0 &&
+                        t("share.freelancerSkills", { skills: skills.slice(0, 8).map((skill) => skill.name).join(", ") }),
+                    ], [
+                      t("share.freelancerCta", { url: taggedUrl }),
+                      t("share.hashtags"),
+                    ]),
+                }}
               />
 
               {ownerVisitCount !== null ? (
@@ -950,10 +973,12 @@ export default function FreelancerProfilePage() {
                           <span className={metaPillClass}>
                             {formatListingPrice(service.price, service.price_type, { negotiable })}
                           </span>
-                          <span className={metaPillClass}>
-                            <ViewCountEyeIcon className="h-3.5 w-3.5 shrink-0 text-gray-500" />
-                            {service.views_count}
-                          </span>
+                          {service.views_count > 0 ? (
+                            <span className={metaPillClass}>
+                              <ViewCountEyeIcon className="h-3.5 w-3.5 shrink-0 text-gray-500" />
+                              {service.views_count}
+                            </span>
+                          ) : null}
                         </div>
                         <div className="mt-auto flex gap-2 pt-1">
                           <Link

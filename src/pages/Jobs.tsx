@@ -1010,10 +1010,19 @@ export default function JobsPage() {
           </div>
         ) : (
           <>
-            <p className="mt-6 text-sm font-medium text-slate-600">{t("jobs.found", { count: sortedJobs.length })}</p>
+            {sortedJobs.length > 0 ? (
+              <p className="mt-6 text-sm font-medium text-slate-600">{t("jobs.found", { count: sortedJobs.length })}</p>
+            ) : null}
             {sortedJobs.length === 0 ? (
               <div className="mt-6">
-                <EmptyState message={t("jobs.empty")} actionLabel={t("common.clearFilters")} onAction={clearFilters} />
+                <EmptyState
+                  message={t("jobs.empty")}
+                  hint={t("emptyCta.jobsHint")}
+                  ctaLabel={t("emptyCta.postJob")}
+                  ctaTo="/post-job"
+                  actionLabel={t("common.clearFilters")}
+                  onAction={clearFilters}
+                />
               </div>
             ) : (
               <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">

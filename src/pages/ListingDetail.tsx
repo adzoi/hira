@@ -2,12 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import ShareButtons from "../components/ShareButtons.tsx"
+import { joinPostLines } from "../lib/groupPost.ts"
 import VipBadge from "../components/VipBadge.tsx"
 import VipCoinsButton from "../components/VipCoinsButton.tsx"
 import FreelancerAvailabilityIndicator from "../components/FreelancerAvailabilityIndicator.tsx"
 import { OptimizedImage } from "../components/OptimizedImage.tsx"
 import { ViewCountEyeIcon } from "../components/ViewCountEyeIcon.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
+import ReportBlockMenu from "../components/ReportBlockMenu.tsx"
 import StartConversationButton from "../components/StartConversationButton.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
 import { META_SUFFIX, resolveListingMetaPrefix, stripLegacyPricePrefix } from "../lib/listingDescription.ts"
@@ -407,10 +409,29 @@ export default function ListingDetailPage() {
                       {formatDate(item.createdAt)}
                     </span>
                   </div>
-                  <ShareButtons url={listingShareUrl} text={displayTitle} className="mt-3" />
+                  <ShareButtons
+                    url={listingShareUrl}
+                    text={displayTitle}
+                    className="mt-3"
+                    groupPost={{
+                      campaign: "listing",
+                      buildText: (taggedUrl) =>
+                        joinPostLines([
+                          t("share.listingIntro", { title: displayTitle }),
+                          t("share.listingPrice", { price: formatListingPrice(item.price, item.priceType) }),
+                          item.fullName && t("share.listingBy", { name: item.fullName }),
+                        ], [
+                          t("share.listingCta", { url: taggedUrl }),
+                          t("share.hashtags"),
+                        ]),
+                    }}
+                  />
                 </div>
                 {!viewerOwnsListing ? (
-                  <SaveBookmarkButton variant="icon" resourceType="service" resourceId={item.id} />
+                  <div className="flex shrink-0 items-start gap-2">
+                    <SaveBookmarkButton variant="icon" resourceType="service" resourceId={item.id} />
+                    <ReportBlockMenu targetType="service" targetId={item.id} targetUserId={item.freelancerUserId} />
+                  </div>
                 ) : null}
               </div>
 

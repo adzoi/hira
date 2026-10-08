@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { OptimizedImage } from "../components/OptimizedImage.tsx"
 import ChatMessageAttachment from "../components/ChatMessageAttachment.tsx"
+import ReportBlockMenu from "../components/ReportBlockMenu.tsx"
 import ChatIcon from "../components/ui/ChatIcon.tsx"
 import EmptyState from "../components/ui/EmptyState.tsx"
 import ErrorState from "../components/ui/ErrorState.tsx"
@@ -20,6 +21,7 @@ import {
 } from "../lib/chat.ts"
 import { formatChatAttachmentSize } from "../lib/chatAttachments.ts"
 import { formatContentRateLimitError } from "../lib/contentRateLimit.ts"
+import { isBlockedError } from "../lib/moderation.ts"
 import { subscribeToConversationBroadcast, subscribeToInboxBroadcast } from "../lib/chatBroadcast.ts"
 import type { ChatBroadcastPayload } from "../lib/chatBroadcast.ts"
 import { oncePerChatMessage } from "../lib/chatMessageDedup.ts"
@@ -133,6 +135,11 @@ export default function MessagesPage() {
   const [attachmentError, setAttachmentError] = useState("")
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [sending, setSending] = useState(false)
+  /** "byMe": viewer blocked the other user; "other": the server refused because of a block. Keyed by partner id. */
+  const [chatBlockState, setChatBlockState] = useState<{ userId: string | null; mode: "none" | "byMe" | "other" }>({
+    userId: null,
+    mode: "none",
+  })
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const threadViewportRef = useRef<HTMLDivElement>(null)
@@ -233,6 +240,10 @@ export default function MessagesPage() {
     [conversations, validatedActiveId],
   )
 
+  const activeOtherUserId = activeConversation?.otherUserId ?? null
+  const chatBlock = chatBlockState.userId === activeOtherUserId ? chatBlockState.mode : "none"
+  const setChatBlock = (mode: "none" | "byMe" | "other") => setChatBlockState({ userId: activeOtherUserId, mode })
+
   useEffect(() => {
     if (!routeConversationId) {
       setActiveId(null)
@@ -302,7 +313,13 @@ export default function MessagesPage() {
         await refetchConversations()
       } catch (e) {
         if (!cancelled) {
-          setListValidationError(e instanceof Error ? e.message : t("messages.createConversationFailed"))
+          setListValidationError(
+            isBlockedError(e)
+              ? t("moderation.chatBlocked")
+              : e instanceof Error
+                ? e.message
+                : t("messages.createConversationFailed"),
+          )
         }
       } finally {
         if (!cancelled) startChatInFlightRef.current = false
@@ -496,7 +513,7 @@ export default function MessagesPage() {
   }
 
   const handleSend = async () => {
-    if (!supabase || !validatedActiveId || sending) return
+    if (!supabase || !validatedActiveId || sending || chatBlock !== "none") return
     const text = draft.trim()
     if (!text && !pendingAttachment) return
     setSending(true)
@@ -521,6 +538,11 @@ export default function MessagesPage() {
       )
       composerRef.current?.focus()
     } catch (e) {
+      if (isBlockedError(e)) {
+        setChatBlock("other")
+        setUploadProgress(null)
+        return
+      }
       const rateMsg = formatContentRateLimitError(e, t)
       setThreadValidationError(rateMsg ?? (e instanceof Error ? e.message : t("messages.sendFailed")))
       setUploadProgress(null)
@@ -739,6 +761,15 @@ export default function MessagesPage() {
                           <p className="truncate text-xs text-slate-500">{activeConversation.contextLabel}</p>
                         ) : null}
                       </div>
+                      <ReportBlockMenu
+                        className="ml-auto shrink-0"
+                        targetType="user"
+                        targetId={activeConversation.otherUserId}
+                        targetUserId={activeConversation.otherUserId}
+                        onBlockChange={(isBlocked) =>
+                          setChatBlock(isBlocked ? "byMe" : chatBlock === "byMe" ? "none" : chatBlock)
+                        }
+                      />
                     </>
                   ) : (
                     <p className="font-semibold text-[#1B2B4B]">{t("messages.conversation")}</p>
@@ -803,6 +834,11 @@ export default function MessagesPage() {
                   )}
                 </div>
 
+                {chatBlock !== "none" ? (
+                  <div className="shrink-0 border-t border-slate-100 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-center text-sm text-slate-500">
+                    {chatBlock === "byMe" ? t("moderation.chatBlockedByMe") : t("moderation.chatBlocked")}
+                  </div>
+                ) : (
                 <div className="shrink-0 border-t border-slate-100 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
                   {pendingAttachment || attachmentError || uploadProgress != null ? (
                     <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -893,6 +929,7 @@ export default function MessagesPage() {
                     </button>
                   </div>
                 </div>
+                )}
               </>
             )}
           </section>

@@ -6,7 +6,10 @@ import { ViewCountEyeIcon } from "../components/ViewCountEyeIcon.tsx"
 import SkeletonCard from "../components/ui/SkeletonCard.tsx"
 import { useToast } from "../components/ui/ToastProvider.tsx"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
+import ReportBlockMenu from "../components/ReportBlockMenu.tsx"
 import ShareButtons from "../components/ShareButtons.tsx"
+import { joinPostLines } from "../lib/groupPost.ts"
+import { locationLabel } from "../lib/locationLabel.ts"
 import SimilarJobs from "../components/SimilarJobs.tsx"
 import VipCoinsButton from "../components/VipCoinsButton.tsx"
 import StartConversationButton from "../components/StartConversationButton.tsx"
@@ -413,10 +416,31 @@ export default function JobDetailPage() {
                     {formatRelativeTime(job.created_at)}
                   </span>
                 </div>
-                <ShareButtons url={jobShareUrl} text={displayTitle} className="mt-3" />
+                <ShareButtons
+                  url={jobShareUrl}
+                  text={displayTitle}
+                  className="mt-3"
+                  groupPost={{
+                    campaign: "job",
+                    buildText: (taggedUrl) =>
+                      joinPostLines([
+                        t("share.jobLookingFor", { title: displayTitle }),
+                        budgetText && t("share.jobBudget", { budget: budgetText }),
+                        job.location_type && t("share.jobLocation", { location: locationLabel(job.location_type, t) }),
+                        (job.skills ?? []).length > 0 &&
+                          t("share.jobSkills", { skills: (job.skills ?? []).map((skill) => skill.name).join(", ") }),
+                      ], [
+                        t("share.jobCta", { url: taggedUrl }),
+                        t("share.hashtags"),
+                      ]),
+                  }}
+                />
               </div>
               {!isJobOwner ? (
-                <SaveBookmarkButton variant="icon" resourceType="job" resourceId={job.id} />
+                <div className="flex shrink-0 items-start gap-2">
+                  <SaveBookmarkButton variant="icon" resourceType="job" resourceId={job.id} />
+                  <ReportBlockMenu targetType="job" targetId={job.id} targetUserId={job.hirer_user_id} />
+                </div>
               ) : null}
             </div>
 

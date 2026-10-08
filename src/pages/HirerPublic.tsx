@@ -10,6 +10,7 @@ import FollowListsModal, { FollowStatPills, type FollowModalTab } from "../compo
 import { countFollowers, countFollowing, followUser, isFollowing, unfollowUser } from "../lib/follows.ts"
 import { jobVacancyStats } from "../lib/jobVacancies.ts"
 import SaveBookmarkButton from "../components/SaveBookmarkButton.tsx"
+import ReportBlockMenu from "../components/ReportBlockMenu.tsx"
 import StartConversationButton from "../components/StartConversationButton.tsx"
 import { avatarImageUrl } from "../lib/storageImageUrl.ts"
 import { isSupabaseConfigured, supabase } from "../lib/supabase"
@@ -392,11 +393,14 @@ export default function HirerPublicPage() {
 
         <header className="relative rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           {!viewerOwnsHirer ? (
-            <div className="absolute right-4 top-4 z-10">
+            <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
               <SaveBookmarkButton variant="icon" resourceType="hirer" resourceId={hirer.id} />
+              {hirer.ownerUserId ? (
+                <ReportBlockMenu targetType="user" targetId={hirer.ownerUserId} targetUserId={hirer.ownerUserId} />
+              ) : null}
             </div>
           ) : null}
-          <div className={`flex min-w-0 flex-wrap items-start gap-4 ${!viewerOwnsHirer ? "pr-10" : ""}`}>
+          <div className={`flex min-w-0 flex-wrap items-start gap-4 ${!viewerOwnsHirer ? "pr-24" : ""}`}>
             <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#1B2B4B]/5 text-lg font-black text-[#1B2B4B]">
               {hirer.avatarUrl ? (
                 <OptimizedImage
