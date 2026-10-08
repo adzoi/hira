@@ -53,9 +53,70 @@ export type CvImportResult = {
 // ── PDF → lines ─────────────────────────────────────────────────────────────
 
 type TextItem = { str: string; transform: number[]; width: number; height: number; hasEOL?: boolean }
+type PlacedItem = { x: number; y: number; w: number; h: number; str: string }
 
-/** Extracts text lines, top-to-bottom per page. Two-column layouts are read column by column when obvious. */
-export async function extractPdfLines(file: File): Promise<string[]> {
+export type PdfText = { lines: string[]; links: string[] }
+
+/**
+ * x where a page splits into two columns (sidebar CVs from Canva etc.), or null.
+ * A split is an empty vertical strip in the middle of the page with real text on both sides,
+ * so right-aligned dates in a one-column CV do not count as a second column.
+ */
+function columnSplit(items: PlacedItem[], pageWidth: number): number | null {
+  if (items.length < 12) return null
+  const spans = items.map((it) => [it.x, it.x + Math.max(it.w, 1)] as const).sort((a, b) => a[0] - b[0])
+  const totalChars = items.reduce((n, it) => n + it.str.length, 0)
+  let best: { at: number; width: number } | null = null
+  let reach = -Infinity
+  for (const [x0, x1] of spans) {
+    const gap = x0 - reach
+    const mid = reach + gap / 2
+    if (reach > -Infinity && gap >= 12 && mid > pageWidth * 0.2 && mid < pageWidth * 0.75) {
+      const leftChars = items.filter((it) => it.x < mid).reduce((n, it) => n + it.str.length, 0)
+      const rightChars = totalChars - leftChars
+      if (leftChars >= totalChars * 0.15 && rightChars >= totalChars * 0.15 && (!best || gap > best.width)) best = { at: mid, width: gap }
+    }
+    reach = Math.max(reach, x1)
+  }
+  return best?.at ?? null
+}
+
+/** Group items into rows by baseline (y), then each row left to right; wide gaps become separate lines. */
+function itemsToLines(items: PlacedItem[]): string[] {
+  const lines: string[] = []
+  const rows: Array<{ y: number; parts: PlacedItem[] }> = []
+  for (const it of items) {
+    const tol = Math.max(2, (it.h || 10) * 0.4)
+    let row = rows.find((r) => Math.abs(r.y - it.y) <= tol)
+    if (!row) {
+      row = { y: it.y, parts: [] }
+      rows.push(row)
+    }
+    row.parts.push(it)
+  }
+  rows.sort((a, b) => b.y - a.y)
+  for (const row of rows) {
+    row.parts.sort((a, b) => a.x - b.x)
+    let current = ""
+    let lastEnd = -Infinity
+    for (const part of row.parts) {
+      const gap = part.x - lastEnd
+      if (current && gap > 60) {
+        lines.push(current.replace(/\s+/g, " ").trim())
+        current = ""
+      } else if (current && gap > 1.5 && !current.endsWith(" ") && !part.str.startsWith(" ")) {
+        current += " "
+      }
+      current += part.str
+      lastEnd = part.x + part.w
+    }
+    if (current.trim()) lines.push(current.replace(/\s+/g, " ").trim())
+  }
+  return lines
+}
+
+/** Extracts text lines top-to-bottom per page (column by column on two-column pages), plus link targets. */
+export async function extractPdfLines(file: File): Promise<PdfText> {
   const pdfjs = await import("pdfjs-dist")
   const workerUrl = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
@@ -63,50 +124,32 @@ export async function extractPdfLines(file: File): Promise<string[]> {
   const data = new Uint8Array(await file.arrayBuffer())
   const doc = await pdfjs.getDocument({ data, isEvalSupported: false }).promise
   const lines: string[] = []
+  const links: string[] = []
   const pageCount = Math.min(doc.numPages, 8)
   for (let p = 1; p <= pageCount; p += 1) {
     const page = await doc.getPage(p)
     const content = await page.getTextContent()
-    const items = (content.items as unknown[]).filter(
-      (it): it is TextItem => typeof (it as TextItem).str === "string" && Array.isArray((it as TextItem).transform),
-    )
-    // Group by baseline (y), then sort each row by x.
-    const rows: Array<{ y: number; parts: Array<{ x: number; str: string; w: number }> }> = []
-    for (const it of items) {
-      if (!it.str.trim()) continue
-      const x = it.transform[4]
-      const y = it.transform[5]
-      const tol = Math.max(2, (it.height || 10) * 0.4)
-      let row = rows.find((r) => Math.abs(r.y - y) <= tol)
-      if (!row) {
-        row = { y, parts: [] }
-        rows.push(row)
-      }
-      row.parts.push({ x, str: it.str, w: it.width })
-    }
-    rows.sort((a, b) => b.y - a.y)
-    for (const row of rows) {
-      row.parts.sort((a, b) => a.x - b.x)
-      // A wide horizontal gap means a separate column cell: split it into its own line.
-      let current = ""
-      let lastEnd = -Infinity
-      for (const part of row.parts) {
-        const gap = part.x - lastEnd
-        if (current && gap > 60) {
-          lines.push(current.trim())
-          current = ""
-        } else if (current && gap > 1.5 && !current.endsWith(" ") && !part.str.startsWith(" ")) {
-          current += " "
-        }
-        current += part.str
-        lastEnd = part.x + part.w
-      }
-      if (current.trim()) lines.push(current.replace(/\s+/g, " ").trim())
+    const items: PlacedItem[] = (content.items as unknown[])
+      .filter((it): it is TextItem => typeof (it as TextItem).str === "string" && Array.isArray((it as TextItem).transform))
+      .filter((it) => it.str.trim())
+      .map((it) => ({ x: it.transform[4], y: it.transform[5], w: it.width, h: it.height, str: it.str }))
+    const split = columnSplit(items, page.view[2] - page.view[0])
+    if (split == null) lines.push(...itemsToLines(items))
+    else {
+      lines.push(...itemsToLines(items.filter((it) => it.x < split)), "")
+      lines.push(...itemsToLines(items.filter((it) => it.x >= split)))
     }
     lines.push("")
+    // "LinkedIn" / "GitHub" are often clickable words or icons whose URL never appears as text.
+    try {
+      const annotations = (await page.getAnnotations()) as Array<{ url?: unknown }>
+      for (const a of annotations) if (typeof a.url === "string" && /^https?:\/\//i.test(a.url)) links.push(a.url)
+    } catch {
+      /* annotations are a bonus */
+    }
   }
   await doc.destroy()
-  return lines
+  return { lines, links }
 }
 
 // ── Text → fields ───────────────────────────────────────────────────────────
@@ -123,6 +166,9 @@ const SECTION_PATTERNS: Array<[SectionKey, RegExp]> = [
   ["other", /^(certificates?|certifications?|courses|trainings?|projects|awards|achievements|interests|hobbies|references|volunteering|publications|სერტიფიკატები|კურსები|ტრენინგები|პროექტები|ჯილდოები|ინტერესები|хобби|сертификаты|проекты)$/],
 ]
 
+// Same patterns without spaces, for letter-spaced headings ("E X P E R I E N C E").
+const COMPACT_SECTION_PATTERNS: Array<[SectionKey, RegExp]> = SECTION_PATTERNS.map(([key, re]) => [key, new RegExp(re.source.replace(/ /g, ""))])
+
 function sectionOf(line: string): SectionKey | null {
   const norm = line
     .toLowerCase()
@@ -131,6 +177,11 @@ function sectionOf(line: string): SectionKey | null {
     .trim()
   if (!norm || norm.length > 40) return null
   for (const [key, re] of SECTION_PATTERNS) if (re.test(norm)) return key
+  const tokens = norm.split(" ")
+  if (tokens.length >= 3 && tokens.filter((t) => t.length === 1).length >= tokens.length * 0.7) {
+    const compact = tokens.join("")
+    for (const [key, re] of COMPACT_SECTION_PATTERNS) if (re.test(compact)) return key
+  }
   return null
 }
 
@@ -229,13 +280,27 @@ function parseExperience(lines: string[]): CvImportExperience[] {
   const out: CvImportExperience[] = []
   let current: CvImportExperience | null = null
   let pendingHeader: string[] = []
-  for (const raw of lines) {
-    const line = raw.trim()
-    if (!line) continue
+  const appendDescription = (job: CvImportExperience, text: string) => {
+    job.description += (job.description ? "\n" : "") + text.replace(BULLET_RE, "• ")
+  }
+  // Keep at most two header candidates; an older one was a bullet of the current job, not a header.
+  const addPending = (line: string) => {
+    if (current && pendingHeader.length >= 2) appendDescription(current, pendingHeader.shift() as string)
+    pendingHeader.push(line)
+  }
+  const nonEmpty = lines.map((l) => l.trim()).filter(Boolean)
+  for (let i = 0; i < nonEmpty.length; i += 1) {
+    const line = nonEmpty[i]
     const range = findRange(line)
     if (range) {
-      if (current) out.push(current)
       const rest = stripRange(line, range)
+      // "Title + date" on one row with the company on the next line: only the line right before the
+      // date is a header, the one above it is the previous job's last bullet.
+      const next = nonEmpty[i + 1] ?? ""
+      if (current && !rest && pendingHeader.length === 2 && next && !BULLET_RE.test(next) && !findRange(next) && next.length < 60 && !/[.;:]$/.test(next)) {
+        appendDescription(current, pendingHeader.shift() as string)
+      }
+      if (current) out.push(current)
       // Header text can sit on the date line, on the line(s) just before it, or both.
       const headerParts = [...pendingHeader, rest].filter(Boolean)
       let title = ""
@@ -257,6 +322,17 @@ function parseExperience(lines: string[]): CvImportExperience[] {
       pendingHeader = [...pendingHeader, line].slice(-2)
       continue
     }
+    // A title wrapped onto two lines ("Web Developer &" / "Website Manager").
+    if (!current.description && current.title && !current.organization && /(&|\band|,|\/|-)$/i.test(current.title)) {
+      current.title = `${current.title} ${line}`
+      continue
+    }
+    // A line starting in lowercase continues the previous bullet, it is never a new job's header.
+    if (current.description && /^\p{Ll}/u.test(line)) {
+      if (pendingHeader.length) pendingHeader[pendingHeader.length - 1] += ` ${line}`
+      else current.description += ` ${line}`
+      continue
+    }
     // Before any description, a short non-bullet line is most likely the company (or the role).
     if (!current.description && !BULLET_RE.test(line) && line.length < 70) {
       if (!current.organization) {
@@ -270,16 +346,17 @@ function parseExperience(lines: string[]): CvImportExperience[] {
     }
     // A short header-looking line followed later by a date belongs to the next job.
     if (!BULLET_RE.test(line) && line.length < 60 && !/[.;:]$/.test(line) && current.description) {
-      pendingHeader = [...pendingHeader, line].slice(-2)
+      addPending(line)
       continue
     }
-    if (pendingHeader.length) {
-      current.description += (current.description ? "\n" : "") + pendingHeader.join("\n")
-      pendingHeader = []
-    }
-    current.description += (current.description ? "\n" : "") + line.replace(BULLET_RE, "• ")
+    for (const pending of pendingHeader) appendDescription(current, pending)
+    pendingHeader = []
+    appendDescription(current, line)
   }
-  if (current) out.push(current)
+  if (current) {
+    for (const pending of pendingHeader) appendDescription(current, pending)
+    out.push(current)
+  }
   return out
     .map((e) => ({ ...e, title: e.title.slice(0, 120), organization: e.organization.slice(0, 120), description: e.description.slice(0, 1500) }))
     .filter((e) => e.title || e.organization)
@@ -401,7 +478,7 @@ function classifyLinks(text: string): CvImportLinks {
 
 const NAME_RE = /^[\p{Lu}\p{Script=Georgian}][\p{L}'’.-]+(?:\s+[\p{Lu}\p{Script=Georgian}][\p{L}'’.-]+){1,3}$/u
 
-export function parseCvLines(rawLines: string[], skillCatalog: Array<{ id: string; name: string }>): CvImportResult {
+export function parseCvLines(rawLines: string[], skillCatalog: Array<{ id: string; name: string }>, linkUrls: string[] = []): CvImportResult {
   const lines = rawLines.map((l) => l.replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim())
   const fullText = lines.join("\n")
 
@@ -454,7 +531,7 @@ export function parseCvLines(rawLines: string[], skillCatalog: Array<{ id: strin
     phone,
     skillIds: matchSkills(skillText, skillCatalog),
     languages: matchLanguages(languageText),
-    links: classifyLinks(fullText),
+    links: classifyLinks([...linkUrls, fullText].join("\n")),
     experiences: parseExperience(sections.experience),
     educations: parseEducation(sections.education),
     textLength: fullText.replace(/\s/g, "").length,
@@ -462,6 +539,6 @@ export function parseCvLines(rawLines: string[], skillCatalog: Array<{ id: strin
 }
 
 export async function importCvFromPdf(file: File, skillCatalog: Array<{ id: string; name: string }>): Promise<CvImportResult> {
-  const lines = await extractPdfLines(file)
-  return parseCvLines(lines, skillCatalog)
+  const { lines, links } = await extractPdfLines(file)
+  return parseCvLines(lines, skillCatalog, links)
 }

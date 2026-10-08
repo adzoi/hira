@@ -139,8 +139,8 @@ export default function CvImportPanel({ skillCatalog, onApply, allowAttach = tru
 
   return (
     <div className="rounded-xl border border-dashed border-[#0088FF]/50 bg-[#F4F9FF] p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0 flex-1">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 sm:flex-1">
           <p className="font-semibold text-[#1B2B4B]">{t("cvImport.title")}</p>
           <p className="mt-0.5 text-sm text-slate-600">{t("cvImport.hint")}</p>
         </div>
@@ -159,7 +159,7 @@ export default function CvImportPanel({ skillCatalog, onApply, allowAttach = tru
           type="button"
           disabled={reading}
           onClick={() => inputRef.current?.click()}
-          className="h-11 shrink-0 rounded-lg bg-[#0088FF] px-4 text-sm font-semibold text-white transition hover:bg-[#006ACC] disabled:opacity-60"
+          className="h-11 w-full shrink-0 rounded-lg bg-[#0088FF] px-4 sm:w-auto text-sm font-semibold text-white transition hover:bg-[#006ACC] disabled:opacity-60"
         >
           {reading ? t("cvImport.reading") : t("cvImport.button")}
         </button>
