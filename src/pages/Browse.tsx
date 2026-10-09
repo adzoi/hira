@@ -44,6 +44,8 @@ type FreelancerCardItem = {
   availability: string | null
   /** false = temporarily not taking new work (shown on card; inquiries still allowed on listings). */
   isAcceptingNewWork: boolean
+  /** false = signed up but hasn't finished onboarding; listed after complete profiles. */
+  isProfileComplete: boolean
   completedJobsCount: number
   createdAt: string
   fullName: string
@@ -80,6 +82,7 @@ const mockFreelancers: FreelancerCardItem[] = [
     completedJobsCount: 31,
     availability: "full_time",
     isAcceptingNewWork: true,
+    isProfileComplete: true,
     skills: [
       { id: "r1", name: "React", categoryId: null },
       { id: "r2", name: "Node.js", categoryId: null },
@@ -103,6 +106,7 @@ const mockFreelancers: FreelancerCardItem[] = [
     completedJobsCount: 22,
     availability: "part_time",
     isAcceptingNewWork: true,
+    isProfileComplete: true,
     skills: [
       { id: "d1", name: "Figma", categoryId: null },
       { id: "d2", name: "Adobe XD", categoryId: null },
@@ -125,6 +129,7 @@ const mockFreelancers: FreelancerCardItem[] = [
     completedJobsCount: 14,
     availability: "full_time",
     isAcceptingNewWork: true,
+    isProfileComplete: true,
     skills: [
       { id: "m1", name: "SEO", categoryId: null },
       { id: "m2", name: "Google Ads", categoryId: null },
@@ -147,6 +152,7 @@ const mockFreelancers: FreelancerCardItem[] = [
     completedJobsCount: 45,
     availability: "weekends",
     isAcceptingNewWork: true,
+    isProfileComplete: true,
     skills: [
       { id: "w1", name: "კოპირაიტინგი", categoryId: null },
       { id: "w2", name: "SEO წერა", categoryId: null },
@@ -248,6 +254,7 @@ async function loadBrowseFreelancersPage(offset: number): Promise<BrowseFreelanc
       { count: "exact" },
     )
     .eq("is_public", true)
+    .order("is_profile_complete", { ascending: false })
     .order("average_rating", { ascending: false })
     .range(offset, offset + FREELANCER_PAGE_SIZE - 1)
 
@@ -278,6 +285,7 @@ async function loadBrowseFreelancersPage(offset: number): Promise<BrowseFreelanc
       totalReviewsCount: item.total_reviews_count ?? 0,
       availability: item.availability ?? null,
       isAcceptingNewWork: item.is_accepting_new_work !== false,
+      isProfileComplete: item.is_profile_complete !== false,
       completedJobsCount: Number(item.completed_jobs_count ?? 0),
       createdAt: item.created_at,
       fullName: item.profiles?.full_name ?? "ფრილანსერი",
@@ -870,6 +878,11 @@ export default function BrowsePage() {
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-lg font-bold text-[#1B2B4B]">{freelancer.fullName}</p>
                             <p className="truncate text-sm text-slate-500">{freelancer.professionalTitle}</p>
+                            {!freelancer.isProfileComplete ? (
+                              <span className="mt-1 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                                {t("browse.profileInProgress")}
+                              </span>
+                            ) : null}
                           </div>
                         </div>
 

@@ -36,6 +36,7 @@ export type FreelancerData = {
   user_id: string
   is_accepting_new_work?: boolean | null
   show_completed_work_on_public_profile?: boolean
+  is_profile_complete?: boolean
 }
 
 export type SkillData = { id: string; name: string }

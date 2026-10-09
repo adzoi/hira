@@ -675,6 +675,7 @@ export const ka: T = {
     found: "მოიძებნა {count} ფრილანსერი",
     empty: "ამ ძიებით ფრილანსერები ჯერ არ მოიძებნა.",
     sortNewest: "ახალი",
+    profileInProgress: "პროფილი ივსება",
   },
   listings: {
     title: "სერვისების ლისტინგები",
@@ -782,6 +783,8 @@ export const ka: T = {
     completedStat: "დასრულებული",
     subscriberStat: "გამომწერი",
     subscribedStat: "გამოწერილი",
+    inProgressOwner: "შენი პროფილი ჯერ არ არის შევსებული. დაამატე პროფესია და უნარები, რომ დამქირავებლებმა გიპოვონ.",
+    finishProfile: "პროფილის დასრულება",
   },
   listingDetail: {
     metaDescription: "ნახე სერვისის დეტალები, ფასი და დაუკავშირდი ფრილანსერს ჰირაზე.",

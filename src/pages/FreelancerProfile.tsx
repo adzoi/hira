@@ -605,7 +605,13 @@ export default function FreelancerProfilePage() {
       : t("freelancerProfile.title"),
     profileBio ? profileBio.slice(0, 200) : t("freelancerProfile.metaDescription"),
     slug ? shareUrl : undefined,
-    slug ? { image: `${SITE_BASE_URL}/og/freelancer/${encodeURIComponent(slug)}.png` } : undefined,
+    slug
+      ? {
+          image: `${SITE_BASE_URL}/og/freelancer/${encodeURIComponent(slug)}.png`,
+          // Unfinished profiles are thin pages; keep them out of search until onboarding is done.
+          noindex: freelancer?.is_profile_complete === false,
+        }
+      : undefined,
   )
 
   const personStructuredData = useMemo(() => {
@@ -642,6 +648,18 @@ export default function FreelancerProfilePage() {
                 </div>
               ) : null}
 
+              {viewerIsOwner && freelancer.is_profile_complete === false ? (
+                <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                  <p className="text-sm text-amber-900">{t("freelancerProfile.inProgressOwner")}</p>
+                  <Link
+                    to="/onboarding"
+                    className="mt-2 inline-block rounded-lg bg-[#0088FF] px-4 py-2 text-sm font-semibold text-white hover:bg-[#006ACC]"
+                  >
+                    {t("freelancerProfile.finishProfile")}
+                  </Link>
+                </div>
+              ) : null}
+
               <div className={`flex items-start gap-4 ${!viewerIsOwner ? "pr-24" : ""}`}>
                 <button
                   type="button"
@@ -667,6 +685,11 @@ export default function FreelancerProfilePage() {
                 <div className="min-w-0 flex-1">
                   <h1 className="text-xl font-semibold text-gray-900">{profile.full_name}</h1>
                   <p className="mt-0.5 text-sm text-gray-500">{freelancer.professional_title ?? t("common.freelancerFallback")}</p>
+                  {freelancer.is_profile_complete === false ? (
+                    <span className="mt-1 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                      {t("browse.profileInProgress")}
+                    </span>
+                  ) : null}
                   {formatCityForDisplay(profile.city) ? (
                     <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-gray-500">
                       <MapPinIcon className="h-4 w-4 shrink-0 text-red-500" />

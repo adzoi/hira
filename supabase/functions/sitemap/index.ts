@@ -133,6 +133,7 @@ async function fetchPublicFreelancerEntries(admin: ReturnType<typeof createClien
       .from("freelancer_profiles")
       .select("slug, updated_at, created_at")
       .eq("is_public", true)
+      .eq("is_profile_complete", true)
       .not("slug", "is", null)
       .neq("slug", "")
       .order("updated_at", { ascending: false })

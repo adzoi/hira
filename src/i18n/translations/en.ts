@@ -679,6 +679,7 @@ export const en: T = {
     found: "Found {count} freelancers",
     empty: "No freelancers match this search yet.",
     sortNewest: "Newest",
+    profileInProgress: "Profile in progress",
   },
   listings: {
     title: "Service listings - Hira",
@@ -786,6 +787,8 @@ export const en: T = {
     completedStat: "Completed",
     subscriberStat: "Followers",
     subscribedStat: "Following",
+    inProgressOwner: "Your profile isn't finished yet. Add your title and skills so hirers can find you.",
+    finishProfile: "Finish profile",
   },
   listingDetail: {
     metaDescription: "View service listing details, pricing, and contact the freelancer on Hira.",
