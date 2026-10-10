@@ -2,6 +2,7 @@
 // LinkedIn, X, Google…). Those bots don't run JavaScript, so the SPA's Helmet tags never reach
 // them. Real visitors get the untouched index.html with no extra latency.
 import { CITY_BY_SLUG } from "./citySlugs.mjs"
+import { staticMetaFor } from "./staticMeta.mjs"
 
 const SITE_URL = "https://hira.ge"
 const META_TTL_MS = 10 * 60_000
@@ -147,6 +148,8 @@ async function buildTags(pathname, restBase, anonKey) {
  * @returns {Promise<ShareTags | typeof SHARE_NOT_FOUND | null>}
  */
 export function resolveShareTags(pathname, restBase, anonKey) {
+  const staticTags = staticMetaFor(pathname)
+  if (staticTags) return Promise.resolve(staticTags)
   if (!restBase || !anonKey) return Promise.resolve(null)
   const now = Date.now()
   const hit = metaCache.get(pathname)
