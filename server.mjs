@@ -15,6 +15,8 @@ import {
 import { injectShareTags, isLinkPreviewCrawler, resolveShareTags } from "./seo/shareMeta.mjs"
 
 const root = resolve(fileURLToPath(new URL(".", import.meta.url)), "dist")
+const CANONICAL_HOST = "hira.ge"
+const CANONICAL_ORIGIN = `https://${CANONICAL_HOST}`
 const host = process.env.HOST ?? "0.0.0.0"
 const port = Number.parseInt(process.env.PORT ?? "3000", 10)
 const staticSecurityHeaders = buildSecurityHeaders()
@@ -153,6 +155,13 @@ async function sendSpaIndex(req, res, urlPath) {
   res.setHeader("Cache-Control", HTML_CACHE_CONTROL)
   res.setHeader("Vary", "Accept-Encoding, User-Agent")
   let template = getIndexHtmlTemplate()
+  // Every route gets a canonical in the served HTML (not just after JS runs). data-rh lets
+  // react-helmet-async replace it with the page's own canonical instead of adding a second one.
+  const canonicalPath = urlPath.length > 1 ? urlPath.replace(/\/+$/, "") : urlPath
+  template = template.replace(
+    /<\/head>/i,
+    `    <link rel="canonical" data-rh="true" href="${CANONICAL_ORIGIN}${encodeURI(canonicalPath).replace(/"/g, "%22")}" />\n  </head>`,
+  )
   if (isLinkPreviewCrawler(req.headers["user-agent"])) {
     const tags = await resolveShareTags(urlPath, supabaseRestBase, supabaseAnonKey)
     if (tags) template = injectShareTags(template, tags)
@@ -281,6 +290,23 @@ const server = createServer(async (req, res) => {
     return
   }
   const safePath = urlPath
+
+  // One URL per page: www -> apex and trailing-slash -> no slash, so Google doesn't index duplicates.
+  const requestHost = String(req.headers["x-forwarded-host"] ?? req.headers.host ?? "").split(",")[0].trim().toLowerCase()
+  const rawUrl = req.url ?? "/"
+  const queryIndex = rawUrl.indexOf("?")
+  const rawPath = queryIndex === -1 ? rawUrl : rawUrl.slice(0, queryIndex)
+  const rawQuery = queryIndex === -1 ? "" : rawUrl.slice(queryIndex)
+  const isWww = requestHost === `www.${CANONICAL_HOST}`
+  const hasTrailingSlash = rawPath.length > 1 && rawPath.endsWith("/") && !rawPath.startsWith("//")
+  if (isWww || hasTrailingSlash) {
+    const targetPath = hasTrailingSlash ? rawPath.replace(/\/+$/, "") || "/" : rawPath
+    res.statusCode = 301
+    res.setHeader("Location", `${isWww ? `https://${CANONICAL_HOST}` : ""}${targetPath}${rawQuery}`)
+    res.setHeader("Cache-Control", "public, max-age=3600")
+    res.end()
+    return
+  }
 
   if (safePath === "/sitemap-dynamic.xml") {
     await proxySitemapDynamic(res)
