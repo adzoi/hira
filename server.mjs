@@ -12,7 +12,7 @@ import {
   HTML_CACHE_CONTROL,
   injectScriptNonces,
 } from "./security/csp.mjs"
-import { injectShareTags, isLinkPreviewCrawler, resolveShareTags } from "./seo/shareMeta.mjs"
+import { injectShareTags, isLinkPreviewCrawler, resolveShareTags, SHARE_NOT_FOUND } from "./seo/shareMeta.mjs"
 
 const root = resolve(fileURLToPath(new URL(".", import.meta.url)), "dist")
 const CANONICAL_HOST = "hira.ge"
@@ -164,7 +164,8 @@ async function sendSpaIndex(req, res, urlPath) {
   )
   if (isLinkPreviewCrawler(req.headers["user-agent"])) {
     const tags = await resolveShareTags(urlPath, supabaseRestBase, supabaseAnonKey)
-    if (tags) template = injectShareTags(template, tags)
+    if (tags === SHARE_NOT_FOUND) res.statusCode = 404
+    else if (tags) template = injectShareTags(template, tags)
   }
   const html = injectScriptNonces(template, nonce)
   // Per-request nonce means the HTML can't be cached compressed; use fast gzip (small file).

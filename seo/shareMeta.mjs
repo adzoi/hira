@@ -19,7 +19,10 @@ export function isLinkPreviewCrawler(userAgent) {
   return Boolean(userAgent && CRAWLER_UA.test(userAgent))
 }
 
-/** @type {Map<string, { expires: number; value: Promise<ShareTags | null> }>} */
+/** Returned when the backend answered and the page doesn't exist (as opposed to a failed lookup, which is null). */
+export const SHARE_NOT_FOUND = Object.freeze({ notFound: true })
+
+/** @type {Map<string, { expires: number; value: Promise<ShareTags | typeof SHARE_NOT_FOUND | null> }>} */
 const metaCache = new Map()
 
 /**
@@ -58,13 +61,13 @@ async function rpc(restBase, anonKey, fn, args) {
   return res.json()
 }
 
-/** @returns {Promise<ShareTags | null>} */
+/** @returns {Promise<ShareTags | typeof SHARE_NOT_FOUND | null>} */
 async function buildTags(pathname, restBase, anonKey) {
   let match = /^\/freelancer\/([^/]+)\/?$/.exec(pathname)
   if (match) {
     const slug = decodeURIComponent(match[1])
     const m = await rpc(restBase, anonKey, "get_share_meta", { p_kind: "freelancer", p_id: slug })
-    if (!m) return null
+    if (!m) return SHARE_NOT_FOUND
     const city = displayCity(m.city)
     const bio = clip(m.bio, 200)
     const skills = Array.isArray(m.skills) ? m.skills.filter(Boolean) : []
@@ -90,7 +93,7 @@ async function buildTags(pathname, restBase, anonKey) {
   match = /^\/job\/([0-9a-f-]{36})\/?$/i.exec(pathname)
   if (match) {
     const m = await rpc(restBase, anonKey, "get_share_meta", { p_kind: "job", p_id: match[1] })
-    if (!m) return null
+    if (!m) return SHARE_NOT_FOUND
     return {
       title: `${clip(m.title, 80)} | სამუშაო ჰირაზე`,
       description: clip(m.description || m.title, 200),
@@ -102,7 +105,7 @@ async function buildTags(pathname, restBase, anonKey) {
   match = /^\/listing\/([0-9a-f-]{36})\/?$/i.exec(pathname)
   if (match) {
     const m = await rpc(restBase, anonKey, "get_share_meta", { p_kind: "listing", p_id: match[1] })
-    if (!m) return null
+    if (!m) return SHARE_NOT_FOUND
     return {
       title: `${clip(m.title, 80)}${m.name ? ` - ${clip(m.name, 40)}` : ""} | ჰირა`,
       description: clip(m.description || m.title, 200),
@@ -114,13 +117,13 @@ async function buildTags(pathname, restBase, anonKey) {
   match = /^\/freelancers\/([a-z0-9-]+)(?:\/([a-z-]+))?\/?$/.exec(pathname)
   if (match) {
     const city = match[2] ? CITY_BY_SLUG[match[2]] : null
-    if (match[2] && !city) return null
+    if (match[2] && !city) return SHARE_NOT_FOUND
     const m = await rpc(restBase, anonKey, "get_freelancer_landing", {
       p_category: match[1],
       p_city: city,
       p_limit: 1,
     })
-    if (!m?.category) return null
+    if (!m?.category) return SHARE_NOT_FOUND
     const place = city ? ` ${cityLocative(city)}` : ""
     const name = m.category.name_ka
     const count = Number(m.total_count ?? 0)
@@ -139,8 +142,9 @@ async function buildTags(pathname, restBase, anonKey) {
 }
 
 /**
- * Cached per path; failures resolve to null so the default tags are served.
- * @returns {Promise<ShareTags | null>}
+ * Cached per path; failures resolve to null so the default tags are served. A page the backend
+ * says doesn't exist resolves to SHARE_NOT_FOUND so crawlers get a real 404, not a soft 404.
+ * @returns {Promise<ShareTags | typeof SHARE_NOT_FOUND | null>}
  */
 export function resolveShareTags(pathname, restBase, anonKey) {
   if (!restBase || !anonKey) return Promise.resolve(null)
