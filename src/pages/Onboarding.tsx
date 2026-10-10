@@ -28,6 +28,20 @@ const SKILL_PICKER_UNCATEGORIZED = "__uncategorized__"
 
 type SkillCategoryRow = { id: string; name_ka: string; name_en?: string | null; parent_id: string | null }
 
+/** One-tap title suggestions; `category` is the mid-level category (name_en) whose skills are shown next. */
+const TITLE_SUGGESTIONS = [
+  { ka: "ვებ დეველოპერი", en: "Web developer", category: "Web Development" },
+  { ka: "მობილური დეველოპერი", en: "Mobile developer", category: "Mobile Development" },
+  { ka: "Backend დეველოპერი", en: "Backend developer", category: "Software Development" },
+  { ka: "გრაფიკული დიზაინერი", en: "Graphic designer", category: "Graphic Design" },
+  { ka: "UI/UX დიზაინერი", en: "UI/UX designer", category: "UI/UX Design" },
+  { ka: "SMM მენეჯერი", en: "SMM manager", category: "Digital Marketing" },
+  { ka: "ვიდეო მონტაჟორი", en: "Video editor", category: "Video Production" },
+  { ka: "მოუშენ დიზაინერი", en: "Motion designer", category: "Animation" },
+  { ka: "კოპირაიტერი", en: "Copywriter", category: "Writing" },
+  { ka: "თარჯიმანი", en: "Translator", category: "Translation" },
+] as const
+
 const industryOptions = ["ტექნოლოგია", "მარკეტინგი", "განათლება", "ფინანსები", "ჯანდაცვა", "უძრავი ქონება", "სხვა"]
 
 type ExperienceForm = {
@@ -202,13 +216,6 @@ export default function OnboardingPage() {
 
   const uncategorizedSkillCount = skillsByCategoryId.get(SKILL_PICKER_UNCATEGORIZED)?.length ?? 0
 
-  const skillFocusCategoryLabel = useMemo(() => {
-    if (!skillFocusCategoryId) return ""
-    if (skillFocusCategoryId === SKILL_PICKER_UNCATEGORIZED) return "სხვა"
-    const cat = skillCategories.find((c) => c.id === skillFocusCategoryId)
-    return cat ? pickCategoryName(cat, locale) : t("common.category")
-  }, [skillFocusCategoryId, skillCategories, locale, t])
-
   const skillNameById = useMemo(() => {
     const m = new Map<string, string>()
     for (const s of skills) m.set(s.id, s.name)
@@ -245,6 +252,13 @@ export default function OnboardingPage() {
     } finally {
       setAvatarUploading(false)
     }
+  }
+
+  const pickTitleSuggestion = (suggestion: (typeof TITLE_SUGGESTIONS)[number]) => {
+    setProfessionalTitle(locale === "en" ? suggestion.en : suggestion.ka)
+    const category = skillCategories.find((c) => c.parent_id && c.name_en === suggestion.category)
+    if (category) setSkillFocusCategoryId(category.id)
+    setError("")
   }
 
   const toggleSkill = (id: string) =>
@@ -327,7 +341,7 @@ export default function OnboardingPage() {
     setError("")
   }
 
-  /** Only the title is required up front; the completeness meter nudges for the rest later. */
+  /** Only the title is required; skills are suggested on the same screen, everything else is optional later. */
   const validateMinimumProfile = () => {
     if (!professionalTitle.trim()) {
       setError("პროფესიული სათაური სავალდებულოა.")
@@ -572,7 +586,7 @@ export default function OnboardingPage() {
     <div className="min-h-screen bg-slate-50">
       <main className="mx-auto max-w-3xl px-6 py-10">
         <div className="mx-auto max-w-[640px] rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-          <h1 className="text-3xl font-bold text-[#0088FF]">{t("onboarding.heading")}</h1>
+          <h1 className="text-2xl font-bold text-[#0088FF] sm:text-3xl">{t("onboarding.heading")}</h1>
 
           {userType === "hirer" ? (
             <div className="mt-6 space-y-4">
@@ -588,17 +602,172 @@ export default function OnboardingPage() {
             </div>
           ) : (
             <div className="mt-6 space-y-4">
-              <div className="h-2 rounded-full bg-slate-200">
-                <div
-                  className={`h-2 rounded-full bg-[#D4A843] transition-[width] duration-300 ${step === 1 ? "w-1/3" : step === 2 ? "w-2/3" : "w-full"}`}
-                />
-              </div>
-              <p className="text-xs text-slate-500">{t("common.stepOf", { step, total: 3 })}</p>
+              {step > 1 ? (
+                <>
+                  <div className="h-2 rounded-full bg-slate-200">
+                    <div
+                      className={`h-2 rounded-full bg-[#D4A843] transition-[width] duration-300 ${step === 2 ? "w-1/2" : "w-full"}`}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    {t("onboarding.detailsHeading")} · {t("common.stepOf", { step: step - 1, total: 2 })}
+                  </p>
+                </>
+              ) : null}
 
               {step === 1 && (
-                <div className="space-y-3">
-                  <CvImportPanel skillCatalog={skills} onApply={applyCvImport} />
-                  <input className="h-11 w-full rounded-lg border border-slate-300 px-3" placeholder="პროფესიული სათაური" value={professionalTitle} onChange={(e)=>setProfessionalTitle(e.target.value)} />
+                <div className="space-y-5">
+                  <div>
+                    <h2 className="text-xl font-semibold text-[#1B2B4B]">{t("onboarding.quickHeading")}</h2>
+                    <p className="mt-1 text-sm text-slate-500">{t("onboarding.quickSubheading")}</p>
+                  </div>
+
+                  <div>
+                    <label htmlFor="onboarding-title" className="mb-1 block text-sm font-medium text-slate-700">
+                      {t("onboarding.titleLabel")}
+                    </label>
+                    <input
+                      id="onboarding-title"
+                      className="h-11 w-full rounded-lg border border-slate-300 px-3"
+                      placeholder={t("onboarding.titlePlaceholder")}
+                      value={professionalTitle}
+                      onChange={(e) => setProfessionalTitle(e.target.value)}
+                    />
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {TITLE_SUGGESTIONS.map((suggestion) => {
+                        const label = locale === "en" ? suggestion.en : suggestion.ka
+                        const active = professionalTitle.trim() === label
+                        return (
+                          <button
+                            key={suggestion.en}
+                            type="button"
+                            onClick={() => pickTitleSuggestion(suggestion)}
+                            className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                              active
+                                ? "border-[#0088FF] bg-[#E8F4FF] text-[#0088FF]"
+                                : "border-slate-300 bg-white text-slate-700 hover:border-[#0088FF] hover:text-[#0088FF]"
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label htmlFor="onboarding-skill-category" className="block text-sm font-medium text-slate-700">
+                      {t("onboarding.skillsLabel")}
+                    </label>
+                    <select
+                      id="onboarding-skill-category"
+                      className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#0088FF] focus:ring-2 focus:ring-[#0088FF]/25"
+                      value={skillFocusCategoryId}
+                      onChange={(e) => setSkillFocusCategoryId(e.target.value)}
+                    >
+                      <option value="">{t("onboarding.skillsPickCategory")}</option>
+                      {skillPickerMidCategories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {pickCategoryName(c, locale)}
+                        </option>
+                      ))}
+                      {uncategorizedSkillCount > 0 ? <option value={SKILL_PICKER_UNCATEGORIZED}>სხვა</option> : null}
+                    </select>
+                    {skillFocusCategoryId ? (
+                      (skillsByCategoryId.get(skillFocusCategoryId) ?? []).length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {(skillsByCategoryId.get(skillFocusCategoryId) ?? []).map((s) => {
+                            const selected = selectedSkillIds.includes(s.id)
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                aria-pressed={selected}
+                                onClick={() => toggleSkill(s.id)}
+                                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                                  selected
+                                    ? "border-[#0088FF] bg-[#0088FF] text-white"
+                                    : "border-slate-300 bg-white text-slate-700 hover:border-[#0088FF] hover:text-[#0088FF]"
+                                }`}
+                              >
+                                {selected ? "✓ " : "+ "}
+                                {s.name}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-500">{t("onboarding.skillsNoneInCategory")}</p>
+                      )
+                    ) : null}
+                    {selectedSkillIds.length > 0 ? (
+                      <p className="text-xs text-slate-500">
+                        {t("onboarding.skillsSelected", { count: selectedSkillIds.length })}:{" "}
+                        {selectedSkillIds.map((id) => skillNameById.get(id) ?? id).join(", ")}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={finishEarly}
+                    className="h-11 w-full rounded-lg bg-[#0088FF] text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#006ACC] disabled:opacity-60"
+                  >
+                    {submitting ? t("common.loading") : t("onboarding.finishQuick")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={nextFromStep1}
+                    className="w-full text-center text-sm font-medium text-slate-500 hover:text-[#0088FF]"
+                  >
+                    {t("onboarding.addMoreDetails")}
+                  </button>
+
+                  <div className="border-t border-slate-100 pt-4">
+                    <CvImportPanel skillCatalog={skills} onApply={applyCvImport} />
+                  </div>
+                </div>
+              )}
+
+              {step === 2 && (
+                <div className="space-y-4">
+                  <div>
+                    {avatarPreview && (
+                      <OptimizedImage
+                        src={avatarPreview}
+                        alt="Avatar preview"
+                        width={100}
+                        height={100}
+                        className="mb-3 h-[100px] w-[100px] rounded-full object-cover"
+                      />
+                    )}
+                    <input
+                      ref={avatarInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) handleAvatarUpload(file)
+                      }}
+                      disabled={avatarUploading}
+                    />
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => avatarInputRef.current?.click()}
+                        disabled={avatarUploading}
+                        className="inline-flex h-10 items-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-[#1B2B4B] transition hover:border-[#D4A843] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        პროფილის ფოტოს დამატება
+                      </button>
+                      <span className="text-sm text-slate-500">
+                        {avatarUploading ? "იტვირთება..." : avatarPreview ? "ფოტო არჩეულია" : "ფაილი არჩეული არ არის"}
+                      </span>
+                    </div>
+                  </div>
                   <div>
                     <textarea className="w-full rounded-lg border border-slate-300 px-3 py-2" rows={5} placeholder="ბიო (არასავალდებულო)" value={bio} onChange={(e)=>setBio(e.target.value)} />
                     <p className="mt-1 text-right text-xs text-slate-500">{bio.length}/2000</p>
@@ -676,145 +845,6 @@ export default function OnboardingPage() {
                           })
                         )}
                       </ul>
-                    ) : null}
-                  </div>
-                  {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
-                  <button
-                    type="button"
-                    onClick={nextFromStep1}
-                    className="h-11 w-full rounded-lg bg-[#0088FF] text-sm font-medium text-white transition-colors duration-150 hover:bg-[#006ACC]"
-                  >
-                    შემდეგი
-                  </button>
-                  <button
-                    type="button"
-                    disabled={submitting}
-                    onClick={finishEarly}
-                    className="w-full text-center text-sm font-medium text-slate-500 hover:text-[#0088FF] disabled:opacity-50"
-                  >
-                    {submitting ? t("common.loading") : t("onboarding.finishLater")}
-                  </button>
-                </div>
-              )}
-
-              {step === 2 && (
-                <div className="space-y-4">
-                  <div className="space-y-3">
-                    <p className="text-xs font-medium text-slate-600">
-                      უნარები - ჯერ აირჩიე კატეგორია, შემდეგ დაამატე ტეგები ამ კატეგორიიდან (არასავალდებულო).
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      არჩეულია <span className="font-semibold tabular-nums text-slate-700">{selectedSkillIds.length}</span> უნარი
-                    </p>
-
-                    <div>
-                      <label htmlFor="onboarding-skill-category" className="mb-1 block text-xs font-medium text-slate-600">
-                        კატეგორია
-                      </label>
-                      <select
-                        id="onboarding-skill-category"
-                        className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#0088FF] focus:ring-2 focus:ring-[#0088FF]/25"
-                        value={skillFocusCategoryId}
-                        onChange={(e) => setSkillFocusCategoryId(e.target.value)}
-                      >
-                        <option value="">აირჩიე კატეგორია…</option>
-                        {skillPickerMidCategories.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {pickCategoryName(c, locale)}
-                          </option>
-                        ))}
-                        {uncategorizedSkillCount > 0 ? (
-                          <option value={SKILL_PICKER_UNCATEGORIZED}>სხვა</option>
-                        ) : null}
-                      </select>
-                    </div>
-
-                    {skillFocusCategoryId ? (
-                      (() => {
-                        const list = skillsByCategoryId.get(skillFocusCategoryId) ?? []
-                        if (list.length === 0) {
-                          return (
-                            <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-3 py-3 text-xs text-slate-500">
-                              ამ კატეგორიაში დამტკიცებული უნარები ჯერ არ არის.
-                            </p>
-                          )
-                        }
-                        const selectedInCategory = list.filter((s) => selectedSkillIds.includes(s.id))
-                        return (
-                          <div className="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
-                            <p className="mb-2 text-sm font-semibold text-[#0088FF]">{skillFocusCategoryLabel}</p>
-                            <>
-                              {selectedInCategory.length > 0 ? (
-                                <div className="mb-2 flex flex-wrap gap-1.5">
-                                  {selectedInCategory.map((s) => (
-                                    <button
-                                      key={s.id}
-                                      type="button"
-                                      onClick={() => toggleSkill(s.id)}
-                                      className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#D1D5DB] bg-white px-2.5 py-0.5 text-xs font-medium text-[#374151] hover:bg-slate-50"
-                                    >
-                                      <span className="truncate">{s.name}</span>
-                                      <span className="shrink-0 text-slate-400" aria-hidden>
-                                        ×
-                                      </span>
-                                    </button>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="mb-2 text-xs text-slate-500">ამ კატეგორიიდან ჯერ არაფერი არ არის არჩეული.</p>
-                              )}
-                              <label className="sr-only" htmlFor="onboarding-skill-add-active">
-                                უნარის დამატება - {skillFocusCategoryLabel}
-                              </label>
-                              <select
-                                id="onboarding-skill-add-active"
-                                key={`skill-dd-${skillFocusCategoryId}-${selectedInCategory.map((s) => s.id).join("-")}`}
-                                className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#0088FF] focus:ring-2 focus:ring-[#0088FF]/25"
-                                defaultValue=""
-                                onChange={(e) => {
-                                  const id = e.target.value
-                                  if (id) {
-                                    toggleSkill(id)
-                                    e.target.value = ""
-                                  }
-                                }}
-                              >
-                                <option value="">ტეგის / უნარის დამატება…</option>
-                                {list.map((s) => (
-                                  <option key={s.id} value={s.id} disabled={selectedSkillIds.includes(s.id)}>
-                                    {s.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </>
-                          </div>
-                        )
-                      })()
-                    ) : (
-                      <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-3 py-3 text-xs text-slate-500">
-                        კატეგორიის ასარჩევად გამოიყენე ზემოთ სია - აქ გამოჩნდება შესაბამისი ტეგები.
-                      </p>
-                    )}
-
-                    {selectedSkillIds.length > 0 ? (
-                      <div className="rounded-lg border border-slate-100 bg-white p-3">
-                        <p className="mb-2 text-xs font-semibold text-slate-600">ყველა არჩეული უნარი</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {selectedSkillIds.map((id) => (
-                            <button
-                              key={id}
-                              type="button"
-                              onClick={() => toggleSkill(id)}
-                              className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#D1D5DB] bg-white px-2.5 py-0.5 text-xs font-medium text-[#374151] hover:bg-red-50"
-                            >
-                              <span className="truncate">{skillNameById.get(id) ?? id}</span>
-                              <span className="shrink-0 text-slate-400" aria-hidden>
-                                ×
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
                     ) : null}
                   </div>
                   <div className="space-y-2 rounded-lg border border-slate-200 p-3">
@@ -1004,41 +1034,6 @@ export default function OnboardingPage() {
 
               {step === 3 && (
                 <div className="space-y-4">
-                  <div>
-                    {avatarPreview && (
-                      <OptimizedImage
-                        src={avatarPreview}
-                        alt="Avatar preview"
-                        width={100}
-                        height={100}
-                        className="mb-3 h-[100px] w-[100px] rounded-full object-cover"
-                      />
-                    )}
-                    <input
-                      ref={avatarInputRef}
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0]
-                        if (file) handleAvatarUpload(file)
-                      }}
-                      disabled={avatarUploading}
-                    />
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => avatarInputRef.current?.click()}
-                        disabled={avatarUploading}
-                        className="inline-flex h-10 items-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-[#1B2B4B] transition hover:border-[#D4A843] disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        პროფილის ფოტოს დამატება
-                      </button>
-                      <span className="text-sm text-slate-500">
-                        {avatarUploading ? "იტვირთება..." : avatarPreview ? "ფოტო არჩეულია" : "ფაილი არჩეული არ არის"}
-                      </span>
-                    </div>
-                  </div>
                   <OptionalSocialUrlField
                     label="LinkedIn"
                     noLabel="არ მაქვს LinkedIn პროფილი"
