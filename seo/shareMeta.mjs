@@ -167,36 +167,36 @@ export function resolveShareTags(pathname, restBase, anonKey) {
 /** Swap the default title/description/OG/Twitter tags in index.html for page-specific ones. */
 export function injectShareTags(html, tags) {
   const stripped = html
-    .replace(/<title>[\s\S]*?<\/title>/i, "")
+    .replace(/<title[^>]*>[\s\S]*?<\/title>/i, "")
     .replace(/<meta\s+name="description"[^>]*>\s*/i, "")
     .replace(/<meta\s+property="og:(?:title|description|image|url|type)"[^>]*>\s*/gi, "")
     .replace(/<meta\s+name="twitter:(?:card|image|title|description)"[^>]*>\s*/gi, "")
     .replace(/<link\s+rel="canonical"[^>]*>\s*/i, "")
 
   const lines = [
-    `<title>${escapeAttr(tags.title)}</title>`,
-    `<meta name="description" content="${escapeAttr(tags.description)}" />`,
-    `<link rel="canonical" href="${escapeAttr(tags.url)}" />`,
-    `<meta property="og:type" content="${escapeAttr(tags.type ?? "website")}" />`,
-    `<meta property="og:title" content="${escapeAttr(tags.title)}" />`,
-    `<meta property="og:description" content="${escapeAttr(tags.description)}" />`,
-    `<meta property="og:url" content="${escapeAttr(tags.url)}" />`,
-    `<meta name="twitter:title" content="${escapeAttr(tags.title)}" />`,
-    `<meta name="twitter:description" content="${escapeAttr(tags.description)}" />`,
+    `<title data-static>${escapeAttr(tags.title)}</title>`,
+    `<meta name="description" content="${escapeAttr(tags.description)}" data-static />`,
+    `<link rel="canonical" href="${escapeAttr(tags.url)}" data-static />`,
+    `<meta property="og:type" content="${escapeAttr(tags.type ?? "website")}" data-static />`,
+    `<meta property="og:title" content="${escapeAttr(tags.title)}" data-static />`,
+    `<meta property="og:description" content="${escapeAttr(tags.description)}" data-static />`,
+    `<meta property="og:url" content="${escapeAttr(tags.url)}" data-static />`,
+    `<meta name="twitter:title" content="${escapeAttr(tags.title)}" data-static />`,
+    `<meta name="twitter:description" content="${escapeAttr(tags.description)}" data-static />`,
   ]
   if (tags.image) {
     lines.push(
-      `<meta property="og:image" content="${escapeAttr(tags.image)}" />`,
-      `<meta property="og:image:width" content="1200" />`,
-      `<meta property="og:image:height" content="630" />`,
-      `<meta name="twitter:card" content="summary_large_image" />`,
-      `<meta name="twitter:image" content="${escapeAttr(tags.image)}" />`,
+      `<meta property="og:image" content="${escapeAttr(tags.image)}" data-static />`,
+      `<meta property="og:image:width" content="1200" data-static />`,
+      `<meta property="og:image:height" content="630" data-static />`,
+      `<meta name="twitter:card" content="summary_large_image" data-static />`,
+      `<meta name="twitter:image" content="${escapeAttr(tags.image)}" data-static />`,
     )
   } else {
     lines.push(
-      `<meta property="og:image" content="${SITE_URL}/og-image.png" />`,
-      `<meta name="twitter:card" content="summary" />`,
-      `<meta name="twitter:image" content="${SITE_URL}/og-image.png" />`,
+      `<meta property="og:image" content="${SITE_URL}/og-image.png" data-static />`,
+      `<meta name="twitter:card" content="summary" data-static />`,
+      `<meta name="twitter:image" content="${SITE_URL}/og-image.png" data-static />`,
     )
   }
   if (tags.noindex) lines.push(`<meta name="robots" content="noindex, follow" />`)

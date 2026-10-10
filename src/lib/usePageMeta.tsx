@@ -1,3 +1,4 @@
+import { useEffect } from "react"
 import { Helmet } from "react-helmet-async"
 import { useLocation } from "react-router-dom"
 
@@ -15,10 +16,54 @@ export type PageMetaProps = {
   noindex?: boolean
 }
 
+/** Head tags PageMeta renders itself; the static/server copies of these are dropped once Helmet has its own. */
+const STATIC_DUPLICATE_SELECTORS = [
+  "title",
+  'link[rel="canonical"]',
+  'meta[property="og:title"]',
+  'meta[property="og:url"]',
+  'meta[property="og:image"]',
+  'meta[property="og:type"]',
+  'meta[property="og:site_name"]',
+  'meta[property="og:locale"]',
+  'meta[name="twitter:card"]',
+  'meta[name="twitter:image"]',
+]
+const STATIC_DESCRIPTION_SELECTORS = ['meta[name="description"]', 'meta[property="og:description"]']
+
+/**
+ * react-helmet-async appends its tags instead of replacing the ones in index.html (or the ones the
+ * server injects), leaving two titles/descriptions/canonicals per page. Search engines may pick the
+ * generic first copy, so drop the static ones once the page's own are in the head.
+ */
+function removeStaticHeadDuplicates(hasDescription: boolean) {
+  const selectors = hasDescription ? [...STATIC_DUPLICATE_SELECTORS, ...STATIC_DESCRIPTION_SELECTORS] : STATIC_DUPLICATE_SELECTORS
+  for (const selector of selectors) {
+    const all = document.head.querySelectorAll(selector)
+    const hasOwn = Array.from(all).some((el) => !el.hasAttribute("data-static"))
+    if (!hasOwn) continue
+    all.forEach((el) => {
+      if (el.hasAttribute("data-static")) el.remove()
+    })
+  }
+}
+
 export function PageMeta({ title, description, url, image, noindex }: PageMetaProps) {
   const { pathname, search } = useLocation()
   const pageUrl = url ?? `${SITE_BASE_URL}${pathname}${search}`
   const ogImage = image ?? SITE_OG_IMAGE
+
+  useEffect(() => {
+    // Helmet commits on the next animation frame, so wait for it before looking for duplicates.
+    let second = 0
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => removeStaticHeadDuplicates(Boolean(description)))
+    })
+    return () => {
+      cancelAnimationFrame(first)
+      cancelAnimationFrame(second)
+    }
+  }, [pathname, title, description, url])
 
   return (
     <Helmet>

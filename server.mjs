@@ -155,12 +155,12 @@ async function sendSpaIndex(req, res, urlPath) {
   res.setHeader("Cache-Control", HTML_CACHE_CONTROL)
   res.setHeader("Vary", "Accept-Encoding, User-Agent")
   let template = getIndexHtmlTemplate()
-  // Every route gets a canonical in the served HTML (not just after JS runs). data-rh lets
-  // react-helmet-async replace it with the page's own canonical instead of adding a second one.
+  // Every route gets a canonical in the served HTML (not just after JS runs). PageMeta removes
+  // [data-static] head tags once react-helmet-async has rendered the page's own.
   const canonicalPath = urlPath.length > 1 ? urlPath.replace(/\/+$/, "") : urlPath
   template = template.replace(
     /<\/head>/i,
-    `    <link rel="canonical" data-rh="true" href="${CANONICAL_ORIGIN}${encodeURI(canonicalPath).replace(/"/g, "%22")}" />\n  </head>`,
+    `    <link rel="canonical" data-static href="${CANONICAL_ORIGIN}${encodeURI(canonicalPath).replace(/"/g, "%22")}" />\n  </head>`,
   )
   if (isLinkPreviewCrawler(req.headers["user-agent"])) {
     const tags = await resolveShareTags(urlPath, supabaseRestBase, supabaseAnonKey)
