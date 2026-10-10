@@ -29,6 +29,10 @@ verify_jwt = false
 [functions.send-weekly-digest]
 verify_jwt = false
 
+# Called hourly by pg_cron (trigger_confirm_reminders); authenticated by X-Gigori-Webhook-Secret inside the function.
+[functions.send-confirm-reminders]
+verify_jwt = false
+
 # Authorized by the HMAC token in the email link.
 [functions.digest-unsubscribe]
 verify_jwt = false
