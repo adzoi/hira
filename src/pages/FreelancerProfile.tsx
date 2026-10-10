@@ -48,6 +48,7 @@ import { useTranslation } from "../i18n/LocaleContext.tsx"
 import { SITE_BASE_URL, usePageMeta } from "../lib/usePageMeta.tsx"
 import { buildPersonStructuredData, JsonLd } from "../lib/structuredData.tsx"
 import { pickListingDescription, pickListingTitle } from "../lib/listingLocale.ts"
+import { isSubstantiveProfile } from "../lib/profileSeo.ts"
 
 function getInitials(fullName: string) {
   const parts = fullName.trim().split(" ").filter(Boolean)
@@ -608,8 +609,16 @@ export default function FreelancerProfilePage() {
     slug
       ? {
           image: `${SITE_BASE_URL}/og/freelancer/${encodeURIComponent(slug)}.png`,
-          // Unfinished profiles are thin pages; keep them out of search until onboarding is done.
-          noindex: freelancer?.is_profile_complete === false,
+          // Unfinished or near-empty profiles are thin pages; keep them out of search until they have substance.
+          noindex:
+            freelancer?.is_profile_complete === false ||
+            (freelancer
+              ? !isSubstantiveProfile({
+                  bio: freelancer.bio,
+                  skillCount: skills.length,
+                  reviewCount: freelancer.total_reviews_count,
+                })
+              : false),
         }
       : undefined,
   )
@@ -954,8 +963,7 @@ export default function FreelancerProfilePage() {
               </div>
             </div>
 
-            {profileTab === "services" ? (
-              <div className="mt-5 grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-[14px]">
+            <div hidden={profileTab !== "services"} className="mt-5 grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-[14px]">
                 {services.length === 0 ? (
                   <p className="col-span-full text-sm text-gray-500">{t("freelancerProfile.noActiveServices")}</p>
                 ) : (
@@ -1022,11 +1030,9 @@ export default function FreelancerProfilePage() {
                     )
                   })
                 )}
-              </div>
-            ) : null}
+            </div>
 
-            {profileTab === "bio" ? (
-              <div className="mt-5 space-y-5">
+            <div hidden={profileTab !== "bio"} className="mt-5 space-y-5">
                 <section className="rounded-[14px] border border-[#E5E7EB] bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
                   <h2 className="text-lg font-semibold text-gray-900">{t("common.bio")}</h2>
                   <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-[#374151]">
@@ -1086,11 +1092,9 @@ export default function FreelancerProfilePage() {
                     ))}
                   </div>
                 </section>
-              </div>
-            ) : null}
+            </div>
 
-            {profileTab === "reviews" ? (
-              <section className="mt-5 rounded-[14px] border border-[#E5E7EB] bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+            <section hidden={profileTab !== "reviews"} className="mt-5 rounded-[14px] border border-[#E5E7EB] bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
                 <div className="space-y-3">
                   {reviews.length === 0 ? (
                     <p className="text-sm text-gray-500">{t("freelancerProfile.noReviews")}</p>
@@ -1113,7 +1117,6 @@ export default function FreelancerProfilePage() {
                   )}
                 </div>
               </section>
-            ) : null}
 
             {portfolioItems.length > 0 ? (
               <section className="mt-5 rounded-[14px] border border-[#E5E7EB] bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">

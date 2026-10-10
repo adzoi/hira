@@ -7,6 +7,9 @@ const SITE_URL = "https://hira.ge"
 const META_TTL_MS = 10 * 60_000
 const META_CACHE_MAX = 500
 const FETCH_TIMEOUT_MS = 1500
+/** A profile is worth indexing with a real bio, a few skills, or a review (keep in sync with src/lib/profileSeo.ts). */
+const MIN_PROFILE_BIO_CHARS = 60
+const MIN_PROFILE_SKILLS = 3
 
 const CRAWLER_UA =
   /bot\b|crawler|spider|facebookexternalhit|facebookcatalog|meta-externalagent|whatsapp|telegram|viber|slack|discord|linkedin|skype|pinterest|embedly|vkshare|google-inspectiontool|applebot|yandex|bingpreview/i
@@ -62,13 +65,25 @@ async function buildTags(pathname, restBase, anonKey) {
     const slug = decodeURIComponent(match[1])
     const m = await rpc(restBase, anonKey, "get_share_meta", { p_kind: "freelancer", p_id: slug })
     if (!m) return null
-    const headline = [m.title, displayCity(m.city)].filter(Boolean).join(" · ")
+    const city = displayCity(m.city)
+    const bio = clip(m.bio, 200)
+    const skills = Array.isArray(m.skills) ? m.skills.filter(Boolean) : []
+    const reviews = Number(m.reviews ?? 0)
+    const headline = [m.title, city].filter(Boolean).join(" · ")
+    // Profiles with no real bio, few skills and no reviews are thin pages; keep them out of the index.
+    const substantive = bio.length >= MIN_PROFILE_BIO_CHARS || skills.length >= MIN_PROFILE_SKILLS || reviews > 0
+    const facts = [
+      headline,
+      skills.length > 0 ? `უნარები: ${skills.join(", ")}` : "",
+      reviews > 0 ? `შეფასება ${Number(m.rating ?? 0).toFixed(1)} (${reviews})` : "",
+    ].filter(Boolean)
     return {
-      title: `${clip(m.name, 60)}${m.title ? ` - ${clip(m.title, 60)}` : ""} | ჰირა`,
-      description: clip(m.bio || `${headline}. დაიქირავე ჰირაზე - ქართულ ფრილანს პლატფორმაზე.`, 200),
+      title: `${clip(m.name, 60)}${m.title ? ` - ${clip(m.title, 60)}` : ""}${city ? ` | ${city}` : ""} | ჰირა`,
+      description: clip(bio || `${facts.join(". ")}. დაიქირავე ჰირაზე - ქართულ ფრილანს პლატფორმაზე.`, 200),
       image: `${SITE_URL}/og/freelancer/${encodeURIComponent(slug)}.png`,
       url: `${SITE_URL}/freelancer/${encodeURIComponent(slug)}`,
       type: "profile",
+      noindex: !substantive,
     }
   }
 

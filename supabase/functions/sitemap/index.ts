@@ -15,6 +15,8 @@ const CACHE_TTL_SECONDS = 3600
 const PAGE_SIZE = 1000
 /** Category × city pages need at least this many freelancers to be listed (avoids thin pages). */
 const MIN_FREELANCERS_PER_CITY_PAGE = 2
+/** Profiles need a real bio (or a review) to be listed (keep in sync with src/lib/profileSeo.ts). */
+const MIN_PROFILE_BIO_CHARS = 60
 
 type SitemapEntry = {
   loc: string
@@ -131,7 +133,7 @@ async function fetchPublicFreelancerEntries(admin: ReturnType<typeof createClien
   const rows = await fetchAllRows("freelancer_profiles", (from, to) =>
     admin
       .from("freelancer_profiles")
-      .select("slug, updated_at, created_at")
+      .select("slug, bio, total_reviews_count, updated_at, created_at")
       .eq("is_public", true)
       .eq("is_profile_complete", true)
       .not("slug", "is", null)
@@ -142,6 +144,8 @@ async function fetchPublicFreelancerEntries(admin: ReturnType<typeof createClien
 
   return rows
     .filter((row) => typeof row.slug === "string" && row.slug.trim().length > 0)
+    // Only list profiles worth indexing (real bio or a review); thin ones stay out of the sitemap.
+    .filter((row) => (row.bio ?? "").replace(/\s+/g, " ").trim().length >= MIN_PROFILE_BIO_CHARS || (row.total_reviews_count ?? 0) > 0)
     .map((row) => ({
       loc: absoluteUrl(`/freelancer/${encodeURIComponent(row.slug.trim())}`),
       lastmod: toLastmod(row.updated_at ?? row.created_at),
@@ -251,7 +255,7 @@ serveWithSentry("sitemap", async (req) => {
   }
 
   const redis = getRedis()
-  const cacheKey = "sitemap:xml:v2"
+  const cacheKey = "sitemap:xml:v3"
 
   if (redis) {
     try {
